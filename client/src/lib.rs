@@ -138,3 +138,8 @@ pub fn start() -> Result<(), JsValue> {
 
     Ok(())
 }
+
+#[wasm_bindgen]
+pub fn increment(count: i32) -> i32 {
+    count + 1
+}

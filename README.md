@@ -3,6 +3,8 @@
 - [ ] Allow web developers to make games with familiar tools
 
 ## Preflight checklist
+- [ ] npm installed
+- [ ] rustup installed
 - [ ] rustup target add wasm32-unknown-unknown
 - [ ] cargo binstall wasmpack
 

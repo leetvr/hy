@@ -14,10 +14,15 @@
     </head>
     <body>
         <canvas id="canvas" width="640" height="480"></canvas>
+        <div id="root"></div>
         <script type="module">
-            import init from "./pkg/client.js";
+            import init, { increment } from "./pkg/client.js";
+
+            // Crimes? What crimes?
+            window.increment = increment;
 
             init().catch((err) => console.error("Error initializing wasm module:", err));
         </script>
+        <script type="module" crossorigin src="./ui/main.js"></script>
     </body>
 </html>
