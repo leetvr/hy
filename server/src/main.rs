@@ -1,26 +1,23 @@
-use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpListener;
-use std::thread;
+use anyhow::Result;
+use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:8888").unwrap();
-    println!("Serving on http://127.0.0.1:8888");
-
+#[tokio::main]
+async fn main() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:8888").await?;
     webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
+    loop {
+        let (stream, _) = listener.accept().await?;
 
-        thread::spawn(move || {
-            handle_connection(stream);
-        });
+        tokio::spawn(handle_connection(stream));
     }
 }
 
-fn handle_connection(mut stream: std::net::TcpStream) {
+async fn handle_connection(mut stream: TcpStream) -> Result<()> {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    stream.read(&mut buffer).await?;
 
     let request = String::from_utf8_lossy(&buffer[..]);
     let mut lines = request.lines();
@@ -29,13 +26,15 @@ fn handle_connection(mut stream: std::net::TcpStream) {
     let _method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
 
-    let response = get_response(path);
+    let response = get_response(path).await?;
 
-    stream.write_all(&response).unwrap();
-    stream.flush().unwrap();
+    stream.write_all(&response).await?;
+    stream.flush().await?;
+
+    Ok(())
 }
 
-fn get_response(request_path: &str) -> Vec<u8> {
+async fn get_response(request_path: &str) -> Result<Vec<u8>> {
     println!("CLIENT <- {request_path}");
     let request_path = if request_path == "/" {
         "/index.html"
@@ -48,10 +47,11 @@ fn get_response(request_path: &str) -> Vec<u8> {
 
     if !file_path.exists() {
         println!("SERVER <- 404");
-        return "HTTP/1.1 404 NOT FOUND\r\n\r\n".as_bytes().to_vec();
+        let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n".as_bytes().to_vec();
+        return Ok(response);
     }
 
-    let contents = fs::read(&file_path).unwrap();
+    let contents = fs::read(&file_path).await?;
     let content_type = if request_path.ends_with(".wasm") {
         "application/wasm"
     } else if request_path.ends_with(".js") {
@@ -64,7 +64,7 @@ fn get_response(request_path: &str) -> Vec<u8> {
 
     println!("SERVER -> 200 {file_path:?}");
 
-    format!(
+    Ok(format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\r\n",
         contents.len(),
         content_type
@@ -72,5 +72,5 @@ fn get_response(request_path: &str) -> Vec<u8> {
     .into_bytes()
     .into_iter()
     .chain(contents.into_iter())
-    .collect()
+    .collect())
 }
