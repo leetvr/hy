@@ -1,9 +1,5 @@
 use deno_core::{error::AnyError, extension, op2, v8::Value};
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, net::SocketAddr, rc::Rc};
-
-thread_local! {
-    static KEYDOWN_HANDLER: RefCell<HashMap<SocketAddr, String>> = RefCell::new(HashMap::new());
-}
+use std::{borrow::Borrow, net::SocketAddr, rc::Rc};
 
 #[op2(async)]
 #[string]
