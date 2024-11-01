@@ -6,6 +6,7 @@ use wasm_bindgen::JsCast;
 // Import the necessary web_sys features
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
+mod gltf;
 mod render;
 
 // Enable console.log for debugging
@@ -44,11 +45,21 @@ impl Engine {
 
     pub fn key_down(&self, event: KeyboardEvent) {
         console_log!("Key pressed: {}", event.key());
+
+        if event.code() == "KeyW" {
+            match gltf::load(include_bytes!("gltf/test.glb")) {
+                Err(e) => {
+                    console_log!("Error loading GLTF: {e:#?}");
+                }
+                Ok(s) => console_log!("Loaded GLTF: {s:#?}"),
+            }
+        }
     }
 
     pub fn tick(&mut self, time: f64) {
-        let delta_time = Duration::from_secs_f64(time / 1000.0);
-        self.elapsed_time += delta_time;
+        let current_time = Duration::from_secs_f64(time / 1000.0);
+        let delta_time = current_time - self.elapsed_time;
+        self.elapsed_time = current_time;
 
         self.renderer.render(self.elapsed_time);
     }

@@ -31,7 +31,7 @@ impl Renderer {
         Ok(Self { gl, program })
     }
 
-    pub fn render(&self, delta_time: Duration) {
+    pub fn render(&self, elapsed_time: Duration) {
         let gl = &self.gl;
 
         unsafe {
@@ -39,7 +39,7 @@ impl Renderer {
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
-            let effect = (delta_time.as_secs_f32().sin() * 0.5 + 0.5) * 0.25;
+            let effect = (elapsed_time.as_secs_f32().sin() * 0.5 + 0.5) * 0.25;
 
             // Define the triangle vertices
             let vertices: [f32; 6] = [

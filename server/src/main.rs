@@ -1,3 +1,6 @@
+#![cfg_attr(target_arch = "wasm32", no_main)]
+#![cfg(not(target_arch = "wasm32"))]
+
 mod js;
 
 use std::net::SocketAddr;
