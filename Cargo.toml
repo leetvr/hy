@@ -9,6 +9,8 @@ web-sys = { version = "0.3.72", features = [
     "Document",
     "HtmlCanvasElement",
     "WebGl2RenderingContext",
+    "EventTarget",
+    "KeyboardEvent",
     "console",
 ] }
 wasm-bindgen = "0.2"

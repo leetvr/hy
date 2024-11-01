@@ -1,7 +1,10 @@
+use std::cell::RefCell;
+
 use glow::HasContext;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+use web_sys::KeyboardEvent;
 // Import the necessary web_sys features
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
@@ -10,12 +13,22 @@ macro_rules! console_log {
     ($($t:tt)*) => (web_sys::console::log_1(&format!($($t)*).into()))
 }
 
+// Keyboard handling
+thread_local! {
+    static KEYDOWN_HANDLER: RefCell<Option<Closure<dyn FnMut(KeyboardEvent)>>> = RefCell::new(None);
+}
+
 // Entry point when the module is loaded
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    // Access the canvas element
+    // Get the window, etc.
     let window = web_sys::window().ok_or("Could not access window")?;
     let document = window.document().ok_or("Could not access document")?;
+
+    // Set up handlers
+    set_keyboard_handler(&document)?;
+
+    // Access the canvas element
     let canvas = document
         .get_element_by_id("canvas")
         .ok_or("Canvas element not found")?;
@@ -142,4 +155,25 @@ pub fn start() -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn increment(count: i32) -> i32 {
     count + 1
+}
+
+fn set_keyboard_handler(document: &web_sys::Document) -> Result<(), JsValue> {
+    let body = document.body().ok_or("No body")?;
+
+    // Create a closure to handle the keyboard event
+    let keydown_handler = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+        let key = event.key();
+        console_log!("Key pressed: {}", key);
+        event.prevent_default();
+    }) as Box<dyn FnMut(_)>);
+
+    // Add the event listener
+    body.add_event_listener_with_callback("keydown", keydown_handler.as_ref().unchecked_ref())?;
+
+    // Stash the closure away
+    KEYDOWN_HANDLER.with(|h| {
+        *h.borrow_mut() = Some(keydown_handler);
+    });
+
+    Ok(())
 }
