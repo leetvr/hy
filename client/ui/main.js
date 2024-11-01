@@ -7008,7 +7008,7 @@ function App() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "oh hey triangle this is react, what's up??" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleClick, children: [
-      "count is ",
+      "count from Rust is ",
       count
     ] }) })
   ] });

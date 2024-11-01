@@ -13,7 +13,7 @@ function App() {
     <>
       <h1>oh hey triangle this is react, what's up??</h1>
       <div className="card">
-        <button onClick={handleClick}>count is {count}</button>
+        <button onClick={handleClick}>count from Rust is {count}</button>
       </div>
     </>
   );
