@@ -16,12 +16,24 @@
         <canvas id="canvas" width="640" height="480"></canvas>
         <div id="root"></div>
         <script type="module">
-            import init, { increment } from "./pkg/client.js";
+            import init, { increment, Engine } from "./pkg/client.js";
+
+            let module = await init().catch((err) => console.error("Error initializing wasm module:", err));
 
             // Crimes? What crimes?
             window.increment = increment;
+            window.engine = Engine.new();
 
-            init().catch((err) => console.error("Error initializing wasm module:", err));
+            window.addEventListener("keydown", (event) => {
+                window.engine.key_down(event);
+            })
+
+            let tick = (timestamp) => {
+                window.engine.tick(timestamp);
+                window.requestAnimationFrame(tick);
+            }
+
+            window.requestAnimationFrame(tick);
         </script>
         <script type="module" crossorigin src="./ui/main.js"></script>
     </body>
