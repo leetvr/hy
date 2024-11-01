@@ -3,4 +3,11 @@ name = "client"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+[lib]
+crate-type = ["cdylib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+glow = { workspace = true }
+wasm-bindgen.workspace = true
+web-sys.workspace = true
+bytemuck.workspace = true

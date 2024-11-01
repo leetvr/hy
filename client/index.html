@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Rust + Glow Triangle</title>
+        <style>
+            body {
+                margin: 0;
+            }
+            canvas {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <script type="module">
+            import init from "./pkg/client.js";
+
+            init().catch((err) => console.error("Error initializing wasm module:", err));
+        </script>
+    </body>
+</html>

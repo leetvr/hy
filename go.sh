@@ -1,7 +1,6 @@
 #!/bin/bash
-# Start the server
-cargo build
-cargo run --bin server &
+# Build the client
+(cd client && wasm-pack build --target web)
 
-# Connect to the server
-open https://localhost:8888
+# Start the server
+cargo run --bin server
