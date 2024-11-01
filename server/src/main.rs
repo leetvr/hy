@@ -1,9 +1,10 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![cfg(not(target_arch = "wasm32"))]
 
+mod game_server;
 mod js;
 
-use std::net::SocketAddr;
+use {futures_util::try_join, std::net::SocketAddr};
 
 use anyhow::Result;
 use js::run_js;
@@ -18,10 +19,17 @@ fn main() {
         .unwrap();
     webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
 
-    runtime.block_on(async { go().await }).unwrap();
+    let game = async {
+        tokio::spawn(game_server::start_game_server())
+            .await
+            .unwrap()
+    };
+    let http = start_http_server();
+
+    runtime.block_on(async { try_join!(game, http) }).unwrap();
 }
 
-async fn go() -> Result<()> {
+async fn start_http_server() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:8888").await?;
 
     loop {
