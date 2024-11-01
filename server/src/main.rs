@@ -1,21 +1,33 @@
+mod js;
+
+use std::net::SocketAddr;
+
 use anyhow::Result;
+use js::run_js;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:8888").await?;
+fn main() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
 
-    loop {
-        let (stream, _) = listener.accept().await?;
+    runtime.block_on(async { go().await }).unwrap();
+}
 
-        tokio::spawn(handle_connection(stream));
+async fn go() -> Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:8888").await?;
+
+    loop {
+        let (stream, addr) = listener.accept().await?;
+        handle_connection(stream, addr).await?;
     }
 }
 
-async fn handle_connection(mut stream: TcpStream) -> Result<()> {
+async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()> {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).await?;
 
@@ -23,10 +35,16 @@ async fn handle_connection(mut stream: TcpStream) -> Result<()> {
     let mut lines = request.lines();
     let first_line = lines.next().unwrap_or("");
     let mut parts = first_line.split_whitespace();
-    let _method = parts.next().unwrap_or("");
+    let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
 
-    let response = get_response(path).await?;
+    let response = match method {
+        "GET" => handle_get(path).await?,
+        "POST" => handle_post(path, addr).await?,
+        _ => "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n"
+            .as_bytes()
+            .to_vec(),
+    };
 
     stream.write_all(&response).await?;
     stream.flush().await?;
@@ -34,8 +52,17 @@ async fn handle_connection(mut stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-async fn get_response(request_path: &str) -> Result<Vec<u8>> {
-    println!("CLIENT <- {request_path}");
+async fn handle_post(path: &str, addr: SocketAddr) -> Result<Vec<u8>> {
+    let response = run_js(path, addr).await?;
+    Ok(format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n{response}",
+        response.len()
+    )
+    .into())
+}
+
+async fn handle_get(request_path: &str) -> Result<Vec<u8>> {
+    println!("CLIENT <- GET {request_path}");
     let request_path = if request_path == "/" {
         "/index.html"
     } else {

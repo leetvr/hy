@@ -7,3 +7,4 @@ edition = "2021"
 webbrowser.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+deno_core.workspace = true
