@@ -1,4 +1,5 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
+use bytemuck::{NoUninit, Pod, Zeroable};
 use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use gltf::{Animation, Glb, Mesh, Node};
 use itertools::izip;
@@ -10,7 +11,7 @@ pub struct GLTFModel {
     pub meshes: Vec<GLTFMesh>,
     pub skins: Vec<Skin>,
     pub nodes: Vec<GLTFNode>,
-    pub root_node: usize,
+    pub root_node_idx: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,7 +48,7 @@ pub enum AnimationPath {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 pub struct GLTFVertex {
     pub position: Vec4,
     pub normal: Vec4,
@@ -58,12 +59,12 @@ pub struct GLTFVertex {
 
 #[derive(Debug, Default, Clone)]
 pub struct GLTFMesh {
-    pub primitives: Vec<Primitive>,
+    pub primitives: Vec<GLTFPrimitive>,
 }
 
 #[derive(Debug, Clone)]
 pub struct GLTFMaterial {
-    pub base_colour_texture: Option<GLTFTexture>,
+    pub base_colour_texture: GLTFTexture,
     pub base_colour_factor: Vec4,
     pub roughness_factor: f32,
     pub metallic_factor: f32,
@@ -72,22 +73,9 @@ pub struct GLTFMaterial {
     pub emissive_texture: Option<GLTFTexture>,
 }
 
-impl Default for GLTFMaterial {
-    fn default() -> Self {
-        Self {
-            base_colour_texture: Default::default(),
-            base_colour_factor: Vec4::ONE,
-            roughness_factor: 1.,
-            metallic_factor: 1.,
-            normal_texture: Default::default(),
-            metallic_roughness_ao_texture: Default::default(),
-            emissive_texture: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct GLTFNode {
+    pub mesh: Option<usize>,
     pub children: Vec<usize>,
     pub transform: Transform,
 }
@@ -110,13 +98,13 @@ impl std::fmt::Debug for GLTFTexture {
 }
 
 #[derive(Clone)]
-pub struct Primitive {
+pub struct GLTFPrimitive {
     pub vertices: Vec<GLTFVertex>,
     pub indices: Vec<u32>,
     pub material: GLTFMaterial,
 }
 
-impl std::fmt::Debug for Primitive {
+impl std::fmt::Debug for GLTFPrimitive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Primitive")
             .field("vertices", &self.vertices.len())
@@ -142,6 +130,7 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     } else {
         anyhow::bail!("No root node found in glTF");
     }
+    asset.root_node_idx = root_node.context("No root node found in glTF")?.index();
 
     for mesh in document.meshes() {
         asset.meshes.push(load_mesh(mesh, &blob)?);
@@ -165,6 +154,7 @@ fn load_node(node: Node<'_>) -> anyhow::Result<GLTFNode> {
     let transform = cvt(node.transform());
     let children = node.children().map(|n| n.index()).collect();
     Ok(GLTFNode {
+        mesh: node.mesh().map(|m| m.index()),
         transform,
         children,
     })
@@ -258,7 +248,7 @@ fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
         let indices = import_indices(&primitive, &blob)?;
         let material = load_material(&primitive, &blob)?;
 
-        let prim = Primitive {
+        let prim = GLTFPrimitive {
             vertices,
             indices,
             material,
@@ -357,8 +347,7 @@ fn load_material(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result
     let metallic_factor = pbr.metallic_factor();
 
     let base_colour_texture = load_texture(pbr.base_color_texture(), blob)
-        .map_err(|e| console_log!("Unable to import base colour texture: {e}"))
-        .ok();
+        .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))?;
 
     let normal_texture = load_texture(material.normal_texture(), blob)
         .map_err(|e| console_log!("Unable to import normal texture: {e}"))

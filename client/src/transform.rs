@@ -8,6 +8,12 @@ pub struct Transform {
 }
 
 impl Transform {
+    pub const IDENTITY: Self = Self {
+        position: glam::Vec3::ZERO,
+        rotation: glam::Quat::IDENTITY,
+        scale: glam::Vec3::ONE,
+    };
+
     pub fn new<V: Into<glam::Vec3>>(position: V, rotation: glam::Quat) -> Self {
         Self {
             position: position.into(),

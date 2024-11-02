@@ -1,15 +1,26 @@
-use std::time::Duration;
+use std::{mem, slice, time::Duration};
 
+use bytemuck::offset_of;
+use glam::{Mat4, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::console_log;
+use crate::{
+    console_log,
+    gltf::{GLTFPrimitive, GLTFVertex},
+    transform::Transform,
+};
+
+const POSITION_ATTRIBUTE: u32 = 0;
+const NORMAL_ATTRIBUTE: u32 = 1;
+const UV_ATTRIBUTE: u32 = 2;
 
 pub struct Renderer {
     gl: glow::Context,
 
     program: glow::Program,
+    matrix_location: Option<glow::UniformLocation>,
 }
 
 impl Renderer {
@@ -27,11 +38,16 @@ impl Renderer {
         let fragment_shader_source = include_str!("shaders/tri.frag");
 
         let program = compile_shaders(&gl, vertex_shader_source, fragment_shader_source);
+        let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
 
-        Ok(Self { gl, program })
+        Ok(Self {
+            gl,
+            program,
+            matrix_location,
+        })
     }
 
-    pub fn render(&self, elapsed_time: Duration) {
+    pub fn render(&self, elapsed_time: Duration, draw_calls: &[DrawCall]) {
         let gl = &self.gl;
 
         unsafe {
@@ -39,46 +55,31 @@ impl Renderer {
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
 
-            let effect = (elapsed_time.as_secs_f32().sin() * 0.5 + 0.5) * 0.25;
+            let projection_matrix =
+                Mat4::perspective_rh_gl(45.0_f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
 
-            // Define the triangle vertices
-            let vertices: [f32; 6] = [
-                0.0 + effect,
-                0.5, // Vertex 1 (X, Y)
-                0.5 + effect,
-                -0.5, // Vertex 2 (X, Y)
-                -0.5 + effect,
-                -0.5, // Vertex 3 (X, Y)
-            ];
+            let view_matrix = Mat4::look_to_rh(Vec3::new(0.0, 0.0, 5.0), -Vec3::Z, Vec3::Y);
 
-            // Create and bind the vertex buffer
-            let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&vertices),
-                glow::STATIC_DRAW,
-            );
-
-            // Use the program and set up the vertex attributes
             gl.use_program(Some(self.program));
 
-            let position_attribute_location = gl
-                .get_attrib_location(self.program, "position")
-                .expect("gl: Unable to get position");
+            for draw_call in draw_calls {
+                let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
 
-            gl.enable_vertex_attrib_array(position_attribute_location);
-            gl.vertex_attrib_pointer_f32(
-                position_attribute_location,
-                2,           // size
-                glow::FLOAT, // type
-                false,       // normalized
-                0,           // stride
-                0,           // offset
-            );
+                gl.uniform_matrix_4_f32_slice(
+                    self.matrix_location.as_ref(),
+                    false,
+                    bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
+                );
 
-            // Draw the triangle
-            gl.draw_arrays(glow::TRIANGLES, 0, 3);
+                gl.bind_vertex_array(Some(draw_call.primitive.vao));
+                gl.bind_texture(glow::TEXTURE_2D, Some(draw_call.primitive.diffuse_texture));
+                gl.draw_elements(
+                    glow::TRIANGLES,
+                    draw_call.primitive.index_count as i32,
+                    glow::UNSIGNED_INT,
+                    0,
+                );
+            }
         }
     }
 }
@@ -87,7 +88,7 @@ fn compile_shaders(
     gl: &glow::Context,
     vertex_shader_source: &str,
     fragment_shader_source: &str,
-) -> glow::WebProgramKey {
+) -> glow::Program {
     unsafe {
         // Compile the vertex shader
         let vertex_shader = gl
@@ -136,4 +137,190 @@ fn compile_shaders(
         gl.delete_shader(fragment_shader);
         program
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderPrimitive {
+    vao: glow::VertexArray,
+    diffuse_texture: glow::Texture,
+    index_count: u32,
+}
+
+impl RenderPrimitive {
+    fn from_gltf(gl: &glow::Context, primitive: &GLTFPrimitive) -> Self {
+        unsafe {
+            let vao = gl
+                .create_vertex_array()
+                .expect("Failed to create vertex array");
+            gl.bind_vertex_array(Some(vao));
+
+            let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
+            gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                bytemuck::cast_slice(&primitive.vertices),
+                glow::STATIC_DRAW,
+            );
+
+            let index_buffer = gl.create_buffer().expect("Failed to create buffer");
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
+            gl.buffer_data_u8_slice(
+                glow::ELEMENT_ARRAY_BUFFER,
+                bytemuck::cast_slice(&primitive.indices),
+                glow::STATIC_DRAW,
+            );
+
+            let stride = mem::size_of::<crate::gltf::GLTFVertex>() as i32;
+
+            gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
+            gl.vertex_attrib_pointer_f32(
+                POSITION_ATTRIBUTE,
+                3,
+                glow::FLOAT,
+                false,
+                stride,
+                offset_of!(GLTFVertex, position) as i32,
+            );
+
+            gl.enable_vertex_attrib_array(NORMAL_ATTRIBUTE);
+            gl.vertex_attrib_pointer_f32(
+                NORMAL_ATTRIBUTE,
+                3,
+                glow::FLOAT,
+                false,
+                stride,
+                offset_of!(GLTFVertex, normal) as i32,
+            );
+
+            gl.enable_vertex_attrib_array(UV_ATTRIBUTE);
+            gl.vertex_attrib_pointer_f32(
+                UV_ATTRIBUTE,
+                2,
+                glow::FLOAT,
+                false,
+                stride,
+                offset_of!(GLTFVertex, uv) as i32,
+            );
+
+            gl.bind_vertex_array(None);
+
+            let diffuse_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(diffuse_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGB as i32,
+                primitive.material.base_colour_texture.dimensions.x as i32,
+                primitive.material.base_colour_texture.dimensions.y as i32,
+                0,
+                glow::RGB,
+                glow::UNSIGNED_BYTE,
+                Some(&primitive.material.base_colour_texture.data),
+            );
+
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR_MIPMAP_LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR_MIPMAP_LINEAR as i32,
+            );
+
+            Self {
+                vao,
+                diffuse_texture,
+                index_count: primitive.indices.len() as u32,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RenderMesh {
+    primitives: Vec<RenderPrimitive>,
+}
+
+impl RenderMesh {
+    pub fn from_gltf(renderer: &Renderer, mesh: &crate::gltf::GLTFMesh) -> Self {
+        let mut primitives = Vec::new();
+
+        for primitive in &mesh.primitives {
+            primitives.push(RenderPrimitive::from_gltf(&renderer.gl, primitive));
+        }
+
+        Self { primitives }
+    }
+}
+
+#[derive(Debug)]
+pub struct RenderModel {
+    meshes: Vec<RenderMesh>,
+}
+
+impl RenderModel {
+    pub fn from_gltf(renderer: &Renderer, gltf: &crate::gltf::GLTFModel) -> Self {
+        let mut meshes = Vec::new();
+
+        for mesh in &gltf.meshes {
+            meshes.push(RenderMesh::from_gltf(renderer, mesh));
+        }
+
+        Self { meshes }
+    }
+}
+
+pub fn build_render_plan(
+    models: &[crate::gltf::GLTFModel],
+    render_model: &[RenderModel],
+) -> Vec<DrawCall> {
+    let mut render_objects = Vec::new();
+
+    for (idx, model) in models.iter().enumerate() {
+        build_render_plan_recursive(
+            &mut render_objects,
+            model,
+            &render_model[idx],
+            model.root_node_idx,
+            Transform::IDENTITY,
+        );
+    }
+
+    render_objects
+}
+
+fn build_render_plan_recursive(
+    draw_calls: &mut Vec<DrawCall>,
+    gltf: &crate::gltf::GLTFModel,
+    render_model: &RenderModel,
+    current_node: usize,
+    parent_transform: Transform,
+) {
+    let node = &gltf.nodes[current_node];
+
+    let transform = parent_transform * node.transform;
+
+    if let Some(mesh) = node.mesh {
+        let render_mesh = &render_model.meshes[mesh];
+        for primitive in &render_mesh.primitives {
+            draw_calls.push(DrawCall {
+                primitive: primitive.clone(),
+                transform: transform.as_affine().into(),
+            });
+        }
+    }
+
+    for &child in &node.children {
+        build_render_plan_recursive(draw_calls, gltf, render_model, child, transform);
+    }
+}
+
+#[derive(Debug)]
+pub struct DrawCall {
+    primitive: RenderPrimitive,
+    transform: glam::Mat4,
 }
