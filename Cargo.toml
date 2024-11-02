@@ -14,7 +14,11 @@ web-sys = { version = "0.3.72", features = [
     "console",
 ] }
 wasm-bindgen = "0.2"
-bytemuck = "1.9.1"
+bytemuck = { version = "1.9.1", features = ["derive"] }
+glam = { version = "0.29", features = ["bytemuck"] }
+gltf = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+itertools = "0.13"
 webbrowser = "1.0.2"
 tokio = { version = "1.4.1", features = ["full"] }
 anyhow = "1.0"
