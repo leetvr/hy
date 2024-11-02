@@ -10,12 +10,6 @@ mod gltf;
 mod render;
 mod transform;
 
-// Enable console.log for debugging
-#[macro_export]
-macro_rules! console_log {
-    ($($t:tt)*) => (web_sys::console::log_1(&format!($($t)*).into()))
-}
-
 struct TestGltf {
     gltf: gltf::GLTFModel,
     render_model: render::RenderModel,
@@ -32,6 +26,8 @@ struct Engine {
 #[wasm_bindgen]
 impl Engine {
     pub fn new() -> Result<Self, JsValue> {
+        tracing_wasm::set_as_global_default();
+
         // Get the window, etc.
         let window = web_sys::window().ok_or("Could not access window")?;
         let document = window.document().ok_or("Could not access document")?;
@@ -52,22 +48,22 @@ impl Engine {
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
-        console_log!("Key pressed: {}", event.key());
+        tracing::info!("Key pressed: {}", event.key());
 
         if event.code() == "KeyW" {
             let gltf = match gltf::load(include_bytes!("gltf/test.glb")) {
                 Ok(g) => g,
                 Err(e) => {
-                    console_log!("Error loading GLTF: {e:#?}");
+                    tracing::info!("Error loading GLTF: {e:#?}");
                     return;
                 }
             };
 
-            console_log!("GLTF loaded: {:#?}", gltf);
+            tracing::info!("GLTF loaded: {:#?}", gltf);
 
             let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
 
-            console_log!("Render model created: {:#?}", render_model);
+            tracing::info!("Render model created: {:#?}", render_model);
 
             self.test = Some(TestGltf { gltf, render_model });
         }
@@ -85,7 +81,7 @@ impl Engine {
                 slice::from_ref(&test.render_model),
             );
 
-            console_log!("Draw calls created: {:#?}", draw_calls);
+            tracing::info!("Draw calls created: {:#?}", draw_calls);
         } else {
             draw_calls = Vec::new();
         }
