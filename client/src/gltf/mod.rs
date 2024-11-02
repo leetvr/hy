@@ -1,13 +1,21 @@
 use anyhow::anyhow;
 use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
-use gltf::{Animation, Glb, Node};
+use gltf::{Animation, Glb, Mesh, Node};
 use itertools::izip;
 
-use crate::console_log;
+use crate::{console_log, transform::Transform};
+
+#[derive(Debug, Default, Clone)]
+pub struct GLTFModel {
+    pub meshes: Vec<GLTFMesh>,
+    pub skins: Vec<Skin>,
+    pub nodes: Vec<GLTFNode>,
+    pub root_node: usize,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Joint {
-    // pub target_entity: hecs::Entity,
+    pub target_joint_node: usize,
     pub inverse_bind_matrix: Mat4,
 }
 
@@ -43,27 +51,14 @@ pub enum AnimationPath {
 pub struct GLTFVertex {
     pub position: Vec4,
     pub normal: Vec4,
-    pub joint: UVec2,
-    pub weight: Vec4,
+    pub joint: [u16; 4],
+    pub weight: [f32; 4],
     pub uv: Vec2,
 }
 
-#[derive(Debug, Clone)]
-pub struct GLTFAsset {
-    pub name: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct GLTFNode {
-    pub name: Option<String>,
-}
-
 #[derive(Debug, Default, Clone)]
-pub struct GLTFModel {
-    pub node_index: usize,
+pub struct GLTFMesh {
     pub primitives: Vec<Primitive>,
-    pub asset_name: String,
-    pub children: Vec<GLTFModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,9 +86,11 @@ impl Default for GLTFMaterial {
     }
 }
 
-/// Indicates that this entity was created as it was a child of a glTF model
-#[derive(Debug, Clone)]
-pub struct GLTFChild;
+#[derive(Debug, Default, Clone)]
+pub struct GLTFNode {
+    pub children: Vec<usize>,
+    pub transform: Transform,
+}
 
 #[derive(Clone)]
 pub struct GLTFTexture {
@@ -129,17 +126,6 @@ impl std::fmt::Debug for Primitive {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct MaterialOverrides {
-    pub base_colour_factor: Vec4,
-}
-
-impl MaterialOverrides {
-    pub fn new(base_colour_factor: Vec4) -> Self {
-        Self { base_colour_factor }
-    }
-}
-
 pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     let mut asset = GLTFModel::default();
 
@@ -151,14 +137,21 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     let root_node;
     if let Some(default_scene) = document.default_scene() {
         root_node = default_scene.nodes().next();
+    } else if let Some(root) = document.nodes().next() {
+        root_node = Some(root)
     } else {
-        root_node = document.nodes().next();
+        anyhow::bail!("No root node found in glTF");
     }
 
-    let root_node = root_node.ok_or_else(|| anyhow!("No nodes found in glTF"))?;
-
-    load_meshes_from_node(root_node.clone(), &blob, &mut asset)?;
-    load_skins_from_node(root_node.clone(), &blob, &mut asset)?;
+    for mesh in document.meshes() {
+        asset.meshes.push(load_mesh(mesh, &blob)?);
+    }
+    for skin in document.skins() {
+        asset.skins.push(load_skin(skin, &blob)?);
+    }
+    for node in document.nodes() {
+        asset.nodes.push(load_node(node)?);
+    }
 
     let mut animation_layers = Vec::new();
     for animation in document.animations() {
@@ -166,6 +159,15 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     }
 
     return Ok(asset);
+}
+
+fn load_node(node: Node<'_>) -> anyhow::Result<GLTFNode> {
+    let transform = cvt(node.transform());
+    let children = node.children().map(|n| n.index()).collect();
+    Ok(GLTFNode {
+        transform,
+        children,
+    })
 }
 
 fn load_animation(animation: Animation<'_>, blob: &[u8]) -> anyhow::Result<AnimationLayer> {
@@ -248,52 +250,28 @@ fn get_animation_path(property: gltf::animation::Property) -> Option<AnimationPa
     }
 }
 
-fn load_meshes_from_node(node: Node<'_>, blob: &[u8], asset: &mut GLTFModel) -> anyhow::Result<()> {
-    let primitives = &mut asset.primitives;
-    if let Some(mesh) = node.mesh() {
-        console_log!("Loading primitives for {}", node.index());
-        for primitive in mesh.primitives() {
-            let vertices = import_vertices(&primitive, &blob)?;
-            let indices = import_indices(&primitive, &blob)?;
-            let material = load_material(&primitive, &blob)?;
+fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
+    console_log!("Loading primitives for {}", mesh.index());
+    let mut parsed = GLTFMesh::default();
+    for primitive in mesh.primitives() {
+        let vertices = import_vertices(&primitive, &blob)?;
+        let indices = import_indices(&primitive, &blob)?;
+        let material = load_material(&primitive, &blob)?;
 
-            let prim = Primitive {
-                vertices,
-                indices,
-                material,
-            };
-            console_log!("Loaded primitive {:?}", prim);
-            primitives.push(prim);
-        }
-    } else {
-        console_log!("Node {} has no mesh", node.index());
+        let prim = Primitive {
+            vertices,
+            indices,
+            material,
+        };
+        console_log!("Loaded primitive {:?}", prim);
+        parsed.primitives.push(prim);
     }
 
-    // Recursively walk through child nodes
-    for node in node.children() {
-        let mut inner_model = GLTFModel::default();
-        load_meshes_from_node(node, blob, &mut inner_model)?;
-        asset.children.push(inner_model);
-    }
-
-    Ok(())
+    Ok(parsed)
 }
 
-fn load_skins_from_node(
-    node: Node<'_>,
-    blob: &[u8],
-    loaded_asset: &mut GLTFModel,
-) -> anyhow::Result<()> {
-    for node in node.children() {
-        load_skins_from_node(node, blob, loaded_asset)?;
-    }
-
-    let Some(skin) = node.skin() else {
-        console_log!("Node {} does not have a skin, ignoring", node.index());
-        return Ok(());
-    };
-
-    console_log!("Loading skin for node {}", node.index());
+fn load_skin(skin: gltf::Skin<'_>, blob: &[u8]) -> anyhow::Result<Skin> {
+    console_log!("Loading skin index {}", skin.index());
     let inverse_bind_matrices = skin
         .reader(|_| Some(blob))
         .read_inverse_bind_matrices()
@@ -304,11 +282,12 @@ fn load_skins_from_node(
     let mut skin_component = Skin::default();
     for (joint, inverse_bind_matrix) in skin.joints().zip(inverse_bind_matrices) {
         skin_component.joints.push(Joint {
+            target_joint_node: joint.index(),
             inverse_bind_matrix: Mat4::from_cols_array_2d(&inverse_bind_matrix),
         });
     }
 
-    Ok(())
+    Ok(skin_component)
 }
 
 fn import_vertices(
@@ -337,12 +316,7 @@ fn import_vertices(
     }
 
     if let Some(joint_reader) = reader.read_joints(0) {
-        for joint in joint_reader.into_u16() {
-            // cool
-            let x_y = (joint[0] as u32) << 16 | (joint[1] as u32);
-            let z_w = (joint[2] as u32) << 16 | (joint[3] as u32);
-            joints.push(UVec2::new(x_y, z_w));
-        }
+        joints.extend(joint_reader.into_u16());
     } else {
         for _ in 0..position_reader.len() {
             joints.push(Default::default());
@@ -357,7 +331,7 @@ fn import_vertices(
         .map(|(position, normal, weight, joint, uv)| GLTFVertex {
             position: Vec3::from(position).extend(1.),
             normal: Vec3::from(normal).extend(1.),
-            weight: weight.into(),
+            weight,
             joint,
             uv: uv.into(),
         })
@@ -407,6 +381,16 @@ fn load_material(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result
         metallic_roughness_ao_texture,
         emissive_texture,
     })
+}
+
+fn cvt(transform: gltf::scene::Transform) -> Transform {
+    let (position, rotation, _) = transform.decomposed();
+    let rotation = Quat::from_array(rotation);
+    Transform {
+        position: position.into(),
+        rotation,
+        scale: glam::Vec3::ONE,
+    }
 }
 
 fn load_texture<'a, T>(texture: Option<T>, blob: &[u8]) -> anyhow::Result<GLTFTexture>

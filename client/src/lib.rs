@@ -8,6 +8,7 @@ use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
 mod gltf;
 mod render;
+mod transform;
 
 // Enable console.log for debugging
 #[macro_export]
