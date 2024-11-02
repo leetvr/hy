@@ -6,7 +6,7 @@
 - [ ] npm installed
 - [ ] rustup installed
 - [ ] rustup target add wasm32-unknown-unknown
-- [ ] cargo binstall wasmpack
+- [ ] cargo install wasm-pack
 
 ## Getting started
 1. Check out the repo
