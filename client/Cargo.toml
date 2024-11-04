@@ -18,3 +18,4 @@ bytemuck.workspace = true
 image.workspace = true
 tracing.workspace = true
 tracing-wasm.workspace = true
+console_error_panic_hook.workspace = true

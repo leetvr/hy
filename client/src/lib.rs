@@ -27,6 +27,7 @@ struct Engine {
 impl Engine {
     pub fn new() -> Result<Self, JsValue> {
         tracing_wasm::set_as_global_default();
+        console_error_panic_hook::set_once();
 
         // Get the window, etc.
         let window = web_sys::window().ok_or("Could not access window")?;
