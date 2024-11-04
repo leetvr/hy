@@ -1,6 +1,6 @@
 use {
     crate::net::ConnectionState,
-    std::{cell::RefCell, net::Incoming, rc::Rc, slice, time::Duration},
+    std::{cell::RefCell, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
 
@@ -106,7 +106,7 @@ impl Engine {
         if *self.connection_state.borrow() == ConnectionState::Open {
             // Echo client
             for message in self.incoming_messages.borrow_mut().drain(..) {
-                console_log!("Received message: {:#?}", message);
+                tracing::info!("Received message: {:#?}", message);
                 self.ws.send_with_str(&message).unwrap();
             }
         }

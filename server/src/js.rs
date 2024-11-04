@@ -4,7 +4,7 @@ use std::{borrow::Borrow, net::SocketAddr, rc::Rc};
 #[op2(async)]
 #[string]
 async fn hello(#[string] ip: String) -> Result<String, AnyError> {
-    println!("Hello called: {ip}!");
+    tracing::info!("Hello called: {ip}!");
     Ok(format!("Hello {ip} from Rust"))
 }
 
@@ -17,7 +17,7 @@ extension!(
 
 pub async fn run_js(file_path: &str, addr: SocketAddr) -> anyhow::Result<String> {
     let file_path = &file_path[1..];
-    println!("CLIENT <- POST {file_path}");
+    tracing::info!("CLIENT <- POST {file_path}");
     let Ok(main_module) = deno_core::resolve_path(file_path, &std::env::current_dir()?) else {
         return Ok(format!("ERROR: File not found: {file_path}"));
     };
@@ -46,11 +46,11 @@ pub async fn run_js(file_path: &str, addr: SocketAddr) -> anyhow::Result<String>
 
     let script = format!("crimes.hello(\"{ip}\").then(console.log);");
 
-    println!("Evaluating {script}");
+    tracing::info!("Evaluating {script}");
     let promise = js_runtime.execute_script("", script)?;
     {
         let promise: &Value = &promise.borrow();
-        println!("is_promise {}", promise.is_promise());
+        tracing::info!("is_promise {}", promise.is_promise());
     }
 
     // This line seems to hang the runtime
