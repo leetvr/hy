@@ -248,6 +248,7 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "bytemuck",
  "console_error_panic_hook",
  "glam",
@@ -255,9 +256,11 @@ dependencies = [
  "gltf",
  "image",
  "itertools 0.13.0",
+ "net",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
@@ -615,6 +618,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "480c9417a5dc586fc0c0cb67891170e59cc11e9dc79ba1c11ddd2c56ca3f3b90"
 dependencies = [
  "bytemuck",
+ "serde",
 ]
 
 [[package]]
@@ -944,6 +948,14 @@ name = "ndk-context"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
+
+[[package]]
+name = "net"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "serde",
+]
 
 [[package]]
 name = "nom"
@@ -1411,8 +1423,11 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "deno_core",
  "futures-util",
+ "glam",
+ "net",
  "tokio",
  "tokio-tungstenite",
  "tracing",
@@ -1876,6 +1891,18 @@ dependencies = [
  "quote",
  "syn",
  "wasm-bindgen-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-futures"
+version = "0.4.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc7ec4f8827a71586374db3e87abdb5a2bb3a15afed140221307c3ec06b1f63b"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

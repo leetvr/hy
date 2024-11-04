@@ -1,5 +1,7 @@
 use {
-    crate::net::ConnectionState,
+    crate::{socket::ConnectionState, transform::Transform},
+    anyhow::{Context, Result},
+    glam::{Quat, Vec3},
     std::{cell::RefCell, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
@@ -11,8 +13,8 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
 mod gltf;
-mod net;
 mod render;
+mod socket;
 mod transform;
 
 struct TestGltf {
@@ -21,7 +23,7 @@ struct TestGltf {
 }
 
 #[wasm_bindgen]
-struct Engine {
+pub struct Engine {
     renderer: render::Renderer,
 
     elapsed_time: Duration,
@@ -29,7 +31,11 @@ struct Engine {
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<String>>>,
+    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
+
+    controls: Controls,
+    player_model: TestGltf,
+    player_position: glam::Vec2,
 }
 
 #[wasm_bindgen]
@@ -52,12 +58,19 @@ impl Engine {
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
         let incoming_messages = Rc::new(RefCell::new(Vec::new()));
-        let ws = net::connect_to_server(
+        let ws = socket::connect_to_server(
             "ws://127.0.0.1:8889",
             connection_state.clone(),
             incoming_messages.clone(),
         )
         .map_err(|e| format!("Failed to connect to server: {e}"))?;
+
+        let player_model = {
+            let gltf = gltf::load(include_bytes!("gltf/test.glb"))
+                .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
+            let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
+            TestGltf { gltf, render_model }
+        };
 
         Ok(Self {
             renderer,
@@ -67,13 +80,17 @@ impl Engine {
             ws,
             connection_state,
             incoming_messages,
+
+            controls: Default::default(),
+            player_model,
+            player_position: glam::Vec2::ZERO,
         })
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
         tracing::info!("Key pressed: {}", event.key());
 
-        if event.code() == "KeyW" {
+        if event.code() == "KeyR" {
             let gltf = match gltf::load(include_bytes!("gltf/test.glb")) {
                 Ok(g) => g,
                 Err(e) => {
@@ -90,6 +107,40 @@ impl Engine {
 
             self.test = Some(TestGltf { gltf, render_model });
         }
+
+        match event.code().as_str() {
+            "KeyW" => {
+                self.controls.up = true;
+            }
+            "KeyS" => {
+                self.controls.down = true;
+            }
+            "KeyA" => {
+                self.controls.left = true;
+            }
+            "KeyD" => {
+                self.controls.right = true;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn key_up(&mut self, event: KeyboardEvent) {
+        match event.code().as_str() {
+            "KeyW" => {
+                self.controls.up = false;
+            }
+            "KeyS" => {
+                self.controls.down = false;
+            }
+            "KeyA" => {
+                self.controls.left = false;
+            }
+            "KeyD" => {
+                self.controls.right = false;
+            }
+            _ => {}
+        }
     }
 
     pub fn tick(&mut self, time: f64) {
@@ -98,16 +149,13 @@ impl Engine {
         self.elapsed_time = current_time;
 
         if *self.connection_state.borrow() == ConnectionState::Connected {
-            // Start ping-pong chain
-            *self.connection_state.borrow_mut() = ConnectionState::Open;
-            self.ws.send_with_str("ping").unwrap();
-        }
+            send_controls(&self.controls, &mut self.ws).expect("Error while sending controls");
 
-        if *self.connection_state.borrow() == ConnectionState::Open {
-            // Echo client
-            for message in self.incoming_messages.borrow_mut().drain(..) {
-                tracing::info!("Received message: {:#?}", message);
-                self.ws.send_with_str(&message).unwrap();
+            let mut incoming_messages = self.incoming_messages.borrow_mut();
+            for message in incoming_messages.drain(..) {
+                let position_update: net::Position =
+                    bincode::deserialize(&message).expect("Failed to deserialize position update");
+                self.player_position = position_update.0;
             }
         }
 
@@ -118,16 +166,23 @@ impl Engine {
             _ => {}
         }
 
-        let draw_calls;
+        let mut draw_calls = render::build_render_plan(
+            slice::from_ref(&self.player_model.gltf),
+            slice::from_ref(&self.player_model.render_model),
+            Transform::new(
+                Vec3::new(self.player_position.x, self.player_position.y, 0.),
+                Quat::IDENTITY,
+            ),
+        );
+
         if let Some(ref test) = self.test {
-            draw_calls = render::build_render_plan(
+            draw_calls.extend(render::build_render_plan(
                 slice::from_ref(&test.gltf),
                 slice::from_ref(&test.render_model),
-            );
+                Transform::IDENTITY,
+            ));
 
-            tracing::info!("Draw calls created: {:#?}", draw_calls);
-        } else {
-            draw_calls = Vec::new();
+            tracing::debug!("Draw calls created: {:#?}", draw_calls);
         }
 
         self.renderer.render(self.elapsed_time, &draw_calls);
@@ -137,4 +192,36 @@ impl Engine {
 #[wasm_bindgen]
 pub fn increment(count: i32) -> i32 {
     count + 1
+}
+
+#[derive(Clone, Copy, Default)]
+struct Controls {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+
+fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
+    let mut move_dir = glam::Vec2::ZERO;
+    if controls.up {
+        move_dir.y += 1.0;
+    }
+    if controls.down {
+        move_dir.y -= 1.0;
+    }
+    if controls.left {
+        move_dir.x -= 1.0;
+    }
+    if controls.right {
+        move_dir.x += 1.0;
+    }
+    let controls = net::Controls {
+        move_direction: move_dir.normalize_or_zero(),
+    };
+    let message = bincode::serialize(&controls).context("Failed to serialize controls")?;
+    ws.send_with_u8_array(&message)
+        .expect("Failed to send controls");
+
+    Ok(())
 }
