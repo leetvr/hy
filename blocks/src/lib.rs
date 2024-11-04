@@ -10,6 +10,8 @@ use {
 
 pub type BlockId = u8;
 
+pub const EMPTY_BLOCK: BlockId = 0;
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct BlockPos {
     pub x: u32,
@@ -31,6 +33,7 @@ pub struct BlockGrid {
 }
 
 impl BlockGrid {
+    /// Create a new block grid with the given dimensions
     pub fn new(size_x: u32, size_y: u32, size_z: u32) -> Self {
         Self {
             blocks: vec![BlockId::default(); (size_x * size_y * size_z) as usize],
@@ -38,17 +41,37 @@ impl BlockGrid {
         }
     }
 
+    /// Get the block at the given position
     pub fn get(&self, pos: BlockPos) -> Option<&BlockId> {
         self.blocks.get(block_pos_to_array_index(pos, self.size))
     }
 
+    /// Get a mutable reference to the block at the given position
     pub fn get_mut(&mut self, pos: BlockPos) -> Option<&mut BlockId> {
         self.blocks
             .get_mut(block_pos_to_array_index(pos, self.size))
     }
 
+    /// Get the size of the block grid
     pub fn size(&self) -> (u32, u32, u32) {
         self.size
+    }
+
+    /// Get an iterator over all non-empty blocks in the grid
+    pub fn iter_non_empty(&self) -> impl Iterator<Item = (BlockPos, BlockId)> + '_ {
+        let indices = (0..self.size.0).flat_map(move |x| {
+            (0..self.size.1).flat_map(move |y| (0..self.size.2).map(move |z| [x, y, z]))
+        });
+        indices.filter_map(|pos| {
+            let block_pos: BlockPos = pos.into();
+            self.get(block_pos).and_then(|&block| {
+                if block != EMPTY_BLOCK {
+                    Some((block_pos, block))
+                } else {
+                    None
+                }
+            })
+        })
     }
 }
 

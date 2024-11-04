@@ -4,7 +4,7 @@ use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::{Context, Result},
     blocks::BlockGrid,
-    glam::{Quat, Vec3},
+    glam::{Mat4, Quat, Vec2, Vec3},
     net_types::PlayerId,
     std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
@@ -141,8 +141,11 @@ impl Engine {
                     GameState::Loading => match packet {
                         net_types::ServerPacket::InitLevel(init_level) => {
                             tracing::info!("Loaded level of size {:?}", init_level.blocks.size());
+                            let blocks = init_level.blocks.iter_non_empty().map(|(pos, _)| pos);
+                            let blocks_primitive = self.renderer.create_block_primitive(blocks);
                             self.game_state = GameState::Playing {
                                 blocks: init_level.blocks,
+                                blocks_primitive,
                                 players: HashMap::new(),
                             };
                         }
@@ -152,9 +155,14 @@ impl Engine {
                             break;
                         }
                     },
-                    GameState::Playing { players, blocks } => match packet {
+                    GameState::Playing {
+                        players,
+                        blocks,
+                        blocks_primitive,
+                    } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
-                            handle_set_block(blocks, set_block).expect("Failed to set block");
+                            handle_set_block(&self.renderer, blocks, blocks_primitive, set_block)
+                                .expect("Failed to set block");
                         }
                         net_types::ServerPacket::AddPlayer(add_player) => {
                             handle_add_player(players, add_player).expect("Failed to add player");
@@ -203,35 +211,6 @@ impl Engine {
             _ => {}
         }
 
-        self.render();
-    }
-
-    fn render(&self) {
-        let mut draw_calls = Vec::new();
-
-        if let GameState::Playing { players, .. } = &self.game_state {
-            for player in players.values() {
-                draw_calls.extend(render::build_render_plan(
-                    slice::from_ref(&self.player_model.gltf),
-                    slice::from_ref(&self.player_model.render_model),
-                    Transform::new(
-                        Vec3::new(player.position.x, player.position.y, 0.),
-                        Quat::IDENTITY,
-                    ),
-                ));
-            }
-        }
-
-        if let Some(ref test) = self.test {
-            draw_calls.extend(render::build_render_plan(
-                slice::from_ref(&test.gltf),
-                slice::from_ref(&test.render_model),
-                Transform::IDENTITY,
-            ));
-
-            tracing::debug!("Draw calls created: {:#?}", draw_calls);
-        }
-
         // Camera Input
         if self.controls.keyboard_inputs.contains("KeyI") {
             self.renderer.camera.translation.z += 0.1;
@@ -265,6 +244,42 @@ impl Engine {
             self.renderer.camera.rotation.y += 0.02;
         }
 
+        self.render();
+    }
+
+    fn render(&self) {
+        let mut draw_calls = Vec::new();
+
+        if let GameState::Playing {
+            players,
+            blocks_primitive,
+            ..
+        } = &self.game_state
+        {
+            for player in players.values() {
+                draw_calls.extend(render::build_render_plan(
+                    slice::from_ref(&self.player_model.gltf),
+                    slice::from_ref(&self.player_model.render_model),
+                    Transform::new(player.position, Quat::IDENTITY),
+                ));
+            }
+
+            draw_calls.push(render::DrawCall {
+                primitive: blocks_primitive.clone(),
+                transform: Mat4::IDENTITY,
+            });
+        }
+
+        if let Some(ref test) = self.test {
+            draw_calls.extend(render::build_render_plan(
+                slice::from_ref(&test.gltf),
+                slice::from_ref(&test.render_model),
+                Transform::IDENTITY,
+            ));
+
+            tracing::debug!("Draw calls created: {:#?}", draw_calls);
+        }
+
         self.renderer.render(self.elapsed_time, &draw_calls);
     }
 }
@@ -280,7 +295,7 @@ struct Controls {
 
 #[derive(Clone, Debug, Default)]
 struct Player {
-    position: glam::Vec2,
+    position: Vec3,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -289,6 +304,7 @@ enum GameState {
     Loading,
     Playing {
         blocks: BlockGrid,
+        blocks_primitive: render::RenderPrimitive,
         players: HashMap<PlayerId, Player>,
     },
 }
@@ -297,7 +313,7 @@ enum GameState {
 
 /// Send outgoing controls packet
 fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
-    let mut move_dir = glam::Vec2::ZERO;
+    let mut move_dir = Vec2::ZERO;
     if controls.keyboard_inputs.contains("KeyW") {
         move_dir.y += 1.0;
     }
@@ -324,10 +340,14 @@ fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
 
 /// Handle a `SetBlock` packet
 fn handle_set_block(
+    renderer: &render::Renderer,
     blocks: &mut BlockGrid,
+    blocks_primitive: &mut render::RenderPrimitive,
     net_types::SetBlock { position, block_id }: net_types::SetBlock,
 ) -> Result<()> {
     blocks[position] = block_id;
+    *blocks_primitive =
+        renderer.create_block_primitive(blocks.iter_non_empty().map(|(pos, _)| pos));
     Ok(())
 }
 

@@ -25,14 +25,14 @@ pub struct Controls {
 /// Update a player's position
 pub struct UpdatePosition {
     pub id: PlayerId,
-    pub position: glam::Vec2,
+    pub position: glam::Vec3,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 /// Send a new player to the game
 pub struct AddPlayer {
     pub id: PlayerId,
-    pub position: glam::Vec2,
+    pub position: glam::Vec3,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

@@ -3,6 +3,7 @@ use {
     blocks::BlockGrid,
     crossbeam::queue::SegQueue,
     futures_util::{SinkExt, StreamExt},
+    glam::Vec3,
     net_types::PlayerId,
     std::{
         collections::{HashMap, HashSet},
@@ -20,6 +21,7 @@ pub struct GameServer {
     spawner: tokio::runtime::Handle,
 
     blocks: BlockGrid,
+    player_spawn_point: glam::Vec3,
 
     next_client_id: u64,
     clients: HashMap<ClientId, Client>,
@@ -36,11 +38,15 @@ impl GameServer {
 
         spawner.spawn(start_client_listener(incoming_connections.clone()));
 
-        let blocks = BlockGrid::new(128, 128, 64);
+        let size = 32;
+        let blocks = generate_map(size, size);
+        // Roughly in the center of the map
+        let player_spawn_point = glam::Vec3::new(size as f32 / 2., 4., size as f32 / 2.);
 
         Self {
             spawner,
             blocks,
+            player_spawn_point,
             next_client_id: 0,
             clients: HashMap::new(),
             next_player_id: 0,
@@ -63,7 +69,8 @@ impl GameServer {
         // Update player positions, this is all the game logic
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            player.position += PLAYER_SPEED * client.last_controls.move_direction * TICK_DT;
+            let move_dir = client.last_controls.move_direction;
+            player.position += PLAYER_SPEED * Vec3::new(move_dir.x, 0., move_dir.y) * TICK_DT;
         }
     }
 
@@ -73,7 +80,8 @@ impl GameServer {
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
-        self.players.insert(player_id, Player::default());
+        self.players
+            .insert(player_id, Player::new(self.player_spawn_point));
 
         let client_id = ClientId(self.next_client_id);
         self.next_client_id += 1;
@@ -177,9 +185,15 @@ pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
 const PLAYER_SPEED: f32 = 5.;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 struct Player {
-    position: glam::Vec2,
+    position: glam::Vec3,
+}
+
+impl Player {
+    pub fn new(position: glam::Vec3) -> Self {
+        Self { position }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -194,7 +208,7 @@ struct Client {
     player_id: PlayerId,
 
     // The clients that the client is aware of, and their last known position
-    known_players: HashMap<PlayerId, glam::Vec2>,
+    known_players: HashMap<PlayerId, glam::Vec3>,
 
     // The packet channels for this client
     incoming_rx: Receiver<net_types::Controls>,
@@ -277,3 +291,21 @@ pub async fn start_client_listener(
 
 type ClientMessageReceiver = Receiver<net_types::Controls>;
 type ServerMessageSender = Sender<net_types::ServerPacket>;
+
+/// Generate a simple map for testing
+fn generate_map(x: u32, z: u32) -> BlockGrid {
+    let mut blocks = BlockGrid::new(x, 16, z);
+
+    for x in 0..x {
+        // Generate flat ground
+        for y in 0..1 {
+            for z in 0..z {
+                if x == 0 || y == 0 || z == 0 || x == 127 || y == 127 || z == 63 {
+                    blocks[[x, y, z].into()] = 1;
+                }
+            }
+        }
+    }
+
+    blocks
+}

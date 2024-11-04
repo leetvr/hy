@@ -1,4 +1,8 @@
-use std::{mem, slice, time::Duration};
+use {
+    blocks::BlockPos,
+    bytemuck::{Pod, Zeroable},
+    std::{mem, slice, time::Duration},
+};
 
 use bytemuck::offset_of;
 use glam::{Mat4, Vec3};
@@ -85,6 +89,13 @@ impl Renderer {
                 );
             }
         }
+    }
+
+    pub fn create_block_primitive(
+        &self,
+        blocks: impl Iterator<Item = BlockPos>,
+    ) -> RenderPrimitive {
+        unsafe { blocks_primitive(&self.gl, blocks) }
     }
 }
 
@@ -326,8 +337,8 @@ fn build_render_plan_recursive(
 
 #[derive(Debug)]
 pub struct DrawCall {
-    primitive: RenderPrimitive,
-    transform: glam::Mat4,
+    pub primitive: RenderPrimitive,
+    pub transform: glam::Mat4,
 }
 
 // This is the only thing keeping us from building this crate on non-wasm32 targets
@@ -363,5 +374,115 @@ impl Camera {
             self.rotation.y,
             self.rotation.z,
         ) * Mat4::from_translation(self.translation)
+    }
+}
+
+unsafe fn blocks_primitive(
+    gl: &glow::Context,
+    blocks: impl Iterator<Item = BlockPos>,
+) -> RenderPrimitive {
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
+    struct CubeVertex {
+        position: glam::Vec3,
+    }
+
+    let cube_iter = blocks.enumerate().map(|(i, pos)| {
+        let pos = glam::Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
+        let vertices = [
+            CubeVertex {
+                position: pos + Vec3::new(0.0, 0.0, 0.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(1.0, 0.0, 0.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(1.0, 1.0, 0.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(0.0, 1.0, 0.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(0.0, 0.0, 1.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(1.0, 0.0, 1.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(1.0, 1.0, 1.0),
+            },
+            CubeVertex {
+                position: pos + Vec3::new(0.0, 1.0, 1.0),
+            },
+        ]
+        .into_iter();
+
+        let idx_start = i as u32 * 8;
+        let indices = [
+            0, 1, 2, 2, 3, 0, // Front
+            1, 5, 6, 6, 2, 1, // Right
+            5, 4, 7, 7, 6, 5, // Back
+            4, 0, 3, 3, 7, 4, // Left
+            3, 2, 6, 6, 7, 3, // Top
+            4, 5, 1, 1, 0, 4, // Bottom
+        ]
+        .map(|i| idx_start + i)
+        .into_iter();
+
+        (vertices, indices)
+    });
+
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    for (v, i) in cube_iter {
+        vertices.extend(v);
+        indices.extend(i);
+    }
+    tracing::info!(
+        "Built {} vertices and {} indices",
+        vertices.len(),
+        indices.len()
+    );
+
+    let vao = gl
+        .create_vertex_array()
+        .expect("Failed to create vertex array");
+    gl.bind_vertex_array(Some(vao));
+
+    let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
+    gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
+    gl.buffer_data_u8_slice(
+        glow::ARRAY_BUFFER,
+        bytemuck::cast_slice(&vertices),
+        glow::STATIC_DRAW,
+    );
+
+    let index_buffer = gl.create_buffer().expect("Failed to create buffer");
+    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
+    gl.buffer_data_u8_slice(
+        glow::ELEMENT_ARRAY_BUFFER,
+        bytemuck::cast_slice(&indices),
+        glow::STATIC_DRAW,
+    );
+
+    let stride = mem::size_of::<CubeVertex>() as i32;
+
+    gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
+    gl.vertex_attrib_pointer_f32(
+        POSITION_ATTRIBUTE,
+        3,
+        glow::FLOAT,
+        false,
+        stride,
+        offset_of!(CubeVertex, position) as i32,
+    );
+    gl.bind_vertex_array(None);
+
+    let diffuse_texture = gl.create_texture().expect("Failed to create texture");
+
+    RenderPrimitive {
+        vao,
+        diffuse_texture,
+        index_count: indices.len() as u32,
     }
 }
