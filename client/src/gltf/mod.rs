@@ -4,7 +4,7 @@ use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use gltf::{Animation, Glb, Mesh, Node};
 use itertools::izip;
 
-use crate::{console_log, transform::Transform};
+use crate::transform::Transform;
 
 #[derive(Debug, Default, Clone)]
 pub struct GLTFModel {
@@ -162,14 +162,14 @@ fn load_node(node: Node<'_>) -> anyhow::Result<GLTFNode> {
 
 fn load_animation(animation: Animation<'_>, blob: &[u8]) -> anyhow::Result<AnimationLayer> {
     let name = animation.name().unwrap_or_else(|| {
-        console_log!(
+        tracing::info!(
             "Unable to load animation without name at index {}",
-            animation.index()
+            animation.index(),
         );
         "unknown"
     });
 
-    console_log!("Loading animation {:?}", animation.name());
+    tracing::info!("Loading animation {:?}", animation.name());
     let mut channels = Vec::new();
     for channel in animation.channels() {
         // Try to get the path this channel is targeting
@@ -241,7 +241,7 @@ fn get_animation_path(property: gltf::animation::Property) -> Option<AnimationPa
 }
 
 fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
-    console_log!("Loading primitives for {}", mesh.index());
+    tracing::info!("Loading primitives for {}", mesh.index());
     let mut parsed = GLTFMesh::default();
     for primitive in mesh.primitives() {
         let vertices = import_vertices(&primitive, &blob)?;
@@ -253,7 +253,7 @@ fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
             indices,
             material,
         };
-        console_log!("Loaded primitive {:?}", prim);
+        tracing::info!("Loaded primitive {:?}", prim);
         parsed.primitives.push(prim);
     }
 
@@ -261,7 +261,7 @@ fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
 }
 
 fn load_skin(skin: gltf::Skin<'_>, blob: &[u8]) -> anyhow::Result<Skin> {
-    console_log!("Loading skin index {}", skin.index());
+    tracing::info!("Loading skin index {}", skin.index());
     let inverse_bind_matrices = skin
         .reader(|_| Some(blob))
         .read_inverse_bind_matrices()
@@ -350,15 +350,15 @@ fn load_material(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result
         .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))?;
 
     let normal_texture = load_texture(material.normal_texture(), blob)
-        .map_err(|e| console_log!("Unable to import normal texture: {e}"))
+        .map_err(|e| tracing::info!("Unable to import normal texture: {e}"))
         .ok();
 
     let metallic_roughness_ao_texture = load_texture(pbr.metallic_roughness_texture(), blob)
-        .map_err(|e| console_log!("Unable to import metallic roughness AO texture: {e}"))
+        .map_err(|e| tracing::info!("Unable to import metallic roughness AO texture: {e}"))
         .ok();
 
     let emissive_texture = load_texture(material.emissive_texture(), blob)
-        .map_err(|e| console_log!("Unable to import emissive texture: {e}"))
+        .map_err(|e| tracing::info!("Unable to import emissive texture: {e}"))
         .ok();
 
     Ok(GLTFMaterial {

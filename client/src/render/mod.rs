@@ -7,7 +7,6 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::{
-    console_log,
     gltf::{GLTFPrimitive, GLTFVertex},
     transform::Transform,
 };
@@ -100,7 +99,7 @@ fn compile_shaders(
         // Check for compilation errors
         if !gl.get_shader_compile_status(vertex_shader) {
             let log = gl.get_shader_info_log(vertex_shader);
-            console_log!("Vertex shader compilation failed: {}", log);
+            tracing::info!("Vertex shader compilation failed: {}", log);
             // return Err(JsValue::from_str(&log));
             panic!("Vertex shader compilation failed: {}", log);
         }
@@ -114,7 +113,7 @@ fn compile_shaders(
         // Check for compilation errors
         if !gl.get_shader_compile_status(fragment_shader) {
             let log = gl.get_shader_info_log(fragment_shader);
-            console_log!("Fragment shader compilation failed: {}", log);
+            tracing::info!("Fragment shader compilation failed: {}", log);
             // return Err(JsValue::from_str(&log));
             panic!("Fragment shader compilation failed: {}", log);
         }
@@ -128,7 +127,7 @@ fn compile_shaders(
         // Check for linking errors
         if !gl.get_program_link_status(program) {
             let log = gl.get_program_info_log(program);
-            console_log!("Program linking failed: {}", log);
+            tracing::info!("Program linking failed: {}", log);
             // return Err(JsValue::from_str(&log));
             panic!("Program linking failed: {}", log);
         }
