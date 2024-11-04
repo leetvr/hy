@@ -4,15 +4,33 @@
 mod game_server;
 mod js;
 
-use {futures_util::try_join, std::net::SocketAddr};
-
-use anyhow::Result;
-use js::run_js;
-use tokio::fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use {
+    anyhow::Result,
+    futures_util::try_join,
+    js::run_js,
+    std::net::SocketAddr,
+    tokio::{
+        fs,
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+    },
+    tracing_subscriber::{
+        filter::{EnvFilter, LevelFilter},
+        layer::SubscriberExt,
+        util::SubscriberInitExt,
+    },
+};
 
 fn main() {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -73,7 +91,7 @@ async fn handle_post(path: &str, addr: SocketAddr) -> Result<Vec<u8>> {
 }
 
 async fn handle_get(request_path: &str) -> Result<Vec<u8>> {
-    println!("CLIENT <- GET {request_path}");
+    tracing::info!("CLIENT <- GET {request_path}");
     let request_path = if request_path == "/" {
         "/index.html"
     } else {
@@ -84,7 +102,7 @@ async fn handle_get(request_path: &str) -> Result<Vec<u8>> {
     file_path.push(&request_path[1..]); // Remove leading '/'
 
     if !file_path.exists() {
-        println!("SERVER <- 404");
+        tracing::info!("SERVER <- 404");
         let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n".as_bytes().to_vec();
         return Ok(response);
     }
@@ -100,7 +118,7 @@ async fn handle_get(request_path: &str) -> Result<Vec<u8>> {
         "application/octet-stream"
     };
 
-    println!("SERVER -> 200 {file_path:?}");
+    tracing::info!("SERVER -> 200 {file_path:?}");
 
     Ok(format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {}\r\n\r\n",

@@ -11,7 +11,7 @@ pub async fn start_game_server() -> Result<()> {
         // Echo server
         tokio::spawn(async move {
             let addr = stream.peer_addr().expect("no peer address found");
-            println!("Client connected from: {}", addr);
+            tracing::info!("Client connected from: {}", addr);
 
             let ws_stream = tokio_tungstenite::accept_async(stream)
                 .await
@@ -23,18 +23,18 @@ pub async fn start_game_server() -> Result<()> {
                     let message = match message {
                         Ok(v) => v,
                         Err(e) => {
-                            println!("Error receiving message: {}", e);
+                            tracing::info!("Error receiving message: {}", e);
                             break;
                         }
                     };
 
                     match message.into_text() {
                         Ok(v) => {
-                            println!("Received message: {}", v);
+                            tracing::info!("Received message: {}", v);
                             write.send(v.into()).await.expect("error sending message");
                         }
                         Err(e) => {
-                            println!("Error decoding message into string: {}", e);
+                            tracing::info!("Error decoding message into string: {}", e);
                             break;
                         }
                     }
