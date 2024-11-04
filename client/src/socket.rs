@@ -2,13 +2,17 @@ use {
     anyhow::Result,
     std::{cell::RefCell, mem, rc::Rc},
     wasm_bindgen::{prelude::Closure, JsCast},
-    web_sys::{Event, MessageEvent, WebSocket},
+    wasm_bindgen_futures::JsFuture,
+    web_sys::{
+        js_sys::{ArrayBuffer, Uint8Array},
+        Blob, Event, MessageEvent, WebSocket,
+    },
 };
 
 pub fn connect_to_server(
     addr: &str,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<String>>>,
+    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
 ) -> Result<WebSocket> {
     // Connect to server
     let ws = WebSocket::new(addr).expect("Failed to connect to server");
@@ -17,8 +21,22 @@ pub fn connect_to_server(
     let onmessage = Closure::wrap(Box::new({
         let incoming_messages = incoming_messages.clone();
         move |event: MessageEvent| {
-            let message = event.data().as_string().unwrap();
-            incoming_messages.borrow_mut().push(message);
+            let message = event
+                .data()
+                .dyn_into::<Blob>()
+                .expect("Failed to read message");
+
+            // Note(ll): I think this can be done synchronously
+            let incoming_messages = incoming_messages.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let array_buffer = JsFuture::from(message.array_buffer())
+                    .await
+                    .expect("Failed to read array buffer")
+                    .dyn_into::<ArrayBuffer>()
+                    .unwrap();
+                let array = Uint8Array::new(&array_buffer);
+                incoming_messages.borrow_mut().push(array.to_vec());
+            });
         }
     }) as Box<dyn FnMut(MessageEvent)>);
     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -63,7 +81,6 @@ pub fn connect_to_server(
 pub enum ConnectionState {
     Connecting,
     Connected,
-    Open,
     Closed,
     Error(String),
 }

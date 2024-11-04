@@ -2,6 +2,7 @@ use {
     anyhow::Result,
     futures_util::{SinkExt, StreamExt},
     tokio::net::TcpListener,
+    tokio_tungstenite::tungstenite::Message,
 };
 
 pub async fn start_game_server() -> Result<()> {
@@ -17,26 +18,31 @@ pub async fn start_game_server() -> Result<()> {
                 .await
                 .expect("error during the websocket handshake");
 
+            let mut position = glam::Vec2::ZERO;
+
             let (mut write, mut read) = ws_stream.split();
             loop {
                 if let Some(message) = read.next().await {
-                    let message = match message {
-                        Ok(v) => v,
+                    let controls = match message {
+                        Ok(v) => match bincode::deserialize::<net::Controls>(&v.into_data()) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                tracing::info!("Error deserializing controls: {}", e);
+                                break;
+                            }
+                        },
                         Err(e) => {
                             tracing::info!("Error receiving message: {}", e);
                             break;
                         }
                     };
 
-                    match message.into_text() {
-                        Ok(v) => {
-                            tracing::info!("Received message: {}", v);
-                            write.send(v.into()).await.expect("error sending message");
-                        }
-                        Err(e) => {
-                            tracing::info!("Error decoding message into string: {}", e);
-                            break;
-                        }
+                    position += controls.move_direction * PLAYER_SPEED;
+
+                    let position_message = bincode::serialize(&net::Position(position)).unwrap();
+                    if let Err(e) = write.send(Message::Binary(position_message)).await {
+                        tracing::info!("Error sending message: {}", e);
+                        break;
                     }
                 }
             }
@@ -45,3 +51,5 @@ pub async fn start_game_server() -> Result<()> {
 
     Ok(())
 }
+
+const PLAYER_SPEED: f32 = 0.05;

@@ -28,6 +28,10 @@
                 window.engine.key_down(event);
             })
 
+            window.addEventListener("keyup", (event) => {
+                window.engine.key_up(event);
+            })
+
             let tick = (timestamp) => {
                 window.engine.tick(timestamp);
                 window.requestAnimationFrame(tick);

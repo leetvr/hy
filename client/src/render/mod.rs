@@ -276,6 +276,7 @@ impl RenderModel {
 pub fn build_render_plan(
     models: &[crate::gltf::GLTFModel],
     render_model: &[RenderModel],
+    transform: Transform,
 ) -> Vec<DrawCall> {
     let mut render_objects = Vec::new();
 
@@ -285,7 +286,7 @@ pub fn build_render_plan(
             model,
             &render_model[idx],
             model.root_node_idx,
-            Transform::IDENTITY,
+            transform,
         );
     }
 

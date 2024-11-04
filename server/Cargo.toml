@@ -12,3 +12,7 @@ deno_core.workspace = true
 futures-util.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+glam.workspace = true
+bincode.workspace = true
+
+net.workspace = true
