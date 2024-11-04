@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::{Context, Result},
@@ -108,39 +110,13 @@ impl Engine {
             self.test = Some(TestGltf { gltf, render_model });
         }
 
-        match event.code().as_str() {
-            "KeyW" => {
-                self.controls.up = true;
-            }
-            "KeyS" => {
-                self.controls.down = true;
-            }
-            "KeyA" => {
-                self.controls.left = true;
-            }
-            "KeyD" => {
-                self.controls.right = true;
-            }
-            _ => {}
-        }
+        self.controls
+            .keyboard_inputs
+            .insert(event.code().as_str().to_string());
     }
 
     pub fn key_up(&mut self, event: KeyboardEvent) {
-        match event.code().as_str() {
-            "KeyW" => {
-                self.controls.up = false;
-            }
-            "KeyS" => {
-                self.controls.down = false;
-            }
-            "KeyA" => {
-                self.controls.left = false;
-            }
-            "KeyD" => {
-                self.controls.right = false;
-            }
-            _ => {}
-        }
+        self.controls.keyboard_inputs.remove(event.code().as_str());
     }
 
     pub fn tick(&mut self, time: f64) {
@@ -202,6 +178,39 @@ impl Engine {
             tracing::debug!("Draw calls created: {:#?}", draw_calls);
         }
 
+        // Camera Input
+        if self.controls.keyboard_inputs.contains("KeyI") {
+            self.renderer.camera.translation.z += 0.1;
+        }
+        if self.controls.keyboard_inputs.contains("KeyK") {
+            self.renderer.camera.translation.z -= 0.1;
+        }
+        if self.controls.keyboard_inputs.contains("KeyJ") {
+            self.renderer.camera.translation.x += 0.1;
+        }
+        if self.controls.keyboard_inputs.contains("KeyL") {
+            self.renderer.camera.translation.x -= 0.1;
+        }
+        if self.controls.keyboard_inputs.contains("KeyU") {
+            self.renderer.camera.translation.y += 0.1;
+        }
+        if self.controls.keyboard_inputs.contains("KeyO") {
+            self.renderer.camera.translation.y -= 0.1;
+        }
+
+        if self.controls.keyboard_inputs.contains("ArrowUp") {
+            self.renderer.camera.rotation.x -= 0.02;
+        }
+        if self.controls.keyboard_inputs.contains("ArrowDown") {
+            self.renderer.camera.rotation.x += 0.02;
+        }
+        if self.controls.keyboard_inputs.contains("ArrowLeft") {
+            self.renderer.camera.rotation.y -= 0.02;
+        }
+        if self.controls.keyboard_inputs.contains("ArrowRight") {
+            self.renderer.camera.rotation.y += 0.02;
+        }
+
         self.renderer.render(self.elapsed_time, &draw_calls);
     }
 }
@@ -211,26 +220,23 @@ pub fn increment(count: i32) -> i32 {
     count + 1
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct Controls {
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
+    keyboard_inputs: HashSet<String>,
 }
 
 fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
     let mut move_dir = glam::Vec2::ZERO;
-    if controls.up {
+    if controls.keyboard_inputs.contains("KeyW") {
         move_dir.y += 1.0;
     }
-    if controls.down {
+    if controls.keyboard_inputs.contains("KeyS") {
         move_dir.y -= 1.0;
     }
-    if controls.left {
+    if controls.keyboard_inputs.contains("KeyA") {
         move_dir.x -= 1.0;
     }
-    if controls.right {
+    if controls.keyboard_inputs.contains("KeyD") {
         move_dir.x += 1.0;
     }
     let controls = net::Controls {

@@ -20,6 +20,8 @@ pub struct Renderer {
 
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
+
+    pub camera: Camera,
 }
 
 impl Renderer {
@@ -39,10 +41,13 @@ impl Renderer {
         let program = compile_shaders(&gl, vertex_shader_source, fragment_shader_source);
         let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
 
+        let camera = Camera::default();
+
         Ok(Self {
             gl,
             program,
             matrix_location,
+            camera,
         })
     }
 
@@ -57,7 +62,7 @@ impl Renderer {
             let projection_matrix =
                 Mat4::perspective_rh_gl(45.0_f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
 
-            let view_matrix = Mat4::look_to_rh(Vec3::new(0.0, 0.0, 5.0), -Vec3::Z, Vec3::Y);
+            let view_matrix = self.camera.view_matrix();
 
             gl.use_program(Some(self.program));
 
@@ -333,4 +338,30 @@ fn get_gl_context(_webgl2_context: WebGl2RenderingContext) -> glow::Context {
 
     #[cfg(target_arch = "wasm32")]
     glow::Context::from_webgl2_context(_webgl2_context)
+}
+
+#[derive(Debug)]
+pub struct Camera {
+    pub translation: Vec3,
+    pub rotation: Vec3,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            translation: Vec3::new(0.0, 0.0, -5.0),
+            rotation: Default::default(),
+        }
+    }
+}
+
+impl Camera {
+    pub fn view_matrix(&self) -> Mat4 {
+        Mat4::from_euler(
+            glam::EulerRot::XYZ,
+            self.rotation.x,
+            self.rotation.y,
+            self.rotation.z,
+        ) * Mat4::from_translation(self.translation)
+    }
 }
