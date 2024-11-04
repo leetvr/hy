@@ -2,7 +2,8 @@ use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::{Context, Result},
     glam::{Quat, Vec3},
-    std::{cell::RefCell, rc::Rc, slice, time::Duration},
+    net::PlayerId,
+    std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
 
@@ -35,7 +36,8 @@ pub struct Engine {
 
     controls: Controls,
     player_model: TestGltf,
-    player_position: glam::Vec2,
+
+    players: HashMap<PlayerId, Player>,
 }
 
 #[wasm_bindgen]
@@ -83,13 +85,11 @@ impl Engine {
 
             controls: Default::default(),
             player_model,
-            player_position: glam::Vec2::ZERO,
+            players: Default::default(),
         })
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
-        tracing::info!("Key pressed: {}", event.key());
-
         if event.code() == "KeyR" {
             let gltf = match gltf::load(include_bytes!("gltf/test.glb")) {
                 Ok(g) => g,
@@ -153,9 +153,23 @@ impl Engine {
 
             let mut incoming_messages = self.incoming_messages.borrow_mut();
             for message in incoming_messages.drain(..) {
-                let position_update: net::Position =
+                let packet: net::ServerPacket =
                     bincode::deserialize(&message).expect("Failed to deserialize position update");
-                self.player_position = position_update.0;
+                match packet {
+                    net::ServerPacket::UpdatePosition(net::UpdatePosition { id, position }) => {
+                        let Some(player) = self.players.get_mut(&id) else {
+                            tracing::error!("Received position update for unknown player");
+                            continue;
+                        };
+                        player.position = position;
+                    }
+                    net::ServerPacket::AddPlayer(net::AddPlayer { id, position }) => {
+                        self.players.insert(id, Player { position });
+                    }
+                    net::ServerPacket::RemovePlayer(net::RemovePlayer { id }) => {
+                        self.players.remove(&id);
+                    }
+                }
             }
         }
 
@@ -166,14 +180,17 @@ impl Engine {
             _ => {}
         }
 
-        let mut draw_calls = render::build_render_plan(
-            slice::from_ref(&self.player_model.gltf),
-            slice::from_ref(&self.player_model.render_model),
-            Transform::new(
-                Vec3::new(self.player_position.x, self.player_position.y, 0.),
-                Quat::IDENTITY,
-            ),
-        );
+        let mut draw_calls = Vec::new();
+        for player in self.players.values() {
+            draw_calls.extend(render::build_render_plan(
+                slice::from_ref(&self.player_model.gltf),
+                slice::from_ref(&self.player_model.render_model),
+                Transform::new(
+                    Vec3::new(player.position.x, player.position.y, 0.),
+                    Quat::IDENTITY,
+                ),
+            ));
+        }
 
         if let Some(ref test) = self.test {
             draw_calls.extend(render::build_render_plan(
@@ -224,4 +241,8 @@ fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
         .expect("Failed to send controls");
 
     Ok(())
+}
+
+struct Player {
+    position: glam::Vec2,
 }
