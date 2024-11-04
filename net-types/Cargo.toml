@@ -1,5 +1,5 @@
 [package]
-name = "net"
+name = "net-types"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,3 +7,5 @@ edition = "2021"
 glam.workspace = true
 serde.workspace = true
 derive_more.workspace = true
+
+blocks.workspace = true

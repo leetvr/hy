@@ -1,8 +1,9 @@
 use {
     anyhow::Result,
+    blocks::BlockGrid,
     crossbeam::queue::SegQueue,
     futures_util::{SinkExt, StreamExt},
-    net::PlayerId,
+    net_types::PlayerId,
     std::{
         collections::{HashMap, HashSet},
         sync::Arc,
@@ -17,6 +18,8 @@ use {
 
 pub struct GameServer {
     spawner: tokio::runtime::Handle,
+
+    blocks: BlockGrid,
 
     next_client_id: u64,
     clients: HashMap<ClientId, Client>,
@@ -33,8 +36,11 @@ impl GameServer {
 
         spawner.spawn(start_client_listener(incoming_connections.clone()));
 
+        let blocks = BlockGrid::new(128, 128, 64);
+
         Self {
             spawner,
+            blocks,
             next_client_id: 0,
             clients: HashMap::new(),
             next_player_id: 0,
@@ -72,10 +78,18 @@ impl GameServer {
         let client_id = ClientId(self.next_client_id);
         self.next_client_id += 1;
 
+        // Send level init packet
+        let _ = outgoing_tx.blocking_send(
+            net_types::InitLevel {
+                blocks: self.blocks.clone(),
+            }
+            .into(),
+        );
+
         self.clients.insert(
             client_id,
             Client {
-                last_controls: net::Controls::default(),
+                last_controls: net_types::Controls::default(),
                 player_id,
                 known_players: HashMap::new(),
                 incoming_rx,
@@ -113,7 +127,7 @@ impl GameServer {
             for player_id in new_players {
                 let player = self.players.get(player_id).unwrap();
                 let _ = client.outgoing_tx.blocking_send(
-                    net::AddPlayer {
+                    net_types::AddPlayer {
                         id: *player_id,
                         position: player.position,
                     }
@@ -126,7 +140,7 @@ impl GameServer {
             for player_id in removed_players {
                 let _ = client
                     .outgoing_tx
-                    .blocking_send(net::RemovePlayer { id: *player_id }.into());
+                    .blocking_send(net_types::RemovePlayer { id: *player_id }.into());
                 client.known_players.remove(player_id);
             }
 
@@ -135,7 +149,7 @@ impl GameServer {
                 let player = self.players.get(player_id).unwrap();
                 if player.position != *known_position {
                     let _ = client.outgoing_tx.blocking_send(
-                        net::UpdatePosition {
+                        net_types::UpdatePosition {
                             id: *player_id,
                             position: player.position,
                         }
@@ -174,7 +188,7 @@ struct ClientId(u64);
 struct Client {
     // The last received controls
     // TODO(ll): Once we have prediction this should be a queue of inputs
-    last_controls: net::Controls,
+    last_controls: net_types::Controls,
 
     // This client's player ID
     player_id: PlayerId,
@@ -183,8 +197,8 @@ struct Client {
     known_players: HashMap<PlayerId, glam::Vec2>,
 
     // The packet channels for this client
-    incoming_rx: Receiver<net::Controls>,
-    outgoing_tx: Sender<net::ServerPacket>,
+    incoming_rx: Receiver<net_types::Controls>,
+    outgoing_tx: Sender<net_types::ServerPacket>,
 }
 
 pub async fn start_client_listener(
@@ -222,7 +236,7 @@ pub async fn start_client_listener(
 
                             // Deserialize the message and pass it to the client's incoming channel
                             let controls = match message {
-                                Ok(v) => match bincode::deserialize::<net::Controls>(&v.into_data()) {
+                                Ok(v) => match bincode::deserialize::<net_types::Controls>(&v.into_data()) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         tracing::warn!("Error deserializing controls: {}", e);
@@ -261,5 +275,5 @@ pub async fn start_client_listener(
     Ok(())
 }
 
-type ClientMessageReceiver = Receiver<net::Controls>;
-type ServerMessageSender = Sender<net::ServerPacket>;
+type ClientMessageReceiver = Receiver<net_types::Controls>;
+type ServerMessageSender = Sender<net_types::ServerPacket>;

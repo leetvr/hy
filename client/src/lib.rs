@@ -3,8 +3,9 @@ use std::collections::HashSet;
 use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::{Context, Result},
+    blocks::BlockGrid,
     glam::{Quat, Vec3},
-    net::PlayerId,
+    net_types::PlayerId,
     std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
@@ -39,7 +40,7 @@ pub struct Engine {
     controls: Controls,
     player_model: TestGltf,
 
-    players: HashMap<PlayerId, Player>,
+    game_state: GameState,
 }
 
 #[wasm_bindgen]
@@ -87,7 +88,8 @@ impl Engine {
 
             controls: Default::default(),
             player_model,
-            players: Default::default(),
+
+            game_state: Default::default(),
         })
     }
 
@@ -127,25 +129,70 @@ impl Engine {
         if *self.connection_state.borrow() == ConnectionState::Connected {
             send_controls(&self.controls, &mut self.ws).expect("Error while sending controls");
 
-            let mut incoming_messages = self.incoming_messages.borrow_mut();
-            for message in incoming_messages.drain(..) {
-                let packet: net::ServerPacket =
+            loop {
+                let Some(message) = self.incoming_messages.borrow_mut().pop() else {
+                    break;
+                };
+
+                let packet: net_types::ServerPacket =
                     bincode::deserialize(&message).expect("Failed to deserialize position update");
-                match packet {
-                    net::ServerPacket::UpdatePosition(net::UpdatePosition { id, position }) => {
-                        let Some(player) = self.players.get_mut(&id) else {
-                            tracing::error!("Received position update for unknown player");
-                            continue;
-                        };
-                        player.position = position;
-                    }
-                    net::ServerPacket::AddPlayer(net::AddPlayer { id, position }) => {
-                        self.players.insert(id, Player { position });
-                    }
-                    net::ServerPacket::RemovePlayer(net::RemovePlayer { id }) => {
-                        self.players.remove(&id);
-                    }
+
+                match &mut self.game_state {
+                    GameState::Loading => match packet {
+                        net_types::ServerPacket::InitLevel(init_level) => {
+                            tracing::info!("Loaded level of size {:?}", init_level.blocks.size());
+                            self.game_state = GameState::Playing {
+                                blocks: init_level.blocks,
+                                players: HashMap::new(),
+                            };
+                        }
+                        p => {
+                            tracing::error!("Received unexpected packet: {:#?}", p);
+                            self.ws.close().unwrap();
+                            break;
+                        }
+                    },
+                    GameState::Playing { players, blocks } => match packet {
+                        net_types::ServerPacket::SetBlock(set_block) => {
+                            handle_set_block(blocks, set_block).expect("Failed to set block");
+                        }
+                        net_types::ServerPacket::AddPlayer(add_player) => {
+                            handle_add_player(players, add_player).expect("Failed to add player");
+                        }
+                        net_types::ServerPacket::UpdatePosition(update_position) => {
+                            handle_update_position(players, update_position)
+                                .expect("Failed to update position");
+                        }
+                        net_types::ServerPacket::RemovePlayer(remove_player) => {
+                            handle_remove_player(players, remove_player)
+                                .expect("Failed to remove player");
+                        }
+                        p => {
+                            tracing::error!("Received unexpected packet: {:#?}", p);
+                            self.ws.close().unwrap();
+                            break;
+                        }
+                    },
                 }
+
+                // match packet {
+                //     net_types::ServerPacket::UpdatePosition(net_types::UpdatePosition {
+                //         id,
+                //         position,
+                //     }) => {
+                //         let Some(player) = self.players.get_mut(&id) else {
+                //             tracing::error!("Received position update for unknown player");
+                //             continue;
+                //         };
+                //         player.position = position;
+                //     }
+                //     net_types::ServerPacket::AddPlayer(net_types::AddPlayer { id, position }) => {
+                //         self.players.insert(id, Player { position });
+                //     }
+                //     net_types::ServerPacket::RemovePlayer(net_types::RemovePlayer { id }) => {
+                //         self.players.remove(&id);
+                //     }
+                // }
             }
         }
 
@@ -156,16 +203,23 @@ impl Engine {
             _ => {}
         }
 
+        self.render();
+    }
+
+    fn render(&self) {
         let mut draw_calls = Vec::new();
-        for player in self.players.values() {
-            draw_calls.extend(render::build_render_plan(
-                slice::from_ref(&self.player_model.gltf),
-                slice::from_ref(&self.player_model.render_model),
-                Transform::new(
-                    Vec3::new(player.position.x, player.position.y, 0.),
-                    Quat::IDENTITY,
-                ),
-            ));
+
+        if let GameState::Playing { players, .. } = &self.game_state {
+            for player in players.values() {
+                draw_calls.extend(render::build_render_plan(
+                    slice::from_ref(&self.player_model.gltf),
+                    slice::from_ref(&self.player_model.render_model),
+                    Transform::new(
+                        Vec3::new(player.position.x, player.position.y, 0.),
+                        Quat::IDENTITY,
+                    ),
+                ));
+            }
         }
 
         if let Some(ref test) = self.test {
@@ -214,7 +268,6 @@ impl Engine {
         self.renderer.render(self.elapsed_time, &draw_calls);
     }
 }
-
 #[wasm_bindgen]
 pub fn increment(count: i32) -> i32 {
     count + 1
@@ -225,6 +278,24 @@ struct Controls {
     keyboard_inputs: HashSet<String>,
 }
 
+#[derive(Clone, Debug, Default)]
+struct Player {
+    position: glam::Vec2,
+}
+
+#[derive(Clone, Debug, Default)]
+enum GameState {
+    #[default]
+    Loading,
+    Playing {
+        blocks: BlockGrid,
+        players: HashMap<PlayerId, Player>,
+    },
+}
+
+// Networking
+
+/// Send outgoing controls packet
 fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
     let mut move_dir = glam::Vec2::ZERO;
     if controls.keyboard_inputs.contains("KeyW") {
@@ -239,7 +310,7 @@ fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
     if controls.keyboard_inputs.contains("KeyD") {
         move_dir.x += 1.0;
     }
-    let controls = net::Controls {
+    let controls = net_types::Controls {
         move_direction: move_dir.normalize_or_zero(),
     };
     let message = bincode::serialize(&controls).context("Failed to serialize controls")?;
@@ -249,6 +320,43 @@ fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
     Ok(())
 }
 
-struct Player {
-    position: glam::Vec2,
+// Handlers for incoming packets
+
+/// Handle a `SetBlock` packet
+fn handle_set_block(
+    blocks: &mut BlockGrid,
+    net_types::SetBlock { position, block_id }: net_types::SetBlock,
+) -> Result<()> {
+    blocks[position] = block_id;
+    Ok(())
+}
+
+/// Handle an `AddPlayer` packet
+fn handle_add_player(
+    players: &mut HashMap<PlayerId, Player>,
+    net_types::AddPlayer { id, position }: net_types::AddPlayer,
+) -> Result<()> {
+    players.insert(id, Player { position });
+    Ok(())
+}
+
+/// Handle a `RemovePlayer` packet
+fn handle_remove_player(
+    players: &mut HashMap<PlayerId, Player>,
+    net_types::RemovePlayer { id }: net_types::RemovePlayer,
+) -> Result<()> {
+    players.remove(&id);
+    Ok(())
+}
+
+/// Handle an `UpdatePosition` packet
+fn handle_update_position(
+    players: &mut HashMap<PlayerId, Player>,
+    net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
+) -> Result<()> {
+    let player = players
+        .get_mut(&id)
+        .context("Received position update for unknown player")?;
+    player.position = position;
+    Ok(())
 }
