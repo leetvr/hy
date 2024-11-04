@@ -31,7 +31,7 @@ impl Renderer {
             .dyn_into::<WebGl2RenderingContext>()?;
 
         // Initialize glow with the WebGL2 context
-        let gl = glow::Context::from_webgl2_context(webgl2_context);
+        let gl = get_gl_context(webgl2_context);
 
         let vertex_shader_source = include_str!("shaders/tri.vert");
         let fragment_shader_source = include_str!("shaders/tri.frag");
@@ -322,4 +322,14 @@ fn build_render_plan_recursive(
 pub struct DrawCall {
     primitive: RenderPrimitive,
     transform: glam::Mat4,
+}
+
+// This is the only thing keeping us from building this crate on non-wasm32 targets
+// This function just hides build errors on non-wasm32 targets so we can use rust-analyzer
+fn get_gl_context(_webgl2_context: WebGl2RenderingContext) -> glow::Context {
+    #[cfg(not(target_arch = "wasm32"))]
+    panic!("This function should only be called on wasm32 target");
+
+    #[cfg(target_arch = "wasm32")]
+    glow::Context::from_webgl2_context(_webgl2_context)
 }
