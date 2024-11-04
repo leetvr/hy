@@ -1,8 +1,10 @@
 use {
     anyhow::Result,
+    blocks::BlockGrid,
     crossbeam::queue::SegQueue,
     futures_util::{SinkExt, StreamExt},
-    net::PlayerId,
+    glam::Vec3,
+    net_types::PlayerId,
     std::{
         collections::{HashMap, HashSet},
         sync::Arc,
@@ -17,6 +19,9 @@ use {
 
 pub struct GameServer {
     spawner: tokio::runtime::Handle,
+
+    blocks: BlockGrid,
+    player_spawn_point: glam::Vec3,
 
     next_client_id: u64,
     clients: HashMap<ClientId, Client>,
@@ -33,8 +38,15 @@ impl GameServer {
 
         spawner.spawn(start_client_listener(incoming_connections.clone()));
 
+        let size = 32;
+        let blocks = generate_map(size, size);
+        // Roughly in the center of the map
+        let player_spawn_point = glam::Vec3::new(size as f32 / 2., 4., size as f32 / 2.);
+
         Self {
             spawner,
+            blocks,
+            player_spawn_point,
             next_client_id: 0,
             clients: HashMap::new(),
             next_player_id: 0,
@@ -57,7 +69,8 @@ impl GameServer {
         // Update player positions, this is all the game logic
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            player.position += PLAYER_SPEED * client.last_controls.move_direction * TICK_DT;
+            let move_dir = client.last_controls.move_direction;
+            player.position += PLAYER_SPEED * Vec3::new(move_dir.x, 0., move_dir.y) * TICK_DT;
         }
     }
 
@@ -67,15 +80,24 @@ impl GameServer {
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
-        self.players.insert(player_id, Player::default());
+        self.players
+            .insert(player_id, Player::new(self.player_spawn_point));
 
         let client_id = ClientId(self.next_client_id);
         self.next_client_id += 1;
 
+        // Send level init packet
+        let _ = outgoing_tx.blocking_send(
+            net_types::InitLevel {
+                blocks: self.blocks.clone(),
+            }
+            .into(),
+        );
+
         self.clients.insert(
             client_id,
             Client {
-                last_controls: net::Controls::default(),
+                last_controls: net_types::Controls::default(),
                 player_id,
                 known_players: HashMap::new(),
                 incoming_rx,
@@ -113,7 +135,7 @@ impl GameServer {
             for player_id in new_players {
                 let player = self.players.get(player_id).unwrap();
                 let _ = client.outgoing_tx.blocking_send(
-                    net::AddPlayer {
+                    net_types::AddPlayer {
                         id: *player_id,
                         position: player.position,
                     }
@@ -126,7 +148,7 @@ impl GameServer {
             for player_id in removed_players {
                 let _ = client
                     .outgoing_tx
-                    .blocking_send(net::RemovePlayer { id: *player_id }.into());
+                    .blocking_send(net_types::RemovePlayer { id: *player_id }.into());
                 client.known_players.remove(player_id);
             }
 
@@ -135,7 +157,7 @@ impl GameServer {
                 let player = self.players.get(player_id).unwrap();
                 if player.position != *known_position {
                     let _ = client.outgoing_tx.blocking_send(
-                        net::UpdatePosition {
+                        net_types::UpdatePosition {
                             id: *player_id,
                             position: player.position,
                         }
@@ -163,9 +185,15 @@ pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
 const PLAYER_SPEED: f32 = 5.;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 struct Player {
-    position: glam::Vec2,
+    position: glam::Vec3,
+}
+
+impl Player {
+    pub fn new(position: glam::Vec3) -> Self {
+        Self { position }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -174,17 +202,17 @@ struct ClientId(u64);
 struct Client {
     // The last received controls
     // TODO(ll): Once we have prediction this should be a queue of inputs
-    last_controls: net::Controls,
+    last_controls: net_types::Controls,
 
     // This client's player ID
     player_id: PlayerId,
 
     // The clients that the client is aware of, and their last known position
-    known_players: HashMap<PlayerId, glam::Vec2>,
+    known_players: HashMap<PlayerId, glam::Vec3>,
 
     // The packet channels for this client
-    incoming_rx: Receiver<net::Controls>,
-    outgoing_tx: Sender<net::ServerPacket>,
+    incoming_rx: Receiver<net_types::Controls>,
+    outgoing_tx: Sender<net_types::ServerPacket>,
 }
 
 pub async fn start_client_listener(
@@ -222,7 +250,7 @@ pub async fn start_client_listener(
 
                             // Deserialize the message and pass it to the client's incoming channel
                             let controls = match message {
-                                Ok(v) => match bincode::deserialize::<net::Controls>(&v.into_data()) {
+                                Ok(v) => match bincode::deserialize::<net_types::Controls>(&v.into_data()) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         tracing::warn!("Error deserializing controls: {}", e);
@@ -261,5 +289,23 @@ pub async fn start_client_listener(
     Ok(())
 }
 
-type ClientMessageReceiver = Receiver<net::Controls>;
-type ServerMessageSender = Sender<net::ServerPacket>;
+type ClientMessageReceiver = Receiver<net_types::Controls>;
+type ServerMessageSender = Sender<net_types::ServerPacket>;
+
+/// Generate a simple map for testing
+fn generate_map(x: u32, z: u32) -> BlockGrid {
+    let mut blocks = BlockGrid::new(x, 16, z);
+
+    for x in 0..x {
+        // Generate flat ground
+        for y in 0..1 {
+            for z in 0..z {
+                if x == 0 || y == 0 || z == 0 || x == 127 || y == 127 || z == 63 {
+                    blocks[[x, y, z].into()] = 1;
+                }
+            }
+        }
+    }
+
+    blocks
+}

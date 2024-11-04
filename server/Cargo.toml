@@ -16,4 +16,5 @@ glam.workspace = true
 bincode.workspace = true
 crossbeam.workspace = true
 
-net.workspace = true
+net-types.workspace = true
+blocks.workspace = true

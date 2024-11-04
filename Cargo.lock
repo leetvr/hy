@@ -164,6 +164,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "blocks"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -249,6 +256,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "blocks",
  "bytemuck",
  "console_error_panic_hook",
  "glam",
@@ -256,7 +264,7 @@ dependencies = [
  "gltf",
  "image",
  "itertools 0.13.0",
- "net",
+ "net-types",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
@@ -1026,9 +1034,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
-name = "net"
+name = "net-types"
 version = "0.1.0"
 dependencies = [
+ "blocks",
  "derive_more",
  "glam",
  "serde",
@@ -1501,11 +1510,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "blocks",
  "crossbeam",
  "deno_core",
  "futures-util",
  "glam",
- "net",
+ "net-types",
  "tokio",
  "tokio-tungstenite",
  "tracing",
