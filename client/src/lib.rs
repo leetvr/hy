@@ -1,4 +1,8 @@
-use std::{slice, time::Duration};
+use {
+    crate::net::ConnectionState,
+    std::{cell::RefCell, net::Incoming, rc::Rc, slice, time::Duration},
+    web_sys::WebSocket,
+};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -7,6 +11,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
 mod gltf;
+mod net;
 mod render;
 mod transform;
 
@@ -21,6 +26,10 @@ struct Engine {
 
     elapsed_time: Duration,
     test: Option<TestGltf>,
+
+    ws: WebSocket,
+    connection_state: Rc<RefCell<ConnectionState>>,
+    incoming_messages: Rc<RefCell<Vec<String>>>,
 }
 
 #[wasm_bindgen]
@@ -41,10 +50,23 @@ impl Engine {
 
         let renderer = render::Renderer::new(canvas)?;
 
+        let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
+        let incoming_messages = Rc::new(RefCell::new(Vec::new()));
+        let ws = net::connect_to_server(
+            "ws://127.0.0.1:8889",
+            connection_state.clone(),
+            incoming_messages.clone(),
+        )
+        .map_err(|e| format!("Failed to connect to server: {e}"))?;
+
         Ok(Self {
             renderer,
             elapsed_time: Duration::ZERO,
             test: None,
+
+            ws,
+            connection_state,
+            incoming_messages,
         })
     }
 
@@ -74,6 +96,27 @@ impl Engine {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         let delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
+
+        if *self.connection_state.borrow() == ConnectionState::Connected {
+            // Start ping-pong chain
+            *self.connection_state.borrow_mut() = ConnectionState::Open;
+            self.ws.send_with_str("ping").unwrap();
+        }
+
+        if *self.connection_state.borrow() == ConnectionState::Open {
+            // Echo client
+            for message in self.incoming_messages.borrow_mut().drain(..) {
+                console_log!("Received message: {:#?}", message);
+                self.ws.send_with_str(&message).unwrap();
+            }
+        }
+
+        match &*self.connection_state.borrow() {
+            ConnectionState::Error(e) => {
+                panic!("Error in websocket connection: {e:#}");
+            }
+            _ => {}
+        }
 
         let draw_calls;
         if let Some(ref test) = self.test {
