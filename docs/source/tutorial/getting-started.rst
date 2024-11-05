@@ -122,8 +122,9 @@ Open up a terminal and list the ``CaptureTheFlag`` directory:
     CaptureTheFlag/
     ├── blocktypes/
     │   └── asphalt/
-    │      └── asphalt.ts
-    │      └── 0.png
+    │      ├── top.png
+    │      ├── behavior.ts
+    │      └── properties.json
     │   └── dirt/
      # ...........
     ├── entities.json

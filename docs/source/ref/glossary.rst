@@ -18,6 +18,10 @@ This page lists all of the concepts that exist in Hytopia’s view of the world.
   every :term:`block` has a “type” which controls the behaviour and appearance
   of all blocks of that type
 
+ Edit Mode
+  a mode of the :term:`Hytopia Editor`, where you can edit the world. If you’re
+  in :term:`Playtest Mode`, press the Stop button to switch back to Edit Mode
+
  entity
   an entity is a wizzle in the wozzle
 
@@ -39,6 +43,11 @@ This page lists all of the concepts that exist in Hytopia’s view of the world.
  player
   represents a real person, running Hytopia, who is playing your game. All
   Hytopia games are automatically multiplayer.
+
+ Playtest Mode
+  a mode of the :term:`Hytopia Editor`, where you can play the world you’re
+  constructing. Press the Play button to switch to Playtest Mode; and the Stop
+  button to switch back to :term:`Edit Mode`
  
  world
   the world is the virtual space in which a Hytopia :term:`game` happens. You
