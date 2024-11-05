@@ -3,18 +3,34 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Hy's documentation!
-==============================
+Hy: the prototype for Hytopia
+=============================
+
+Hy is a prototype for Hytopia’s user-generated content (UGC) platform. This
+documentation:
+
+ * Explains what UGC is and why you should develop it (**TO BE WRITTEN**)
+ * Walks you through building your first :term:`world` and the :term:`game`
+   inside it
+ * Contains a comprehensive reference for everything in Hytopia (**TO BE
+   WRITTEN**)
+
+
+Table of contents
+-----------------
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Tutorial
 
+   tutorial/getting-started
+   tutorial/blocks
+   tutorial/entities
+   tutorial/capture-the-flag
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference material
 
-Indices and tables
-==================
+   ref/glossary
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
