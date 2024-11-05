@@ -233,7 +233,7 @@ impl Engine {
         self.render();
     }
 
-    fn render(&self) {
+    fn render(&mut self) {
         let mut draw_calls = Vec::new();
 
         if let GameState::Playing {
@@ -256,7 +256,9 @@ impl Engine {
             });
         }
 
-        if let Some(ref test) = self.test {
+        if let Some(ref mut test) = self.test {
+            gltf::animate_model(&mut test.gltf, self.elapsed_time);
+
             draw_calls.extend(render::build_render_plan(
                 slice::from_ref(&test.gltf),
                 slice::from_ref(&test.render_model),

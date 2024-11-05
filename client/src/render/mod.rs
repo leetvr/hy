@@ -337,7 +337,7 @@ fn build_render_plan_recursive(
 ) {
     let node = &gltf.nodes[current_node];
 
-    let transform = parent_transform * node.transform;
+    let transform = parent_transform * node.current_transform;
 
     if let Some(mesh) = node.mesh {
         let render_mesh = &render_model.meshes[mesh];
