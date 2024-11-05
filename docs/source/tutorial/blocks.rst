@@ -189,4 +189,4 @@ bases and work out what you might need to tweak.
 
 When you’re ready, click the Stop button to move back to Edit mode, and:
 
-:doc:`Move to the next lesson, on entities <tutorial/entities>`
+:doc:`Move to the next lesson, on entities </tutorial/entities>`

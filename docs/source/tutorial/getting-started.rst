@@ -203,4 +203,4 @@ Next up: blocks
 
 Next you’ll learn how blocks define the terrain of the world.
 
-:doc:`Move to the next lesson, on blocks <tutorial/blocks>`
+:doc:`Move to the next lesson, on blocks </tutorial/blocks>`

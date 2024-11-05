@@ -31,6 +31,12 @@ This page lists all of the concepts that exist in Hytopia’s view of the world.
   example, number of hitpoints), and each entity of that type can customise
   those properties
 
+ entity property
+  every :term:`entity type` defines a set of allowed properties for that
+  entity type (for example, hitpoints). Each instance of that entity has its
+  own value for those properties (some mobs may have more hitpoints) and can
+  use that to control its behavior
+
  game
   a game takes place in a :term:`world`. Usually it has a start, an end, some
   players, and some sort of high score... but it’s up to you!
