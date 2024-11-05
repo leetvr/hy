@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use anyhow::{anyhow, Context};
-use bytemuck::{NoUninit, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use gltf::{Animation, Glb, Mesh, Node};
 use itertools::izip;
@@ -11,6 +13,7 @@ pub struct GLTFModel {
     pub meshes: Vec<GLTFMesh>,
     pub skins: Vec<Skin>,
     pub nodes: Vec<GLTFNode>,
+    pub animations: Vec<AnimationLayer>,
     pub root_node_idx: usize,
 }
 
@@ -37,6 +40,8 @@ pub struct AnimationLayer {
 pub struct AnimationChannel {
     pub time_values: Vec<f32>,
     pub output_values: Vec<glam::Vec4>,
+    // Node index to target
+    pub target_index: usize,
     pub path: AnimationPath,
 }
 
@@ -77,7 +82,8 @@ pub struct GLTFMaterial {
 pub struct GLTFNode {
     pub mesh: Option<usize>,
     pub children: Vec<usize>,
-    pub transform: Transform,
+    pub base_transform: Transform,
+    pub current_transform: Transform,
 }
 
 #[derive(Clone)]
@@ -141,10 +147,8 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     for node in document.nodes() {
         asset.nodes.push(load_node(node)?);
     }
-
-    let mut animation_layers = Vec::new();
     for animation in document.animations() {
-        animation_layers.push(load_animation(animation, &blob)?);
+        asset.animations.push(load_animation(animation, &blob)?);
     }
 
     return Ok(asset);
@@ -155,7 +159,8 @@ fn load_node(node: Node<'_>) -> anyhow::Result<GLTFNode> {
     let children = node.children().map(|n| n.index()).collect();
     Ok(GLTFNode {
         mesh: node.mesh().map(|m| m.index()),
-        transform,
+        current_transform: transform,
+        base_transform: transform,
         children,
     })
 }
@@ -212,6 +217,7 @@ fn load_animation(animation: Animation<'_>, blob: &[u8]) -> anyhow::Result<Anima
         let channel = AnimationChannel {
             time_values: inputs,
             output_values: outputs,
+            target_index: target.node().index(),
             path,
         };
 
@@ -413,4 +419,51 @@ where
         dimensions: image.dimensions().into(),
         data: image.to_vec(),
     })
+}
+
+pub fn animate_model(model: &mut GLTFModel, time: Duration) {
+    for animation in &model.animations {
+        let animation_time = time.as_secs_f32() % animation.duration;
+
+        for channel in &animation.channels {
+            // Find the two keyframes to lerp between
+            let (start, end) = channel
+                .time_values
+                .iter()
+                .enumerate()
+                .find(|(_, &t)| t >= animation_time)
+                .map(|(i, _)| if i == 0 { (0, 0) } else { (i - 1, i) })
+                .unwrap_or((0, 0));
+
+            // Get output values
+            let start_value = channel.output_values[start];
+            let end_value = channel.output_values[end];
+
+            // Get lerp factor
+            let start_time = channel.time_values[start];
+            let end_time = channel.time_values[end];
+
+            let lerp_factor = (animation_time - start_time) / (end_time - start_time);
+
+            // Lerp between the two keyframes
+            let output = Vec4::lerp(start_value, end_value, lerp_factor);
+
+            // Apply the output to the correct node
+            let path = &channel.path;
+
+            match path {
+                AnimationPath::Position => {
+                    model.nodes[channel.target_index].current_transform.position =
+                        output.truncate();
+                }
+                AnimationPath::Rotation => {
+                    model.nodes[channel.target_index].current_transform.rotation =
+                        Quat::from_vec4(output);
+                }
+                AnimationPath::Scale => {
+                    model.nodes[channel.target_index].current_transform.scale = output.truncate();
+                }
+            }
+        }
+    }
 }
