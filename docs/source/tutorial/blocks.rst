@@ -126,20 +126,15 @@ practically, it creates a new directory like:
     $ tree -F CaptureTheFlag/blocktype/flag_pedestal
     CaptureTheFlag/blocktype/flag_pedestal/
     ├── top.png
-    ├── behavior.ts
     └── properties.json
 
-There are three files created for you.
-
-The Typescript file ``behavior.ts`` defines the block’s behaviors and how it
-reacts to events in the world. The flag pedestal will have a complex behavior,
-but we’ll deal with that later, after the flags themselves have been created.
+There are two files created for you.
 
 The JSON file file ``properties.json`` controls whether or not the block can be
 walked through. The flag pedestal isn’t such a block, so no changes are needed.
 
-Finally, the file ``top.png`` is the texture shown on the block's faces. The
-following names are recognised:
+The file ``top.png`` is the texture shown on the block's faces. The following
+names are recognised:
 
  * ``top.png`` -- topmost face
  * ``bottom.png`` -- bottommost face

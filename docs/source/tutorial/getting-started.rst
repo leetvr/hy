@@ -123,7 +123,6 @@ Open up a terminal and list the ``CaptureTheFlag`` directory:
     ├── blocktypes/
     │   └── asphalt/
     │      ├── top.png
-    │      ├── behavior.ts
     │      └── properties.json
     │   └── dirt/
      # ...........
