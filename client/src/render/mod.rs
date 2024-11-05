@@ -24,6 +24,7 @@ pub struct Renderer {
 
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
+    texture_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
 }
@@ -44,6 +45,7 @@ impl Renderer {
 
         let program = compile_shaders(&gl, vertex_shader_source, fragment_shader_source);
         let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
+        let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
 
         let camera = Camera::default();
 
@@ -51,6 +53,7 @@ impl Renderer {
             gl,
             program,
             matrix_location,
+            texture_location,
             camera,
         })
     }
@@ -59,9 +62,11 @@ impl Renderer {
         let gl = &self.gl;
 
         unsafe {
+            gl.enable(glow::DEPTH_TEST);
+
             // Set the clear color
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
+            gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
             let projection_matrix =
                 Mat4::perspective_rh_gl(45.0_f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
@@ -69,6 +74,7 @@ impl Renderer {
             let view_matrix = self.camera.view_matrix();
 
             gl.use_program(Some(self.program));
+            gl.uniform_1_i32(self.texture_location.as_ref(), 0);
 
             for draw_call in draw_calls {
                 let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
@@ -79,6 +85,9 @@ impl Renderer {
                     bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
                 );
 
+                gl.active_texture(glow::TEXTURE0);
+                gl.bind_texture(glow::TEXTURE_2D, Some(draw_call.primitive.diffuse_texture));
+
                 gl.bind_vertex_array(Some(draw_call.primitive.vao));
                 gl.bind_texture(glow::TEXTURE_2D, Some(draw_call.primitive.diffuse_texture));
                 gl.draw_elements(
@@ -88,6 +97,8 @@ impl Renderer {
                     0,
                 );
             }
+
+            gl.flush();
         }
     }
 
@@ -224,26 +235,34 @@ impl RenderPrimitive {
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGB as i32,
+                glow::SRGB8_ALPHA8 as i32,
                 primitive.material.base_colour_texture.dimensions.x as i32,
                 primitive.material.base_colour_texture.dimensions.y as i32,
                 0,
-                glow::RGB,
+                glow::RGBA,
                 glow::UNSIGNED_BYTE,
                 Some(&primitive.material.base_colour_texture.data),
             );
 
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR_MIPMAP_LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR_MIPMAP_LINEAR as i32,
+                glow::NEAREST as i32,
             );
 
             Self {
