@@ -28,10 +28,12 @@ Hytopia uses an events-based model: games are primarily implemented by
 responding to events, whether they be caused by the game itself (a player
 touching something) or the passage of time (the regular ``onUpdate`` tick).
 
-Most event handlers receive two arguments:
+Most event handlers receive arguments in the following way:
 
  * the object that is handling the event: the entity, or player, affected by or
    causing the event
+ * if relevant, the subject of the event (for example, what the player collided
+   with)
  * the world itself, with access to all entities and global properties
 
 Some event handlers have fewer or more arguments, but generally follow this
@@ -63,7 +65,7 @@ Open up ``World.ts`` and locate the ``onSlashCommand`` function:
             } else {
                 world.state.isRunning = true;
                 world.state.score = { "red": 0, "blue": 0 };
-                world.state
+                world.state.checkForWin = (world: World) => {}; // We'll implement this later
             }
         } else if(command === "end")
             if(world.state.isRunning) {
@@ -103,6 +105,7 @@ Replace the ``onRequestSpawn`` event handler as follows:
 .. code-block:: typescript
 
     player.onRequestSpawn( (player: Player, world: World) => {
+        // Check which team has fewer players
         const bluePlayers = countPlayers(world, "blue");
         const redPlayers = countPlayers(world, "red");
 
@@ -111,6 +114,7 @@ Replace the ``onRequestSpawn`` event handler as follows:
         } else {
             player.team = "red";
         }
+        world.messagePlayer(player, "You are on the " + player.team.toUpperCase() + " team");
 
         // Spawn at a random point within x = ±4, z = ±4 of the base
         let spawnPoint: BlockPos = findBase(world, player.team).randomise(4, 0, 4);
@@ -127,6 +131,119 @@ Replace the ``onRequestSpawn`` event handler as follows:
     }
 
     function findBase(world: World, team: string): BlockPos {
-        // left as exercise to reader
+        // TODO: left as exercise to reader
     }
 
+If you press the Play button now to switch to Playtest Mode, you’ll see you
+spawn at the red base, and get a notice that you’re on the red team. The start
+location is randomised slightly: you can restart the game a few times to see
+this in action.
+
+Picking up the flag
+-------------------
+
+When the player touches the flag, they should pick it up. We’d also like to
+notify everyone in the game, so they know who to block.
+
+The most useful event here is ``onCollideWithEntity`` in ``player.ts``:
+
+.. code-block:: typescript
+
+    player.onCollideWithEntity( (player: Player, entity: Entity, world: World) => {
+        if(entity.entityType.name !== "flag") {
+            // For now this test isn't strictly needed, but it's good practice
+            // to include. As you develop more complex games, often
+            // `onCollideWithEntity` and similar functions will call an
+            // entity-specific function based on the type of the touched entity
+            return;
+        }
+
+        // TODO -- there's a way to do this in typescript but I forget what it
+        // is
+        let flag: EntityType::Flag = entity;
+
+        if(player.state.team === flag.getProperty('owning_team')) {
+            if(flag.state.carriedBy === false) {
+                // Can't pick up your own flag
+                return;
+            } else {
+                // Challenge: Alter this so you can intercept an opposing
+                // player and recover the flag
+                return;
+            }
+        }
+
+        if(!player.state.carriedFlag) {
+            return;
+        }
+
+        // Pick up flag
+        player.state.carriedFlag = flag;
+        flag.state.carriedBy = player;
+        world.messageAll(player.name + " has the flag!");
+
+    });
+
+This sets up the metadata to keep track of who's carrying the flag. The other
+thing we'll need to do is make the flag move with the player, so it’s being
+properly carried.
+
+Edit the entity's ``flag/behavior.ts`` file to change the ``onUpdate`` event
+handler as follows:
+
+.. code-block:: typescript
+
+    entityType.onUpdate( (entity, world) => {
+        if(entity.carriedBy) {
+            // Follow my carrier
+            let player: Player = entity.carriedBy;
+            entity.transform = player.transform - 0.3*player.velocity;
+        } else {
+            // Bobbing behavior
+            const bobLength = 3. * Hytopia.tick_rate_Hz;
+            const yOffset = Math.sin(2 * Math.PI * world.tick / bobLength);
+            entity.transform.y = entity.initialProperties.transform.y + yOffset - 2;
+        }
+    } );
+
+Play the game again. You can pick up the flag (remember: you can't pick up the
+flag in your base, you’ll have to go to the blue team base!). You might want to
+tweak the calculation of ``entity.transform`` above to make the carrying action
+look more natural.
+
+Winning the flag
+----------------
+
+You get a point when you bring the flag back to the pedestal in your base.
+
+You’ll recall we implemented the flag pedestal as a block, so we want to edit
+the behavior of the player when we touch that block. In ``player.ts`` find the
+relevant event handler:
+
+.. code-block:: typescript
+
+    player.onCollideWithBlock( (player: Player, block: Block, world: World) => {
+        if(block.blockType !== "flag_pedestal") {
+            return;
+        }
+
+        if(!player.state.carriedFlag) {
+            return;
+        }
+
+        // TODO: figure out how to tell if we're in the red base or the blue
+        // base
+        if(theBaseImIn !== player.state.team) {
+            return;
+        }
+
+        // Capture the flag!
+        let flag: Flag = player.state.carriedFlag;
+
+        player.state.carriedFlag = undefined;
+        flag.carriedBy = undefined;
+        world.state.score[player.state.team] += 1;
+        world.state.checkForWin(world);
+        world.messageAll(player.name + " captured the flag! One point to " + player.state.team.toUpperCase() + " team!");
+        world.messageAll("Scores: RED " + world.state.score["red"] + " vs " + world.state.score["blue"] + " BLUE");
+    });
