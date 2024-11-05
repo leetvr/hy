@@ -17,6 +17,7 @@ impl PlayerId {
 // Client's input state, sent greedily to the server
 pub struct Controls {
     pub move_direction: glam::Vec2,
+    pub jump: bool,
 }
 
 // Packets from the server to the client

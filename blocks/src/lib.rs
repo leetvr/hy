@@ -5,18 +5,54 @@
 ///
 use {
     serde::{Deserialize, Serialize},
-    std::ops::{Index, IndexMut},
+    std::ops::{Add, Index, IndexMut, Sub},
 };
 
 pub type BlockId = u8;
 
 pub const EMPTY_BLOCK: BlockId = 0;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BlockPos {
     pub x: u32,
     pub y: u32,
     pub z: u32,
+}
+
+impl BlockPos {
+    pub fn new(x: u32, y: u32, z: u32) -> Self {
+        Self { x, y, z }
+    }
+}
+
+impl Into<glam::Vec3> for BlockPos {
+    fn into(self) -> glam::Vec3 {
+        glam::Vec3::new(self.x as f32, self.y as f32, self.z as f32)
+    }
+}
+
+impl Sub<BlockPos> for BlockPos {
+    type Output = BlockPos;
+
+    fn sub(self, rhs: BlockPos) -> Self::Output {
+        BlockPos {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl Add<BlockPos> for BlockPos {
+    type Output = BlockPos;
+
+    fn add(self, rhs: BlockPos) -> Self::Output {
+        BlockPos {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
 }
 
 impl From<[u32; 3]> for BlockPos {

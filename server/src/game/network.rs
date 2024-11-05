@@ -1,0 +1,117 @@
+use {
+    anyhow::Result,
+    crossbeam::queue::SegQueue,
+    futures_util::{SinkExt, StreamExt},
+    net_types::PlayerId,
+    std::{collections::HashMap, ops::Add, sync::Arc},
+    tokio::{
+        net::TcpListener,
+        select,
+        sync::mpsc::{self, Receiver, Sender},
+    },
+    tokio_tungstenite::tungstenite::Message,
+};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ClientId(u64);
+
+impl Add<u64> for ClientId {
+    type Output = Self;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+pub struct Client {
+    // The last received controls
+    // TODO(ll): Once we have prediction this should be a queue of inputs
+    pub last_controls: net_types::Controls,
+
+    // This client's player ID
+    pub player_id: PlayerId,
+
+    // The clients that the client is aware of, and their last known position
+    pub known_players: HashMap<PlayerId, glam::Vec3>,
+
+    // The packet channels for this client
+    pub incoming_rx: Receiver<net_types::Controls>,
+    pub outgoing_tx: Sender<net_types::ServerPacket>,
+}
+
+pub async fn start_client_listener(
+    incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
+) -> Result<()> {
+    let server = TcpListener::bind("127.0.0.1:8889").await?;
+
+    while let Ok((stream, _)) = server.accept().await {
+        let incoming_connections = incoming_connections.clone();
+        tokio::spawn(async move {
+            let addr = stream.peer_addr().expect("no peer address found");
+            tracing::info!("Client connected from: {}", addr);
+
+            let ws_stream = tokio_tungstenite::accept_async(stream)
+                .await
+                .expect("error during the websocket handshake");
+
+            // Create channels for serialized messages
+            let (incoming_tx, incoming_rx) = mpsc::channel(16);
+            let (outgoing_tx, mut outgoing_rx) = mpsc::channel(16);
+
+            incoming_connections.push((incoming_rx, outgoing_tx));
+
+            // Spawn a task that handles networking and serialization
+            let (mut write, mut read) = ws_stream.split();
+            tokio::spawn(async move {
+                loop {
+                    select! {
+                        // Handle incoming messages
+                        message = read.next() => {
+                            let Some(message) = message else {
+                                // The stream has been closed, gracefully exit the task
+                                break;
+                            };
+
+                            // Deserialize the message and pass it to the client's incoming channel
+                            let controls = match message {
+                                Ok(v) => match bincode::deserialize::<net_types::Controls>(&v.into_data()) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        tracing::warn!("Error deserializing controls: {}", e);
+                                        break;
+                                    }
+                                },
+                                Err(e) => {
+                                    tracing::warn!("Error receiving message: {}", e);
+                                    break;
+                                }
+                            };
+
+                            incoming_tx.send(controls).await.unwrap();
+                        }
+                        // Handle outgoing messages
+                        message = outgoing_rx.recv() => {
+                            let Some(message) = message else {
+                                // The client has been dropped by the game server, gracefully exit the task
+                                break;
+                            };
+
+
+                            let position_message =
+                                bincode::serialize(&message).unwrap();
+                            if let Err(e) = write.send(Message::Binary(position_message)).await {
+                                tracing::info!("Error sending message: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    Ok(())
+}
+
+pub type ClientMessageReceiver = Receiver<net_types::Controls>;
+pub type ServerMessageSender = Sender<net_types::ServerPacket>;

@@ -1,7 +1,7 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![cfg(not(target_arch = "wasm32"))]
 
-mod game_server;
+mod game;
 mod js;
 
 use {
@@ -38,14 +38,14 @@ fn main() {
     // Start game server on a new thread
     let spawner = runtime.handle().clone();
     std::thread::spawn(move || {
-        let mut server = game_server::GameServer::new(spawner);
+        let mut server = game::GameServer::new(spawner);
 
         let mut last_tick = Instant::now();
         loop {
             server.tick();
 
             // sleep until the next tick
-            let next_tick = last_tick + std::time::Duration::from_secs_f32(game_server::TICK_DT);
+            let next_tick = last_tick + std::time::Duration::from_secs_f32(game::TICK_DT);
             last_tick = next_tick;
             std::thread::sleep(next_tick - Instant::now());
         }

@@ -115,6 +115,9 @@ impl Engine {
         self.controls
             .keyboard_inputs
             .insert(event.code().as_str().to_string());
+        self.controls
+            .keyboard_pressed
+            .insert(event.code().as_str().to_string());
     }
 
     pub fn key_up(&mut self, event: KeyboardEvent) {
@@ -182,25 +185,6 @@ impl Engine {
                         }
                     },
                 }
-
-                // match packet {
-                //     net_types::ServerPacket::UpdatePosition(net_types::UpdatePosition {
-                //         id,
-                //         position,
-                //     }) => {
-                //         let Some(player) = self.players.get_mut(&id) else {
-                //             tracing::error!("Received position update for unknown player");
-                //             continue;
-                //         };
-                //         player.position = position;
-                //     }
-                //     net_types::ServerPacket::AddPlayer(net_types::AddPlayer { id, position }) => {
-                //         self.players.insert(id, Player { position });
-                //     }
-                //     net_types::ServerPacket::RemovePlayer(net_types::RemovePlayer { id }) => {
-                //         self.players.remove(&id);
-                //     }
-                // }
             }
         }
 
@@ -243,6 +227,8 @@ impl Engine {
         if self.controls.keyboard_inputs.contains("ArrowRight") {
             self.renderer.camera.rotation.y += 0.02;
         }
+
+        self.controls.keyboard_pressed.clear();
 
         self.render();
     }
@@ -291,6 +277,7 @@ pub fn increment(count: i32) -> i32 {
 #[derive(Clone, Default)]
 struct Controls {
     keyboard_inputs: HashSet<String>,
+    keyboard_pressed: HashSet<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -328,6 +315,7 @@ fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
     }
     let controls = net_types::Controls {
         move_direction: move_dir.normalize_or_zero(),
+        jump: controls.keyboard_pressed.contains("Space"),
     };
     let message = bincode::serialize(&controls).context("Failed to serialize controls")?;
     ws.send_with_u8_array(&message)

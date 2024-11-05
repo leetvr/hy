@@ -1,0 +1,10 @@
+[package]
+name = "physics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rapier3d.workspace = true
+nalgebra.workspace = true
+glam.workspace = true
+tracing.workspace = true
