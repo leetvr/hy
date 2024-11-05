@@ -98,10 +98,14 @@ Two commands you’ll find useful:
 
 Although there’s not much in it, your world is already playable! Press the Play
 icon in the editor **TODO SCREENSHOT HERE** and your Hytopia player will spawn
-in the CaptureTheCrab world. The standard Hytopia :kbd:`W`, :kbd:`S`, :kbd:`A`,
-:kbd:`D` keybinding will work automatically, and you can run around.
+in the CaptureTheCrab world. This is Playtest Mode. The standard Hytopia
+:kbd:`W`, :kbd:`S`, :kbd:`A`, :kbd:`D` keybinding will work automatically, and
+you can run around.
 
 Congratulations! You’ve made your first Hytopia world.
+
+When you’ve had a look around, press the Stop icon **TODO SCREENSHOT HERE** to
+return to Edit Mode.
 
 What’s in the box?
 ------------------
@@ -117,6 +121,11 @@ Open up a terminal and list the ``CaptureTheCrab`` directory:
     $ tree -F CaptureTheCrab
     CaptureTheCrab/
     ├── blocktypes/
+    │   └── asphalt/
+    │      └── asphalt.ts
+    │      └── 0.png
+    │   └── dirt/
+     # ...........
     ├── entities.json
     ├── entitytypes/
     ├── grid.dat
@@ -140,9 +149,10 @@ The ``.json`` files (and ``grid.dat``) are edited by the Hytopia Editor. The
 choice.
 
 ``blocktypes``
-  This directory (which is empty for now) defines the different :term:`block
-  types<block type>` that are used in the world. You’ll create a new block type
-  in <tutorial/blocks>.
+  This directory defines the different :term:`block types<block type>` that are
+  used in the world. This directory comes pre-populated with some basic,
+  broadly-applicable block types. You’ll see how to use the prebuilt block
+  types, and create your own new block type, in <tutorial/blocks>.
 
 ``entities.json``
   This file (which you don’t need to edit by hand) lists all the
@@ -180,6 +190,11 @@ choice.
   This file contains Typescript code that controls how the world reacts to time
   passing. The template ``hy`` creates has boilerplate prebuilt code for the
   most common world events.
+
+ .. topic:: Challenge
+
+ **Challenge**: Edit ``metadata.json`` to set the name, author and description
+ of your game.
 
 
 Next up: blocks

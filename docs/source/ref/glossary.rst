@@ -7,7 +7,7 @@ parts.
 Throughout this documentation we try to use words consistently: so you can be
 sure that when we talk about an :term:`entity`, we always mean the same thing.
 
-This page lists all of the concepts that exist in Hy’s view of the world.
+This page lists all of the concepts that exist in Hytopia’s view of the world.
 
 .. glossary::
 
@@ -35,6 +35,10 @@ This page lists all of the concepts that exist in Hy’s view of the world.
   a web-based editor that lets you build worlds by placing
   :term:`blocks<block>`, :term:`entities<entity>`, and preview those worlds as
   they’ll be seen by your players.
+
+ player
+  represents a real person, running Hytopia, who is playing your game. All
+  Hytopia games are automatically multiplayer.
  
  world
   the world is the virtual space in which a Hytopia :term:`game` happens. You
