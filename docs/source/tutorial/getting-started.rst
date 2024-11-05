@@ -2,9 +2,9 @@ Getting started
 ===============
 
 To demonstrate all the basic features of Hytopia, we’re going to build a game
-of Capture The Crab (you can capture a Flag, or even something else, if you’d
+of Capture The Flag (you can capture a Flag, or even something else, if you’d
 prefer). The idea is simple: you, or another member of your team, need to grab
-the other team’s Crab and get it back to your base, before the other team does
+the other team’s Flag and get it back to your base, before the other team does
 the same to you.
 
 You’ll see how Hytopia lets you combine simple primitives to quickly build a
@@ -80,11 +80,11 @@ Creating a world is simple:
 
 .. code-block:: console
 
-    $ hy create CaptureTheCrab
+    $ hy create CaptureTheFlag
 
 
 A few things have happened: First, ``hy`` has created a directory (helpfully
-called ``CaptureTheCrab``). Second, your web browser has popped up showing you
+called ``CaptureTheFlag``). Second, your web browser has popped up showing you
 the :term:`Hytopia Editor` environment, as well as your new (and
 currently-empty) world. Third, ``hy`` has started the Hytopia Development
 Server (you’ll be able to see output from the server in your terminal window).
@@ -92,13 +92,13 @@ Server (you’ll be able to see output from the server in your terminal window).
 Two commands you’ll find useful:
 
  * If you close the browser tab containing the :term:`Hytopia Editor`, you can
-   always reload it with: ``hy dev CaptureTheCrab``
+   always reload it with: ``hy dev CaptureTheFlag``
  * If you close the Hytopia Development Server (for example by pressing
-   :kbd:`Ctrl+C`), you can restart it with: ``hy run CaptureTheCrab``
+   :kbd:`Ctrl+C`), you can restart it with: ``hy run CaptureTheFlag``
 
 Although there’s not much in it, your world is already playable! Press the Play
 icon in the editor **TODO SCREENSHOT HERE** and your Hytopia player will spawn
-in the CaptureTheCrab world. This is Playtest Mode. The standard Hytopia
+in the CaptureTheFlag world. This is Playtest Mode. The standard Hytopia
 :kbd:`W`, :kbd:`S`, :kbd:`A`, :kbd:`D` keybinding will work automatically, and
 you can run around.
 
@@ -114,12 +114,12 @@ Above, we mentioned that ``hy`` has created a directory containing the files
 defining your world. Before we move on to the next stage of the tutorial, it’s
 worth taking a brief look at the files that have been created for you.
 
-Open up a terminal and list the ``CaptureTheCrab`` directory:
+Open up a terminal and list the ``CaptureTheFlag`` directory:
 
 .. code-block:: console
 
-    $ tree -F CaptureTheCrab
-    CaptureTheCrab/
+    $ tree -F CaptureTheFlag
+    CaptureTheFlag/
     ├── blocktypes/
     │   └── asphalt/
     │      └── asphalt.ts

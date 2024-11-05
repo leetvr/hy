@@ -25,7 +25,7 @@ The Hytopia Editor
 ------------------
 
 Switch to the :term:`Hytopia Editor` in your browser (you can always run ``hy
-dev CaptureTheCrab`` to re-open it).
+dev CaptureTheFlag`` to re-open it).
 
 You can navigate the world in the Hytopia Editor in the following ways:
 
@@ -52,7 +52,7 @@ Pre-defined blocks
 
 You’ll also see that ``hy create`` has created a series of pre-defined block
 types: these are the directories under the ``blocktypes`` directory in your
-``CaptureTheCrab`` directory.
+``CaptureTheFlag`` directory.
 
 These pre-defined block types are broadly useful, and we’ll place some now.
 
