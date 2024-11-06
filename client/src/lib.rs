@@ -38,6 +38,7 @@ pub struct Engine {
     renderer: render::Renderer,
 
     elapsed_time: Duration,
+    delta_time: Duration,
     test: Option<TestGltf>,
 
     ws: WebSocket,
@@ -94,6 +95,7 @@ impl Engine {
             cube_mesh_data: renderer.create_cube_vao(),
 
             renderer,
+            delta_time: Duration::ZERO,
             elapsed_time: Duration::ZERO,
             test: None,
 
@@ -121,13 +123,25 @@ impl Engine {
                 }
             };
 
-            tracing::info!("GLTF loaded: {:#?}", gltf);
-
             let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
 
-            tracing::info!("Render model created: {:#?}", render_model);
-
             self.test = Some(TestGltf { gltf, render_model });
+        }
+
+        if event.code() == "KeyT" {
+            if let Some(ref mut test) = self.test {
+                test.gltf.play_animation("idle", 0.5);
+            }
+        }
+        if event.code() == "KeyY" {
+            if let Some(ref mut test) = self.test {
+                test.gltf.play_animation("walk", 0.5);
+            }
+        }
+        if event.code() == "KeyG" {
+            if let Some(ref mut test) = self.test {
+                test.gltf.stop_animation(0.5);
+            }
         }
 
         self.controls
@@ -151,7 +165,7 @@ impl Engine {
 
     pub fn tick(&mut self, time: f64) {
         let current_time = Duration::from_secs_f64(time / 1000.0);
-        let delta_time = current_time - self.elapsed_time;
+        self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
         if *self.connection_state.borrow() == ConnectionState::Connected {
@@ -269,7 +283,7 @@ impl Engine {
                             position,
                             YawPitch::new().rotation_quat(rotation),
                         );
-                        camera.update(delta_time.as_secs_f32());
+                        camera.update(self.delta_time.as_secs_f32());
 
                         // Player input
                         let mut move_dir = Vec2::ZERO;
@@ -315,7 +329,7 @@ impl Engine {
                         camera.boost = key_state("CtrlLeft");
                         camera.rotate(delta_yaw.to_degrees(), delta_pitch.to_degrees());
 
-                        camera.update(delta_time.as_secs_f32());
+                        camera.update(self.delta_time.as_secs_f32());
 
                         let (position, rotation) = camera.position_and_rotation();
                         self.renderer.camera.translation = position;
@@ -366,15 +380,13 @@ impl Engine {
         }
 
         if let Some(ref mut test) = self.test {
-            gltf::animate_model(&mut test.gltf, self.elapsed_time);
+            gltf::animate_model(&mut test.gltf, self.delta_time);
 
             draw_calls.extend(render::build_render_plan(
                 slice::from_ref(&test.gltf),
                 slice::from_ref(&test.render_model),
                 Transform::IDENTITY,
             ));
-
-            tracing::debug!("Draw calls created: {:#?}", draw_calls);
         }
 
         draw_calls.extend(render::build_cube_draw_calls(
@@ -382,7 +394,7 @@ impl Engine {
             [(BlockPos::new(0, 0, 0), [&self.cube_texture; 6])].into_iter(),
         ));
 
-        self.renderer.render(self.elapsed_time, &draw_calls);
+        self.renderer.render(&draw_calls);
     }
 }
 #[wasm_bindgen]
