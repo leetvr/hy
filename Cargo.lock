@@ -306,6 +306,7 @@ dependencies = [
  "image",
  "itertools 0.13.0",
  "net-types",
+ "tokio",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
