@@ -332,39 +332,6 @@ impl Engine {
             _ => {}
         }
 
-        // Camera Input
-        // if self.controls.keyboard_inputs.contains("KeyI") {
-        //     self.renderer.camera.translation.z += 0.1;
-        // }
-        // if self.controls.keyboard_inputs.contains("KeyK") {
-        //     self.renderer.camera.translation.z -= 0.1;
-        // }
-        // if self.controls.keyboard_inputs.contains("KeyJ") {
-        //     self.renderer.camera.translation.x += 0.1;
-        // }
-        // if self.controls.keyboard_inputs.contains("KeyL") {
-        //     self.renderer.camera.translation.x -= 0.1;
-        // }
-        // if self.controls.keyboard_inputs.contains("KeyU") {
-        //     self.renderer.camera.translation.y += 0.1;
-        // }
-        // if self.controls.keyboard_inputs.contains("KeyO") {
-        //     self.renderer.camera.translation.y -= 0.1;
-        // }
-
-        // if self.controls.keyboard_inputs.contains("ArrowUp") {
-        //     self.renderer.camera.rotation.x -= 0.02;
-        // }
-        // if self.controls.keyboard_inputs.contains("ArrowDown") {
-        //     self.renderer.camera.rotation.x += 0.02;
-        // }
-        // if self.controls.keyboard_inputs.contains("ArrowLeft") {
-        //     self.renderer.camera.rotation.y -= 0.02;
-        // }
-        // if self.controls.keyboard_inputs.contains("ArrowRight") {
-        //     self.renderer.camera.rotation.y += 0.02;
-        // }
-
         self.controls.keyboard_pressed.clear();
         self.controls.mouse_movement = (0, 0);
 
