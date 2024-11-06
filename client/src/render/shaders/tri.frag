@@ -11,4 +11,8 @@ uniform sampler2D tex;
 
 void main() {
     fragColor = texture(tex, uvInterpolant);
+
+    if (fragColor.a < 1.0) {
+        discard;
+    }
 }

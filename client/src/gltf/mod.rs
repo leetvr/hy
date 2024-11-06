@@ -1,9 +1,10 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, path::Path, time::Duration};
 
 use anyhow::{anyhow, Context};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use gltf::{Animation, Glb, Mesh, Node};
+use image::buffer::ConvertBuffer;
 use itertools::izip;
 
 use crate::transform::Transform;
@@ -79,7 +80,7 @@ pub struct GLTFMesh {
 
 #[derive(Debug, Clone)]
 pub struct GLTFMaterial {
-    pub base_colour_texture: GLTFTexture,
+    pub base_colour_texture: Option<GLTFTexture>,
     pub base_colour_factor: Vec4,
     pub roughness_factor: f32,
     pub metallic_factor: f32,
@@ -133,10 +134,18 @@ impl std::fmt::Debug for GLTFPrimitive {
 pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     let mut asset = GLTFModel::default();
 
-    let glb = Glb::from_slice(&file).unwrap();
-    let root = gltf::json::Root::from_slice(&glb.json)?;
-    let document = gltf::Document::from_json(root)?;
-    let blob = glb.bin.ok_or_else(|| anyhow!("No binary found in glTF"))?;
+    let gltf = gltf::Gltf::from_slice_without_validation(&file).unwrap();
+    let document = gltf.document;
+    let base_path: Option<&Path> = Some(Path::new(
+        "We should not ever be reading a file or a non-data URI.",
+    ));
+    let buffers = gltf::import_buffers(&document, base_path, gltf.blob)
+        .context("Could not find binary data")?;
+    let textures =
+        gltf::import_images(&document, base_path, &buffers).context("Failed to load textures")?;
+    assert_eq!(buffers.len(), 1);
+
+    let blob = &buffers[0];
 
     let root_node;
     if let Some(default_scene) = document.default_scene() {
@@ -149,7 +158,7 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     asset.root_node_idx = root_node.context("No root node found in glTF")?.index();
 
     for mesh in document.meshes() {
-        asset.meshes.push(load_mesh(mesh, &blob)?);
+        asset.meshes.push(load_mesh(mesh, &blob, &textures)?);
     }
     for node in document.nodes() {
         asset.nodes.push(load_node(node)?);
@@ -255,13 +264,17 @@ fn get_animation_path(property: gltf::animation::Property) -> Option<AnimationPa
     }
 }
 
-fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
+fn load_mesh(
+    mesh: Mesh<'_>,
+    blob: &[u8],
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFMesh> {
     tracing::info!("Loading primitives for {}", mesh.index());
     let mut parsed = GLTFMesh::default();
     for primitive in mesh.primitives() {
         let vertices = import_vertices(&primitive, &blob)?;
         let indices = import_indices(&primitive, &blob)?;
-        let material = load_material(&primitive, &blob)?;
+        let material = load_material(&primitive, textures)?;
 
         let prim = GLTFPrimitive {
             vertices,
@@ -311,25 +324,29 @@ fn import_indices(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Resul
     Ok(indices)
 }
 
-fn load_material(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result<GLTFMaterial> {
+fn load_material(
+    primitive: &gltf::Primitive<'_>,
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFMaterial> {
     let material = primitive.material();
     let pbr = material.pbr_metallic_roughness();
     let base_colour_factor = pbr.base_color_factor().into();
     let roughness_factor = pbr.roughness_factor();
     let metallic_factor = pbr.metallic_factor();
 
-    let base_colour_texture = load_texture(pbr.base_color_texture(), blob)
-        .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))?;
+    let base_colour_texture = load_texture(pbr.base_color_texture(), textures)
+        .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))
+        .ok();
 
-    let normal_texture = load_texture(material.normal_texture(), blob)
+    let normal_texture = load_texture(material.normal_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import normal texture: {e}"))
         .ok();
 
-    let metallic_roughness_ao_texture = load_texture(pbr.metallic_roughness_texture(), blob)
+    let metallic_roughness_ao_texture = load_texture(pbr.metallic_roughness_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import metallic roughness AO texture: {e}"))
         .ok();
 
-    let emissive_texture = load_texture(material.emissive_texture(), blob)
+    let emissive_texture = load_texture(material.emissive_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import emissive texture: {e}"))
         .ok();
 
@@ -354,7 +371,10 @@ fn cvt(transform: gltf::scene::Transform) -> Transform {
     }
 }
 
-fn load_texture<'a, T>(texture: Option<T>, blob: &[u8]) -> anyhow::Result<GLTFTexture>
+fn load_texture<'a, T>(
+    texture: Option<T>,
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFTexture>
 where
     T: AsRef<gltf::Texture<'a>>,
 {
@@ -363,66 +383,102 @@ where
         .ok_or_else(|| anyhow!("Texture does not exist"))?
         .as_ref();
 
-    let view = match texture.source().source() {
-        gltf::image::Source::View {
-            view,
-            mime_type: "image/png",
-        } => Ok(view),
-        gltf::image::Source::View { mime_type, .. } => {
-            Err(anyhow!("Invalid mime_type {mime_type}"))
-        }
-        gltf::image::Source::Uri { .. } => Err(anyhow!("Importing images by URI is not supported")),
-    }?;
-    let start = view.offset();
-    let end = view.offset() + view.length();
+    let texture_data = &textures[texture.index()];
 
-    let image_bytes = blob
-        .get(start..end)
-        .ok_or_else(|| anyhow!("Unable to read from blob with range {start}..{end}"))?;
-    let image = image::load_from_memory(image_bytes)?.into_rgba8();
+    // CRIME(cw): gltf import makes an image, then unpacks all that, then we put it back together for easy conversion.
+    let rgba8_image = match texture_data.format {
+        gltf::image::Format::R8G8B8A8 => image::RgbaImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap(),
+        gltf::image::Format::R8G8B8 => image::RgbImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        gltf::image::Format::R8G8 => image::GrayAlphaImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        gltf::image::Format::R8 => image::GrayImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        _ => {
+            return Err(anyhow!(
+                "Unsupported texture format {:?}",
+                texture_data.format
+            ));
+        }
+    };
 
     Ok(GLTFTexture {
-        dimensions: image.dimensions().into(),
-        data: image.to_vec(),
+        dimensions: rgba8_image.dimensions().into(),
+        data: rgba8_image.into_vec(),
     })
 }
 
 pub fn animate_model(model: &mut GLTFModel, time: Duration) {
     // For each node, store the animated value for each animation
 
-    match model.animation_state {
-        AnimationState::Playing { anim_index } => {
-            let animation = &mut model.animations[anim_index];
-            animation.animation_time +=
-                (animation.animation_time + time.as_secs_f32()) % animation.duration;
+    'state_change: loop {
+        match model.animation_state {
+            AnimationState::Playing { anim_index } => {
+                let animation = &mut model.animations[anim_index];
+                animation.animation_time +=
+                    (animation.animation_time + time.as_secs_f32()) % animation.duration;
 
-            for channel in &animation.channels {
-                let Some(value) = get_next_value_for_channel(channel, animation.animation_time)
-                else {
-                    continue;
-                };
+                for channel in &animation.channels {
+                    let Some(value) = get_next_value_for_channel(channel, animation.animation_time)
+                    else {
+                        continue;
+                    };
 
-                let node = &mut model.nodes[channel.target_index];
+                    let node = &mut model.nodes[channel.target_index];
 
-                apply_value_to_node(node, channel.path, value);
+                    apply_value_to_node(node, channel.path, value);
+                }
             }
-        }
-        AnimationState::Paused => {}
-        AnimationState::Transitioning {
-            from_index,
-            to_index,
-            duration,
-            progress,
-        } => {
-            let from_animation = from_index.map(|i| &model.animations[i]);
-            let to_animation = to_index.map(|i| &model.animations[i]);
+            AnimationState::Paused => {}
+            AnimationState::Transitioning {
+                from_index,
+                to_index,
+                duration,
+                ref mut progress,
+            } => {
+                *progress += time.as_secs_f32();
 
-            let mut changes: HashMap<(usize, AnimationPath), (Option<Vec4>, Option<Vec4>)> =
-                HashMap::new();
+                if *progress >= duration {
+                    if let Some(to_index) = to_index {
+                        model.animation_state = AnimationState::Playing {
+                            anim_index: to_index,
+                        };
+                    } else {
+                        model.animation_state = AnimationState::Disabled;
+                    }
+                    break 'state_change;
+                }
 
-            let from_values = match from_animation {
-                Some(from) => {
-                    from.animation_time = (from.animation_time + time.as_secs_f32()) % from.duration;
+                let lerp_weight = *progress / duration;
+
+                // Accumulate the sparse changes for the from animation and the to animation.
+                let mut changes: HashMap<(usize, AnimationPath), (Option<Vec4>, Option<Vec4>)> =
+                    HashMap::new();
+
+                let from_animation = from_index.map(|i| &mut model.animations[i]);
+                if let Some(from) = from_animation {
+                    from.animation_time =
+                        (from.animation_time + time.as_secs_f32()) % from.duration;
 
                     for channel in &from.channels {
                         let Some(value) = get_next_value_for_channel(channel, from.animation_time)
@@ -436,53 +492,42 @@ pub fn animate_model(model: &mut GLTFModel, time: Duration) {
                         change.0 = Some(value);
                     }
                 }
+
+                let to_animation = to_index.map(|i| &mut model.animations[i]);
+                if let Some(to) = to_animation {
+                    to.animation_time = (to.animation_time + time.as_secs_f32()) % to.duration;
+
+                    for channel in &to.channels {
+                        let Some(value) = get_next_value_for_channel(channel, 0.0) else {
+                            continue;
+                        };
+
+                        let change = changes
+                            .entry((channel.target_index, channel.path))
+                            .or_default();
+                        change.1 = Some(value);
+                    }
+                }
+
+                for ((node_index, path), (from_state, to_state)) in changes {
+                    let from_state = from_state
+                        .unwrap_or_else(|| get_default_pose_for_channel(model, node_index, path));
+
+                    let to_state = to_state
+                        .unwrap_or_else(|| get_default_pose_for_channel(model, node_index, path));
+
+                    let final_state = lerp_anim(path, from_state, to_state, lerp_weight);
+
+                    apply_value_to_node(&mut model.nodes[node_index], path, final_state);
+                }
+            }
+            AnimationState::Disabled => {
+                for node in &mut model.nodes {
+                    node.current_transform = node.base_transform;
+                }
             }
         }
-        AnimationState::Disabled => {}
-    }
-
-    let mut changes: HashMap<(usize, AnimationPath), (Option<Vec4>, Option<Vec4>)> = HashMap::new();
-
-    // How much time has elapsed on the "from"" layer?
-    let from_elapsed = wrapping_add(from_layer.duration, *elapsed + *from_offset);
-
-    for channel in &from_layer.channels {
-        let Some(next_value) = get_next_value_for_channel(channel, from_elapsed) else {
-            continue;
-        };
-        let change = changes
-            .entry((channel.target_entity, channel.path))
-            .or_default();
-        change.0 = Some(next_value);
-    }
-
-    for channel in &to_layer.channels {
-        let Some(next_value) = get_next_value_for_channel(channel, *elapsed) else {
-            continue;
-        };
-        let change = changes
-            .entry((channel.target_entity, channel.path))
-            .or_default();
-        change.1 = Some(next_value);
-    }
-
-    for ((target_entity, path), values) in changes.drain() {
-        let next_value = match values {
-            (None, Some(to)) => to,
-            (Some(from), None) => from,
-            (Some(from), Some(to)) => lerp_anim(path, from, to),
-            _ => {
-                continue;
-            }
-        };
-
-        apply_value_to_entity_at_path(
-            target_entity,
-            path,
-            &mut animation_targets,
-            next_value,
-            command_buffer,
-        );
+        break;
     }
 }
 
@@ -511,6 +556,14 @@ fn apply_value_to_node(node: &mut GLTFNode, path: AnimationPath, value: Vec4) {
     }
 }
 
+fn get_default_pose_for_channel(model: &GLTFModel, node_idx: usize, path: AnimationPath) -> Vec4 {
+    let node = &model.nodes[node_idx];
+    match path {
+        AnimationPath::Position => node.base_transform.position.extend(1.),
+        AnimationPath::Rotation => node.base_transform.rotation.to_array().into(),
+        AnimationPath::Scale => node.base_transform.scale.extend(1.),
+    }
+}
 
 /// Get the next value for an animation channel.
 ///
