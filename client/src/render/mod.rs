@@ -246,12 +246,19 @@ impl RenderPrimitive {
 
             gl.bind_vertex_array(None);
 
-            let diffuse_texture = Texture::new(
-                gl,
-                &primitive.material.base_colour_texture.data,
-                primitive.material.base_colour_texture.dimensions.x,
-                primitive.material.base_colour_texture.dimensions.y,
-            );
+            let diffuse_texture =
+                if let Some(ref base_color_texture) = primitive.material.base_colour_texture {
+                    Texture::new(
+                        gl,
+                        &base_color_texture.data,
+                        base_color_texture.dimensions.x,
+                        base_color_texture.dimensions.y,
+                    )
+                } else {
+                    let scaled = primitive.material.base_colour_factor * 255.0;
+                    let bytes = scaled.to_array().map(|x| x as u8);
+                    Texture::new(gl, &bytes, 1, 1)
+                };
 
             Self {
                 vao,

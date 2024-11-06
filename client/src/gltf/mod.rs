@@ -1,9 +1,10 @@
-use std::time::Duration;
+use std::{collections::HashMap, path::Path, time::Duration};
 
 use anyhow::{anyhow, Context};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use gltf::{Animation, Glb, Mesh, Node};
+use image::buffer::ConvertBuffer;
 use itertools::izip;
 
 use crate::transform::Transform;
@@ -11,29 +12,41 @@ use crate::transform::Transform;
 #[derive(Debug, Default, Clone)]
 pub struct GLTFModel {
     pub meshes: Vec<GLTFMesh>,
-    pub skins: Vec<Skin>,
     pub nodes: Vec<GLTFNode>,
     pub animations: Vec<AnimationLayer>,
+    pub animation_state: AnimationState,
     pub root_node_idx: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Joint {
-    pub target_joint_node: usize,
-    pub inverse_bind_matrix: Mat4,
+#[derive(Debug, Default, Clone)]
+pub enum AnimationState {
+    // Animation is enabled and gaining time every frame
+    Playing {
+        anim_index: usize,
+    },
+    // Animation enabled but is not gaining time.
+    Paused,
+    // Animation is fading from one to another
+    Transitioning {
+        from_index: Option<usize>,
+        to_index: Option<usize>,
+        // Duration of the transition
+        duration: f32,
+        // Current progress of the transition [0, 1]
+        progress: f32,
+    },
+    // Animation is disabled
+    #[default]
+    Disabled,
 }
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Skin {
-    pub joints: Vec<Joint>,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnimationLayer {
     pub name: String,
     pub index: usize,
     pub channels: Vec<AnimationChannel>,
     pub duration: f32,
+
+    pub animation_time: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,11 +68,9 @@ pub enum AnimationPath {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 pub struct GLTFVertex {
-    pub position: Vec4,
-    pub normal: Vec4,
-    pub joint: [u16; 4],
-    pub weight: [f32; 4],
-    pub uv: Vec2,
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub uv: [f32; 2],
 }
 
 #[derive(Debug, Default, Clone)]
@@ -69,7 +80,7 @@ pub struct GLTFMesh {
 
 #[derive(Debug, Clone)]
 pub struct GLTFMaterial {
-    pub base_colour_texture: GLTFTexture,
+    pub base_colour_texture: Option<GLTFTexture>,
     pub base_colour_factor: Vec4,
     pub roughness_factor: f32,
     pub metallic_factor: f32,
@@ -123,10 +134,18 @@ impl std::fmt::Debug for GLTFPrimitive {
 pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     let mut asset = GLTFModel::default();
 
-    let glb = Glb::from_slice(&file).unwrap();
-    let root = gltf::json::Root::from_slice(&glb.json)?;
-    let document = gltf::Document::from_json(root)?;
-    let blob = glb.bin.ok_or_else(|| anyhow!("No binary found in glTF"))?;
+    let gltf = gltf::Gltf::from_slice_without_validation(&file).unwrap();
+    let document = gltf.document;
+    let base_path: Option<&Path> = Some(Path::new(
+        "We should not ever be reading a file or a non-data URI.",
+    ));
+    let buffers = gltf::import_buffers(&document, base_path, gltf.blob)
+        .context("Could not find binary data")?;
+    let textures =
+        gltf::import_images(&document, base_path, &buffers).context("Failed to load textures")?;
+    assert_eq!(buffers.len(), 1);
+
+    let blob = &buffers[0];
 
     let root_node;
     if let Some(default_scene) = document.default_scene() {
@@ -139,10 +158,7 @@ pub fn load(file: &[u8]) -> anyhow::Result<GLTFModel> {
     asset.root_node_idx = root_node.context("No root node found in glTF")?.index();
 
     for mesh in document.meshes() {
-        asset.meshes.push(load_mesh(mesh, &blob)?);
-    }
-    for skin in document.skins() {
-        asset.skins.push(load_skin(skin, &blob)?);
+        asset.meshes.push(load_mesh(mesh, &blob, &textures)?);
     }
     for node in document.nodes() {
         asset.nodes.push(load_node(node)?);
@@ -234,6 +250,8 @@ fn load_animation(animation: Animation<'_>, blob: &[u8]) -> anyhow::Result<Anima
         name: name.into(),
         channels,
         duration,
+
+        animation_time: 0.0,
     })
 }
 
@@ -246,13 +264,17 @@ fn get_animation_path(property: gltf::animation::Property) -> Option<AnimationPa
     }
 }
 
-fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
+fn load_mesh(
+    mesh: Mesh<'_>,
+    blob: &[u8],
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFMesh> {
     tracing::info!("Loading primitives for {}", mesh.index());
     let mut parsed = GLTFMesh::default();
     for primitive in mesh.primitives() {
         let vertices = import_vertices(&primitive, &blob)?;
         let indices = import_indices(&primitive, &blob)?;
-        let material = load_material(&primitive, &blob)?;
+        let material = load_material(&primitive, textures)?;
 
         let prim = GLTFPrimitive {
             vertices,
@@ -264,26 +286,6 @@ fn load_mesh(mesh: Mesh<'_>, blob: &[u8]) -> anyhow::Result<GLTFMesh> {
     }
 
     Ok(parsed)
-}
-
-fn load_skin(skin: gltf::Skin<'_>, blob: &[u8]) -> anyhow::Result<Skin> {
-    tracing::info!("Loading skin index {}", skin.index());
-    let inverse_bind_matrices = skin
-        .reader(|_| Some(blob))
-        .read_inverse_bind_matrices()
-        .ok_or_else(|| {
-            anyhow::anyhow!("Loading skins without inverse bind matrices is not supported")
-        })?;
-
-    let mut skin_component = Skin::default();
-    for (joint, inverse_bind_matrix) in skin.joints().zip(inverse_bind_matrices) {
-        skin_component.joints.push(Joint {
-            target_joint_node: joint.index(),
-            inverse_bind_matrix: Mat4::from_cols_array_2d(&inverse_bind_matrix),
-        });
-    }
-
-    Ok(skin_component)
 }
 
 fn import_vertices(
@@ -298,38 +300,15 @@ fn import_vertices(
         .read_normals()
         .ok_or_else(|| anyhow!("Primitive has no normals"))?;
 
-    let mut weights = Vec::new();
-    let mut joints = Vec::new();
-
-    if let Some(weight_reader) = reader.read_weights(0) {
-        for weight in weight_reader.into_f32() {
-            weights.push(weight);
-        }
-    } else {
-        for _ in 0..position_reader.len() {
-            weights.push(Default::default());
-        }
-    }
-
-    if let Some(joint_reader) = reader.read_joints(0) {
-        joints.extend(joint_reader.into_u16());
-    } else {
-        for _ in 0..position_reader.len() {
-            joints.push(Default::default());
-        }
-    }
-
     let uv_reader = reader
         .read_tex_coords(0)
         .ok_or_else(|| anyhow!("Primitive has no UVs"))?
         .into_f32();
-    let vertices = izip!(position_reader, normal_reader, weights, joints, uv_reader)
-        .map(|(position, normal, weight, joint, uv)| GLTFVertex {
-            position: Vec3::from(position).extend(1.),
-            normal: Vec3::from(normal).extend(1.),
-            weight,
-            joint,
-            uv: uv.into(),
+    let vertices = izip!(position_reader, normal_reader, uv_reader)
+        .map(|(position, normal, uv)| GLTFVertex {
+            position,
+            normal,
+            uv,
         })
         .collect();
     Ok(vertices)
@@ -345,25 +324,29 @@ fn import_indices(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Resul
     Ok(indices)
 }
 
-fn load_material(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result<GLTFMaterial> {
+fn load_material(
+    primitive: &gltf::Primitive<'_>,
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFMaterial> {
     let material = primitive.material();
     let pbr = material.pbr_metallic_roughness();
     let base_colour_factor = pbr.base_color_factor().into();
     let roughness_factor = pbr.roughness_factor();
     let metallic_factor = pbr.metallic_factor();
 
-    let base_colour_texture = load_texture(pbr.base_color_texture(), blob)
-        .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))?;
+    let base_colour_texture = load_texture(pbr.base_color_texture(), textures)
+        .map_err(|e| anyhow!("Unable to import base colour texture: {e}"))
+        .ok();
 
-    let normal_texture = load_texture(material.normal_texture(), blob)
+    let normal_texture = load_texture(material.normal_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import normal texture: {e}"))
         .ok();
 
-    let metallic_roughness_ao_texture = load_texture(pbr.metallic_roughness_texture(), blob)
+    let metallic_roughness_ao_texture = load_texture(pbr.metallic_roughness_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import metallic roughness AO texture: {e}"))
         .ok();
 
-    let emissive_texture = load_texture(material.emissive_texture(), blob)
+    let emissive_texture = load_texture(material.emissive_texture(), textures)
         .map_err(|e| tracing::info!("Unable to import emissive texture: {e}"))
         .ok();
 
@@ -388,7 +371,10 @@ fn cvt(transform: gltf::scene::Transform) -> Transform {
     }
 }
 
-fn load_texture<'a, T>(texture: Option<T>, blob: &[u8]) -> anyhow::Result<GLTFTexture>
+fn load_texture<'a, T>(
+    texture: Option<T>,
+    textures: &[gltf::image::Data],
+) -> anyhow::Result<GLTFTexture>
 where
     T: AsRef<gltf::Texture<'a>>,
 {
@@ -397,73 +383,247 @@ where
         .ok_or_else(|| anyhow!("Texture does not exist"))?
         .as_ref();
 
-    let view = match texture.source().source() {
-        gltf::image::Source::View {
-            view,
-            mime_type: "image/png",
-        } => Ok(view),
-        gltf::image::Source::View { mime_type, .. } => {
-            Err(anyhow!("Invalid mime_type {mime_type}"))
-        }
-        gltf::image::Source::Uri { .. } => Err(anyhow!("Importing images by URI is not supported")),
-    }?;
-    let start = view.offset();
-    let end = view.offset() + view.length();
+    let texture_data = &textures[texture.index()];
 
-    let image_bytes = blob
-        .get(start..end)
-        .ok_or_else(|| anyhow!("Unable to read from blob with range {start}..{end}"))?;
-    let image = image::load_from_memory(image_bytes)?.into_rgba8();
+    // CRIME(cw): gltf import makes an image, then unpacks all that, then we put it back together for easy conversion.
+    let rgba8_image = match texture_data.format {
+        gltf::image::Format::R8G8B8A8 => image::RgbaImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap(),
+        gltf::image::Format::R8G8B8 => image::RgbImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        gltf::image::Format::R8G8 => image::GrayAlphaImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        gltf::image::Format::R8 => image::GrayImage::from_vec(
+            texture_data.width,
+            texture_data.height,
+            texture_data.pixels.clone(),
+        )
+        .unwrap()
+        .convert(),
+        _ => {
+            return Err(anyhow!(
+                "Unsupported texture format {:?}",
+                texture_data.format
+            ));
+        }
+    };
 
     Ok(GLTFTexture {
-        dimensions: image.dimensions().into(),
-        data: image.to_vec(),
+        dimensions: rgba8_image.dimensions().into(),
+        data: rgba8_image.into_vec(),
     })
 }
 
 pub fn animate_model(model: &mut GLTFModel, time: Duration) {
-    for animation in &model.animations {
-        let animation_time = time.as_secs_f32() % animation.duration;
+    // For each node, store the animated value for each animation
 
-        for channel in &animation.channels {
-            // Find the two keyframes to lerp between
-            let (start, end) = channel
-                .time_values
-                .iter()
-                .enumerate()
-                .find(|(_, &t)| t >= animation_time)
-                .map(|(i, _)| if i == 0 { (0, 0) } else { (i - 1, i) })
-                .unwrap_or((0, 0));
+    'state_change: loop {
+        match model.animation_state {
+            AnimationState::Playing { anim_index } => {
+                let animation = &mut model.animations[anim_index];
+                animation.animation_time +=
+                    (animation.animation_time + time.as_secs_f32()) % animation.duration;
 
-            // Get output values
-            let start_value = channel.output_values[start];
-            let end_value = channel.output_values[end];
+                for channel in &animation.channels {
+                    let Some(value) = get_next_value_for_channel(channel, animation.animation_time)
+                    else {
+                        continue;
+                    };
 
-            // Get lerp factor
-            let start_time = channel.time_values[start];
-            let end_time = channel.time_values[end];
+                    let node = &mut model.nodes[channel.target_index];
 
-            let lerp_factor = (animation_time - start_time) / (end_time - start_time);
-
-            // Lerp between the two keyframes
-            let output = Vec4::lerp(start_value, end_value, lerp_factor);
-
-            // Apply the output to the correct node
-            let path = &channel.path;
-
-            match path {
-                AnimationPath::Position => {
-                    model.nodes[channel.target_index].current_transform.position =
-                        output.truncate();
+                    apply_value_to_node(node, channel.path, value);
                 }
-                AnimationPath::Rotation => {
-                    model.nodes[channel.target_index].current_transform.rotation =
-                        Quat::from_vec4(output);
+            }
+            AnimationState::Paused => {}
+            AnimationState::Transitioning {
+                from_index,
+                to_index,
+                duration,
+                ref mut progress,
+            } => {
+                *progress += time.as_secs_f32();
+
+                if *progress >= duration {
+                    if let Some(to_index) = to_index {
+                        model.animation_state = AnimationState::Playing {
+                            anim_index: to_index,
+                        };
+                    } else {
+                        model.animation_state = AnimationState::Disabled;
+                    }
+                    break 'state_change;
                 }
-                AnimationPath::Scale => {
-                    model.nodes[channel.target_index].current_transform.scale = output.truncate();
+
+                let lerp_weight = *progress / duration;
+
+                // Accumulate the sparse changes for the from animation and the to animation.
+                let mut changes: HashMap<(usize, AnimationPath), (Option<Vec4>, Option<Vec4>)> =
+                    HashMap::new();
+
+                let from_animation = from_index.map(|i| &mut model.animations[i]);
+                if let Some(from) = from_animation {
+                    from.animation_time =
+                        (from.animation_time + time.as_secs_f32()) % from.duration;
+
+                    for channel in &from.channels {
+                        let Some(value) = get_next_value_for_channel(channel, from.animation_time)
+                        else {
+                            continue;
+                        };
+
+                        let change = changes
+                            .entry((channel.target_index, channel.path))
+                            .or_default();
+                        change.0 = Some(value);
+                    }
+                }
+
+                let to_animation = to_index.map(|i| &mut model.animations[i]);
+                if let Some(to) = to_animation {
+                    to.animation_time = (to.animation_time + time.as_secs_f32()) % to.duration;
+
+                    for channel in &to.channels {
+                        let Some(value) = get_next_value_for_channel(channel, 0.0) else {
+                            continue;
+                        };
+
+                        let change = changes
+                            .entry((channel.target_index, channel.path))
+                            .or_default();
+                        change.1 = Some(value);
+                    }
+                }
+
+                for ((node_index, path), (from_state, to_state)) in changes {
+                    let from_state = from_state
+                        .unwrap_or_else(|| get_default_pose_for_channel(model, node_index, path));
+
+                    let to_state = to_state
+                        .unwrap_or_else(|| get_default_pose_for_channel(model, node_index, path));
+
+                    let final_state = lerp_anim(path, from_state, to_state, lerp_weight);
+
+                    apply_value_to_node(&mut model.nodes[node_index], path, final_state);
+                }
+            }
+            AnimationState::Disabled => {
+                for node in &mut model.nodes {
+                    node.current_transform = node.base_transform;
                 }
             }
         }
+        break;
     }
+}
+
+fn lerp_anim(path: AnimationPath, from: Vec4, to: Vec4, factor: f32) -> Vec4 {
+    match path {
+        AnimationPath::Rotation => {
+            let from = Quat::from_vec4(from);
+            let to = Quat::from_vec4(to);
+            from.slerp(to, factor).to_array().into()
+        }
+        _ => from.lerp(to, factor),
+    }
+}
+
+fn apply_value_to_node(node: &mut GLTFNode, path: AnimationPath, value: Vec4) {
+    match path {
+        AnimationPath::Position => {
+            node.current_transform.position = value.truncate();
+        }
+        AnimationPath::Rotation => {
+            node.current_transform.rotation = Quat::from_vec4(value);
+        }
+        AnimationPath::Scale => {
+            node.current_transform.scale = value.truncate();
+        }
+    }
+}
+
+fn get_default_pose_for_channel(model: &GLTFModel, node_idx: usize, path: AnimationPath) -> Vec4 {
+    let node = &model.nodes[node_idx];
+    match path {
+        AnimationPath::Position => node.base_transform.position.extend(1.),
+        AnimationPath::Rotation => node.base_transform.rotation.to_array().into(),
+        AnimationPath::Scale => node.base_transform.scale.extend(1.),
+    }
+}
+
+/// Get the next value for an animation channel.
+///
+/// Per the glTF spec we iterate through the inputs (a list of timestamps) and try to find
+/// a "lower" and "higher" timestamp than `elapsed`. When we find these timestamps, we record
+/// their indices, fetch the corresponding outputs (a list of Vec4s representing the required
+/// transform) and lerp between them based on `lerp_s`: a scale that tells us how far "between"
+/// elapsed is from "low" and "high".
+///
+/// This implementation is loosely based on the glTF tutorial:
+/// https://github.com/KhronosGroup/glTF-Tutorials/blob/main/gltfTutorial/gltfTutorial_007_Animations.md
+fn get_next_value_for_channel(channel: &AnimationChannel, current_time: f32) -> Option<glam::Vec4> {
+    let mut previous_time = 0.;
+    let mut next_time = f32::MAX;
+
+    let mut previous_index = None;
+    let mut next_index = None;
+
+    let time_values = &channel.time_values;
+    let output_values = &channel.output_values;
+
+    // Fast path: if there is only one value, then that's what we have to return
+    if output_values.len() == 1 {
+        return output_values.first().copied();
+    }
+
+    for (index, time) in time_values.iter().enumerate() {
+        let time = *time;
+
+        // previous_time is the largest element from the times accessor that is smaller than current_time
+        if time > previous_time && time < current_time {
+            previous_time = time;
+            previous_index = Some(index);
+        }
+
+        // next_time is the smallest element from the times accessor that is larger than current_time
+        if time < next_time && time > current_time {
+            next_time = time;
+            next_index = Some(index);
+        }
+    }
+
+    // Get the output values from the indices we found
+    let previous_output = output_values[previous_index?];
+    let next_output = output_values[next_index?];
+
+    // Compute the interpolation value. This is a value between 0.0 and 1.0 that describes the relative
+    // position of the current_time, between the previous_time and the next_time:
+    let interpolation_value = (current_time - previous_time) / (next_time - previous_time);
+
+    let next_value = match channel.path {
+        AnimationPath::Rotation => Quat::from_array(previous_output.to_array())
+            .slerp(
+                Quat::from_array(next_output.to_array()),
+                interpolation_value,
+            )
+            .to_array()
+            .into(),
+        _ => previous_output.lerp(next_output, interpolation_value),
+    };
+
+    Some(next_value)
 }

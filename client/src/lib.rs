@@ -81,7 +81,7 @@ impl Engine {
         .map_err(|e| format!("Failed to connect to server: {e}"))?;
 
         let player_model = {
-            let gltf = gltf::load(include_bytes!("gltf/test.glb"))
+            let gltf = gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
                 .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
             let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
             TestGltf { gltf, render_model }
@@ -112,7 +112,8 @@ impl Engine {
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
         if event.code() == "KeyR" {
-            let gltf = match gltf::load(include_bytes!("gltf/test.glb")) {
+            let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
+            {
                 Ok(g) => g,
                 Err(e) => {
                     tracing::info!("Error loading GLTF: {e:#?}");
