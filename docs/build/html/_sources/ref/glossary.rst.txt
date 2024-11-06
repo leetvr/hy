@@ -1,0 +1,67 @@
+Glossary
+========
+
+Hytopia lets you to a lot, and so is a complex system with a lot of moving
+parts.
+
+Throughout this documentation we try to use words consistently: so you can be
+sure that when we talk about an :term:`entity`, we always mean the same thing.
+
+This page lists all of the concepts that exist in Hytopia’s view of the world.
+
+.. glossary::
+
+ block
+  a voxel (volume element) that makes up the terrain of a Hytopia :term:`world`
+
+ block type
+  every :term:`block` has a “type” which controls the behaviour and appearance
+  of all blocks of that type
+
+ Edit Mode
+  a mode of the :term:`Hytopia Editor`, where you can edit the world. If you’re
+  in :term:`Playtest Mode`, press the Stop button to switch back to Edit Mode
+
+ entity
+  an entity is an object in the world with a model, behaviors and which may
+  define certain :term:`entity properties<entity property>`
+
+ entity type
+  every :term:`entity` has a “type” which controls the behaviour and appearance
+  of all entities of that type. An entity type might define properties (for
+  example, number of hitpoints), and each entity of that type can customise
+  those properties
+
+ entity property
+  every :term:`entity type` defines a set of allowed properties for that
+  entity type (for example, hitpoints). Each instance of that entity has its
+  own value for those properties (some mobs may have more hitpoints) and can
+  use that to control its behavior
+
+ game
+  a game takes place in a :term:`world`. Usually it has a start, an end, some
+  players, and some sort of high score... but it’s up to you!
+
+ Hytopia Editor
+  a web-based editor that lets you build worlds by placing
+  :term:`blocks<block>`, :term:`entities<entity>`, and preview those worlds as
+  they’ll be seen by your players.
+
+ player
+  represents a real person, running Hytopia, who is playing your game. All
+  Hytopia games are automatically multiplayer.
+
+ Playtest Mode
+  a mode of the :term:`Hytopia Editor`, where you can play the world you’re
+  constructing. Press the Play button to switch to Playtest Mode; and the Stop
+  button to switch back to :term:`Edit Mode`
+ 
+ world
+  the world is the virtual space in which a Hytopia :term:`game` happens. You
+  can create worlds in the :term:`Hy Editor`, downloading pre-existing template
+  worlds from the Marketplace, or play games in worlds that other content
+  creators have made.
+
+  The most important things a world contains are its :term:`blocks<block>`,
+  :term:`entities<entity>` and its scripts; and it’s fully documented at **TO
+  BE WRITTEN**.
