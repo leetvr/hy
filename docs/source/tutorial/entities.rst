@@ -46,7 +46,7 @@ world. We’ll see in a second what this practically means.
 The ``model.gltf`` is the 3D model to use for the entity, in Graphics Library
 Transmission Format (GLTF) format. The default, which ``hy`` has set us up
 with, is a very uninspiring gray cube. Make a nicer flag in your favorite 3D
-modelling program (for example, `Blockbench <https://www.blockbench.net/>`), or
+modelling program (for example, `Blockbench <https://www.blockbench.net/>`_), or
 you can use this one we prepared earlier:
 
 **TODO: sample model goes here**
@@ -120,9 +120,9 @@ down to the ``onUpdate`` handler:
 **PC NOTE: when does gravity apply to entities? Perhaps we’d have to exempt
 this one for this trick to work**
 
-The onUpdate handler is called for every game :term:`tick`, that is, 60 times a
-second. Here we simply have the flag’s vertical position bob every three
-seconds.
+The ``onUpdate`` handler is called for every game :term:`tick`, that is, 60
+times a second. Here we simply have the flag’s vertical position bob every
+three seconds.
 
 Next up: the game
 -----------------

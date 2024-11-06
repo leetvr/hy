@@ -23,7 +23,8 @@ This page lists all of the concepts that exist in Hytopia’s view of the world.
   in :term:`Playtest Mode`, press the Stop button to switch back to Edit Mode
 
  entity
-  an entity is a wizzle in the wozzle
+  an entity is an object in the world with a model, behaviors and which may
+  define certain :term:`entity properties<entity property>`
 
  entity type
   every :term:`entity` has a “type” which controls the behaviour and appearance
@@ -61,6 +62,6 @@ This page lists all of the concepts that exist in Hytopia’s view of the world.
   worlds from the Marketplace, or play games in worlds that other content
   creators have made.
 
-  The most important thing a  world contains are its :term:`block`s,
+  The most important things a world contains are its :term:`blocks<block>`,
   :term:`entities<entity>` and its scripts; and it’s fully documented at **TO
   BE WRITTEN**.

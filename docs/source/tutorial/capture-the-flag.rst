@@ -112,8 +112,8 @@ behavior:
         world.spawnPlayer(player, BlockPos(0, 20, 0));
     } );
 
-The default behavior is to spawn the player in the world just above the origin
-(:math:`(x, y, z) = (0, 20, 0)`). This is why your player spawned in Playtest
+The default behavior is to spawn the player in the world just above the origin,
+at :math:`(x, y, z) = (0, 20, 0)`. This is why your player spawned in Playtest
 Mode.
 
 We want to replace this behavior with something appropriate for this game.
@@ -130,14 +130,15 @@ Replace the ``onRequestSpawn`` event handler as follows:
         const redPlayers = countPlayers(world, "red");
 
         if(redPlayers > bluePlayers) {
-            player.team = "blue";
+            player.state.team = "blue";
         } else {
-            player.team = "red";
+            player.state.team = "red";
         }
-        world.messagePlayer(player, "You are on the " + player.team.toUpperCase() + " team");
+        world.messagePlayer(player, "You are on the " + player.state.team.toUpperCase() + " team");
 
         // Spawn at a random point within x = ±4, z = ±4 of the base
-        let spawnPoint: BlockPos = findBase(world, player.team).randomise(4, 0, 4);
+        let spawnPoint: BlockPos = findBase(world, player.state.team).randomise(4, 0, 4);
+        world.spawnPlayer(player, spawnPoint);
     } );
 
     function countPlayers(world: World, team: string): number {
@@ -193,7 +194,7 @@ The most useful event here is ``onCollideWithEntity`` in ``player.ts``:
             }
         }
 
-        if(!player.state.carriedFlag) {
+        if(player.state.carriedFlag) {
             return;
         }
 
@@ -304,5 +305,5 @@ and maybe tweak the logic a little bit.
 
 Next up: you can either:
 
- * `set up your game so it can be played by others <source/tutorial/multiplayer>`
- * `add projectiles to your game <source/tutorial/projectiles>`
+ * :doc:`add projectiles to your game </tutorial/projectiles>`
+ * :doc:`set up your game so it can be played by others </tutorial/multiplayer>`

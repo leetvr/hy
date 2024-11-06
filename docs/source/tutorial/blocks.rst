@@ -17,9 +17,10 @@ that doesn’t have a block placed is treated as air, which
 :term:`players<player>` can freely walk through.
 
 Thinking back to when you played your freshly-created world, you might wonder
-why you didn’t simply fall through the floor. The answer is that `hy create`
+why you didn’t simply fall through the floor. The answer is that ``hy create``
 automatically places a plane of concrete blocks at :math:`y = 15` for you, so
-you had somewhere to run around.
+you had somewhere to run around. **TODO maybe not? perhaps you just stand on
+the magic floor**
 
 The Hytopia Editor
 ------------------
@@ -29,8 +30,8 @@ dev CaptureTheFlag`` to re-open it).
 
 You can navigate the world in the Hytopia Editor in the following ways:
 
- * You can translate horizontally around the world with the :kbd:`W` :kbd:`W`,
-   :kbd:`S`, :kbd:`A`, :kbd:`D` keys
+ * You can translate horizontally around the world with the :kbd:`W`, :kbd:`S`,
+   :kbd:`A`, :kbd:`D` keys
  * You can translate up and down with :kbd:`R` and :kbd:`F`
  * You can pitch with :kbd:`T` and :kbd:`G`
  * You can yaw (pan) with :kbd:`Q` and :kbd:`E`
@@ -74,7 +75,7 @@ some variation in elevation, block types, and theme.
  .. topic:: Challenge
 
  **Challenge**: Build a small maze at the entrance to each team’s base, with a
- couple of way through it. Use different block types to make the maze more
+ couple of ways through it. Use different block types to make the maze more
  interesting.
 
 Pre-defined block types

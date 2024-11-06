@@ -2,17 +2,15 @@ Getting started
 ===============
 
 To demonstrate all the basic features of Hytopia, we’re going to build a game
-of Capture The Flag (you can capture a Flag, or even something else, if you’d
-prefer). The idea is simple: you, or another member of your team, need to grab
-the other team’s Flag and get it back to your base, before the other team does
-the same to you.
+of Capture The Flag. The idea is simple: you, or another member of your team,
+need to grab the other team’s flag and get it back to your base, before the
+other team does the same to you.
 
 You’ll see how Hytopia lets you combine simple primitives to quickly build a
-deceptively-complex game. The game you build will automatically be
-multiplayer, have fast networking, handle a variety of devices and controllers,
-and have robust error recovery and reporting. With a few clicks you’ll be able
-to share the game you’ve made with your friends, put it on Hytopia’s
-Marketplace for others to play, or use it as the base of your own creation.
+deceptively-complex game. The game you build will automatically be multiplayer,
+have fast networking, be easy to extend and have robust error recovery. With a
+few clicks you’ll be able to share the game you’ve made with your friends, or
+use it as the base of your own creation.
 
 You can follow along this tutorial at your own pace, and you should feel free
 to add your own twists and turns to the basic game we lay out.
@@ -27,7 +25,7 @@ like this:
 
 You type: ``echo hi`` and you’ll see ``hi`` as the output.
 
- .. topic:: Challenge
+.. topic:: Challenge
 
  **Challenge**: Boxes like this will contain challenges for things you might
  want to do during this tutorial, to add a bit more to your first game.
@@ -48,8 +46,8 @@ You’ll need just three tools to build your first world and game:
  * The ``hy`` command line interface (CLI)
 
 If you’re reading this documentation, you probably already have a web browser:
-but if not, both `Chrome <https://www.google.com/chrome/>` and `Firefox
-<https://getfirefox.com/>` work great.
+but if not, both `Chrome <https://www.google.com/chrome/>`_ and `Firefox
+<https://getfirefox.com/>`_ work great.
 
 You can use any integrated development environment (IDE) for editing Hytopia’s
 Typescript files. We recommend **XXXXX**.
@@ -97,22 +95,22 @@ Two commands you’ll find useful:
    :kbd:`Ctrl+C`), you can restart it with: ``hy run CaptureTheFlag``
 
 Although there’s not much in it, your world is already playable! Press the Play
-icon in the editor **TODO SCREENSHOT HERE** and your Hytopia player will spawn
+icon in the editor **TODO ICON HERE** and your Hytopia player will spawn
 in the CaptureTheFlag world. This is Playtest Mode. The standard Hytopia
 :kbd:`W`, :kbd:`S`, :kbd:`A`, :kbd:`D` keybinding will work automatically, and
 you can run around.
 
 Congratulations! You’ve made your first Hytopia world.
 
-When you’ve had a look around, press the Stop icon **TODO SCREENSHOT HERE** to
+When you’ve had a look around, press the Stop icon **TODO ICON HERE** to
 return to Edit Mode.
 
 What’s in the box?
 ------------------
 
 Above, we mentioned that ``hy`` has created a directory containing the files
-defining your world. Before we move on to the next stage of the tutorial, it’s
-worth taking a brief look at the files that have been created for you.
+defining your world. Before we move on to the next tutorial, it’s worth taking
+a brief look at the files that have been created for you.
 
 Open up a terminal and list the ``CaptureTheFlag`` directory:
 
@@ -152,16 +150,17 @@ choice.
   This directory defines the different :term:`block types<block type>` that are
   used in the world. This directory comes pre-populated with some basic,
   broadly-applicable block types. You’ll see how to use the prebuilt block
-  types, and create your own new block type, in <tutorial/blocks>.
+  types, and create your own new block type, in :doc:`the Blocks tutorial
+  </tutorial/blocks>`.
 
 ``entities.json``
   This file (which you don’t need to edit by hand) lists all the
   :term:`entities<entity>` in your world. It’s edited by the Hytopia Editor.
 
-``blocktypes``
+``entitytypes``
   This empty directory will contain definitions for the different :term:`entity
   types<entity type>` that will be used in the world. You’ll create some entity
-  types in <tutorial/entities>.
+  types in :doc:`the Entities tutorial </tutorial/entities>`.
 
 ``grid.dat``
   This file contains all the blocks in the world, stored in an efficient
@@ -191,7 +190,7 @@ choice.
   passing. The template ``hy`` creates has boilerplate prebuilt code for the
   most common world events.
 
- .. topic:: Challenge
+.. topic:: Challenge
 
  **Challenge**: Edit ``metadata.json`` to set the name, author and description
  of your game.

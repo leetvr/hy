@@ -9,7 +9,8 @@ Hy: the prototype for Hytopia
 Hy is a prototype for Hytopia’s user-generated content (UGC) platform. This
 documentation:
 
- * Explains what UGC is and why you should develop it (**TO BE WRITTEN**)
+ * Explains what UGC is and why you should develop it (**TO BE WRITTEN
+   [probably by Hytopia themselves]**)
  * Walks you through building your first :term:`world` and the :term:`game`
    inside it
  * Contains a comprehensive reference for everything in Hytopia (**TO BE
