@@ -77,7 +77,7 @@ export function AudioPlayer() {
 
       newSource.start();
 
-      // Keep references to source and panner
+      // Keep references to source, panner and playback status
       setSource(newSource);
       setPanner(newPanner);
       setIsPlaying(true);
@@ -151,9 +151,9 @@ export function AudioPlayer() {
     setIsMovingRight(false);
   };
 
-	const pan_speed = 50;
-  // Update sound position every `pan_speed` (ms) when button is held
   useEffect(() => {
+		const pan_speed = 50;
+		// Update sound position every `pan_speed` (ms) when button is held
     const moveInterval = setInterval(() => {
       if (isMovingLeft) {
         const newX = xPosition - 1;
@@ -170,7 +170,8 @@ export function AudioPlayer() {
       }
     }, pan_speed);
 
-    return () => clearInterval(moveInterval); // Cleanup on unmount
+		// Cleanup our timer
+    return () => clearInterval(moveInterval); 
   }, [isMovingLeft, isMovingRight, xPosition, panner]);
 
   return (
