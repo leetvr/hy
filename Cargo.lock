@@ -206,7 +206,7 @@ dependencies = [
 name = "blocks"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.29.1",
  "serde",
 ]
 
@@ -299,7 +299,8 @@ dependencies = [
  "blocks",
  "bytemuck",
  "console_error_panic_hook",
- "glam",
+ "dolly",
+ "glam 0.29.1",
  "glow",
  "gltf",
  "image",
@@ -548,6 +549,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dolly"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1057c2875c640d0d6c961e0bfe5c31d03010d0e72ea96f6c40fffe6b7aebf235"
+dependencies = [
+ "glam 0.28.0",
+ "mint",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -743,11 +754,21 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "glam"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
+dependencies = [
+ "mint",
+]
+
+[[package]]
+name = "glam"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "480c9417a5dc586fc0c0cb67891170e59cc11e9dc79ba1c11ddd2c56ca3f3b90"
 dependencies = [
  "bytemuck",
+ "mint",
  "serde",
 ]
 
@@ -1107,6 +1128,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
+
+[[package]]
 name = "mio"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1157,7 +1184,7 @@ version = "0.1.0"
 dependencies = [
  "blocks",
  "derive_more",
- "glam",
+ "glam 0.29.1",
  "serde",
 ]
 
@@ -1376,7 +1403,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 name = "physics"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.29.1",
  "nalgebra",
  "rapier3d",
  "tracing",
@@ -1769,7 +1796,7 @@ dependencies = [
  "crossbeam",
  "deno_core",
  "futures-util",
- "glam",
+ "glam 0.29.1",
  "net-types",
  "physics",
  "tokio",

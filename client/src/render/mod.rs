@@ -1,6 +1,7 @@
 use {
     blocks::BlockPos,
     bytemuck::{Pod, Zeroable},
+    glam::Quat,
     std::{mem, slice, time::Duration},
 };
 
@@ -361,7 +362,7 @@ fn get_gl_context(_webgl2_context: WebGl2RenderingContext) -> glow::Context {
 #[derive(Debug)]
 pub struct Camera {
     pub translation: Vec3,
-    pub rotation: Vec3,
+    pub rotation: Quat,
 }
 
 impl Default for Camera {
@@ -375,12 +376,7 @@ impl Default for Camera {
 
 impl Camera {
     pub fn view_matrix(&self) -> Mat4 {
-        Mat4::from_euler(
-            glam::EulerRot::XYZ,
-            self.rotation.x,
-            self.rotation.y,
-            self.rotation.z,
-        ) * Mat4::from_translation(self.translation)
+        (Mat4::from_translation(self.translation) * Mat4::from_quat(self.rotation)).inverse()
     }
 }
 
