@@ -10,6 +10,7 @@ use {
     web_sys::WebSocket,
 };
 
+use blocks::BlockPos;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -41,6 +42,9 @@ pub struct Engine {
 
     controls: Controls,
     player_model: TestGltf,
+
+    cube_mesh_data: render::CubeVao,
+    cube_texture: render::Texture,
 
     game_state: GameState,
 }
@@ -79,8 +83,12 @@ impl Engine {
             TestGltf { gltf, render_model }
         };
 
+        let cube_texture = renderer.create_texture_from_color([255, 0, 0, 255]);
+
         Ok(Self {
             context: context::Context::default(),
+            cube_mesh_data: renderer.create_cube_vao(),
+
             renderer,
             elapsed_time: Duration::ZERO,
             test: None,
@@ -91,6 +99,8 @@ impl Engine {
 
             controls: Default::default(),
             player_model,
+
+            cube_texture,
 
             game_state: Default::default(),
         })
@@ -270,6 +280,11 @@ impl Engine {
 
             tracing::debug!("Draw calls created: {:#?}", draw_calls);
         }
+
+        draw_calls.extend(render::build_cube_draw_calls(
+            &self.cube_mesh_data,
+            [(BlockPos::new(0, 0, 0), [&self.cube_texture; 6])].into_iter(),
+        ));
 
         self.renderer.render(self.elapsed_time, &draw_calls);
     }
