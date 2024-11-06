@@ -1,11 +1,19 @@
 import { useState } from "react";
+import type { Engine, increment } from "../../pkg/client.d.ts";
 import "./App.css";
+
+declare global {
+  interface Window {
+    engine: Engine;
+    increment: typeof increment;
+  }
+}
 
 function App() {
   const [count, setCount] = useState(0);
 
   const handleClick = () => {
-    const nextValue = (window as unknown).increment(count);
+    const nextValue = window.increment(count);
     setCount(nextValue);
   };
 
