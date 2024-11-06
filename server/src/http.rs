@@ -48,8 +48,8 @@ async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()
 async fn handle_post(path: &str, addr: SocketAddr) -> Result<Vec<u8>> {
     let response = run_js(path, addr).await?;
     Ok(format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n{response}",
-        response.len()
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n{response}\r\n",
+        response.len() + 2 // add 2 bytes for the CRLF
     )
     .into())
 }

@@ -1,11 +1,11 @@
-use deno_core::{error::AnyError, extension, op2, v8::Value};
-use std::{borrow::Borrow, net::SocketAddr, rc::Rc};
+use deno_core::{error::AnyError, extension, op2, v8};
+use std::{net::SocketAddr, rc::Rc};
 
 #[op2(async)]
 #[string]
 async fn hello(#[string] ip: String) -> Result<String, AnyError> {
-    tracing::info!("Hello called: {ip}!");
-    Ok(format!("Hello {ip} from Rust"))
+    tracing::info!("Hello from Rust! I was called with {ip}!");
+    Ok(format!("Your IP is {ip}, but from Rust"))
 }
 
 extension!(
@@ -22,42 +22,61 @@ pub async fn run_js(file_path: &str, addr: SocketAddr) -> anyhow::Result<String>
         return Ok(format!("ERROR: File not found: {file_path}"));
     };
 
+    // Load the runtime
     let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
         module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
         extensions: vec![crimes::init_ops_and_esm()],
         ..Default::default()
     });
 
-    // Load the runtime
     let Ok(mod_id) = js_runtime.load_main_es_module(&main_module).await else {
         return Ok(format!("ERROR: File not found: {file_path}"));
     };
 
-    let result = js_runtime.mod_evaluate(mod_id);
+    js_runtime.mod_evaluate(mod_id).await?;
     js_runtime.run_event_loop(Default::default()).await?;
 
-    result.await?;
+    let module_namespace = js_runtime.get_module_namespace(mod_id)?;
+    let promise = {
+        let scope = &mut js_runtime.handle_scope();
+        let module_namespace = module_namespace.open(scope);
 
-    let SocketAddr::V4(addr) = addr else {
-        return Ok("Wow, you're using IPv6!".into());
+        let function_name = v8::String::new(scope, "greet").unwrap();
+        let Some(greet) = module_namespace.get(scope, function_name.into()) else {
+            return Ok(format!("ERROR: Module has no function named greet!"));
+        };
+
+        if !greet.is_function() {
+            return Ok(format!("ERROR: Module has no function named greet!"));
+        }
+
+        let greet = v8::Local::<v8::Function>::try_from(greet).unwrap(); // we know it's a function
+
+        let undefined = deno_core::v8::undefined(scope).into();
+        let arg = v8::String::new(scope, &addr.to_string()).unwrap();
+        let args = [arg.into()];
+
+        let promise = greet.call(scope, undefined, &args).unwrap();
+
+        if !promise.is_promise() {
+            return Ok(format!("ERROR: greet did not return a promise!"));
+        }
+
+        v8::Global::new(scope, promise)
     };
 
-    let ip = addr.ip().to_string();
+    let result = {
+        let value = js_runtime.resolve(promise);
+        js_runtime.run_event_loop(Default::default()).await?;
+        let scope = &mut js_runtime.handle_scope();
 
-    let script = format!("crimes.hello(\"{ip}\").then(console.log);");
+        value
+            .await?
+            .open(scope)
+            .to_string(scope)
+            .unwrap()
+            .to_rust_string_lossy(scope)
+    };
 
-    tracing::info!("Evaluating {script}");
-    let promise = js_runtime.execute_script("", script)?;
-    {
-        let promise: &Value = &promise.borrow();
-        tracing::info!("is_promise {}", promise.is_promise());
-    }
-
-    // This line seems to hang the runtime
-    let resolved = js_runtime.resolve(promise).await?;
-
-    let value: &Value = resolved.borrow();
-    let value = value.to_rust_string_lossy(&mut js_runtime.handle_scope());
-
-    Ok(value)
+    Ok(result)
 }
