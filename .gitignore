@@ -16,5 +16,6 @@ client/ui/dist
 assets/main.js
 assets/main.css
 assets/client_bg*wasm
+assets/index.html
 
 .DS_Store
