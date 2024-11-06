@@ -2,7 +2,10 @@ Coding Capture the Flag
 =======================
 
 **PWC NOTE: I did all of this code freehand, no guarantee it makes sense/is
-syntactically valid**
+syntactically valid, and I'm not suggesting we actually use the API I’ve
+defined — rather I tried to think of all the code that is necessary, and put it
+in there; any other API design design will need to solve at least these
+problems**
 
 We’re now ready to put all the pieces together and turn this world into a game.
 
@@ -53,7 +56,7 @@ period between game rounds.
 The world provides special event handlers to make handling these commands
 easy.
 
-Open up ``World.ts`` and locate the ``onSlashCommand`` function:
+Open up ``world.ts`` and locate the ``onSlashCommand`` function:
 
 .. code-block:: typescript
 
@@ -66,15 +69,32 @@ Open up ``World.ts`` and locate the ``onSlashCommand`` function:
                 world.state.isRunning = true;
                 world.state.score = { "red": 0, "blue": 0 };
                 world.state.checkForWin = (world: World) => {}; // We'll implement this later
+                resetFlag(world.entityById('red-flag'));
+                resetFlag(world.entityById('blue-flag'));
             }
         } else if(command === "end")
             if(world.state.isRunning) {
-                world.state.isRunning = false;
+                endGame(world);
             } else {
                 world.messagePlayer(player, "Game isn't running, '/end' ignored");
             }
         }
     } );
+
+    function endGame(world: World) {
+        world.state.isRunning = false;
+        resetFlag(world.entityById('red-flag'));
+        resetFlag(world.entityById('blue-flag'));
+    }
+
+    function resetFlag(flag: Flag) {
+        flag.velocity = Vec3(0., 0., 0.);
+        flag.transform = flag.initialProperties.transform;
+        if(flag.state.carriedBy) {
+            flag.state.carriedBy.state.carriedFlag = undefined;
+            flag.state.carriedBy = undefined;
+        }
+    }
 
 Here we use an ``isRunning`` boolean in the world's state to control if the
 game is running.
@@ -240,10 +260,49 @@ relevant event handler:
         // Capture the flag!
         let flag: Flag = player.state.carriedFlag;
 
-        player.state.carriedFlag = undefined;
-        flag.carriedBy = undefined;
         world.state.score[player.state.team] += 1;
         world.state.checkForWin(world);
         world.messageAll(player.name + " captured the flag! One point to " + player.state.team.toUpperCase() + " team!");
         world.messageAll("Scores: RED " + world.state.score["red"] + " vs " + world.state.score["blue"] + " BLUE");
+        resetFlag(flag);
     });
+
+World behavior
+--------------
+
+The last thing we need to for our basic Capture The Flag is a scoring system.
+At the moment scores are tracked, in ``world.state.scores``, and we want to end
+the game if either team makes it to five captures.
+
+Cleverly, we set aside a ``checkForWin`` function in the ``onSlashCommand``
+event handler in ``world.ts``. We can now provide an implementation:
+
+.. code-block:: typescript
+
+   // ...
+        world.state.checkForWin = (world: World) => {
+            let winner: string? = undefined;
+            if(world.state.score["red"] >= 5) {
+                winner = "RED";
+            } else if(world.state.score["blue"] >= 5) {
+                winner = "BLUE";
+            }
+            if(winner) {
+                world.globalMessage(winner + " team wins the game!");
+                endGame(world);
+            }
+        };
+   // ...
+
+
+Play!
+-----
+
+You now have a basic, but fully playable, game of capture the flag. Have a play
+around, using the editor’s Playtest mode, check you’re happy with everything,
+and maybe tweak the logic a little bit.
+
+Next up: you can either:
+
+ * `set up your game so it can be played by others <source/tutorial/multiplayer>`
+ * `add projectiles to your game <source/tutorial/projectiles>`

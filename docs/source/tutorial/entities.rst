@@ -87,10 +87,11 @@ The flag will be selected, and its properties will appear in the Properties
 panel (bottom right of the editor). There’s only one custom property for this
 entity (which we created above), but you’ll also see some generic system
 properties common to all entities. We specified Red Team as the default owner
-of this flag, so you don’t need to change anything here.
+of this flag, so you don’t need to change that. The flag also has an ``id``
+property, which you should set to ``red-flag``.
 
 Place a second flag, in the blue base. This time, change the owning team
-property to Blue Team.
+property to Blue Team and set the ``id`` to ``blue-flag``.
 
 Adding behavior
 ---------------

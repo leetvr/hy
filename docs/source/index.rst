@@ -27,6 +27,8 @@ Table of contents
    tutorial/blocks
    tutorial/entities
    tutorial/capture-the-flag
+   tutorial/projectiles
+   tutorial/multiplayer
 
 .. toctree::
    :maxdepth: 2
