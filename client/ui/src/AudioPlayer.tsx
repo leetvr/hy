@@ -62,6 +62,7 @@ export function AudioPlayer() {
       setIsMovingRight(false);
       setXPosition(0); 
       setIsDistortionEnabled(false); 
+			setDistortion(null);  
     } else {
       // Play the sound
       const newSource = audioContext.createBufferSource();
@@ -80,6 +81,11 @@ export function AudioPlayer() {
       // Keep references to source, panner and playback status
       setSource(newSource);
       setPanner(newPanner);
+
+			// Re-apply distortion if it's enabled
+			if (isDistortionEnabled) {
+				applyDistortion();
+			}
       setIsPlaying(true);
     }
   };
