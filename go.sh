@@ -1,8 +1,13 @@
 #!/bin/bash
 set -xe
+
 # Build the client
 (cd client && wasm-pack build --target web)
-(cd client/ui && npm install && npx vite build --minify false && cp dist/assets/index*js main.js && cp dist/assets/*css main.css)
+(cd client/ui && npm install && npx vite build --minify false)
+
+# Copy the resulting files to the assets directory
+cp client/ui/dist/assets/* assets/
+cp client/ui/dist/index.html assets/
 
 # Start the server
 cargo run --bin server

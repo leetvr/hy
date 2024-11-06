@@ -66,15 +66,9 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
-#root {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
-}
-
 .card {
-    padding: 2em;
+    color: #fff;
+    size: 1rem;
     font-family:
         system-ui,
         -apple-system,
@@ -87,4 +81,10 @@ button:focus-visible {
         "Open Sans",
         "Helvetica Neue",
         sans-serif;
+    background-color: #bbb;
+    align-items: center;
+}
+
+.card > p {
+    text-align: left;
 }
