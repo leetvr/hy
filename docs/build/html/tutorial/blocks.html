@@ -1,0 +1,498 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Entities" href="entities.html" /><link rel="prev" title="Getting started" href="getting-started.html" />
+
+    <link rel="shortcut icon" href="../_static/hytopia.ico"/><!-- Generated with Sphinx 8.1.3 and Furo 2024.08.06 -->
+        <title>Blocks: defining terrain - Hy prototype documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=354aac6f" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=302659d7" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">Hy prototype documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  
+  <span class="sidebar-brand-text">Hy prototype documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Tutorial</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Blocks: defining terrain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="entities.html">Entities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="capture-the-flag.html">Coding Capture the Flag</a></li>
+<li class="toctree-l1"><a class="reference internal" href="projectiles.html">Projectiles</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multiplayer.html">Exporting your game</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference material</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../ref/glossary.html">Glossary</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/tutorial/blocks.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="blocks-defining-terrain">
+<h1>Blocks: defining terrain<a class="headerlink" href="#blocks-defining-terrain" title="Link to this heading">¶</a></h1>
+<p>Hytopia is inspired by voxel-based games, meaning that the terrain of the world
+is made from “blocks” that sit on a fixed grid. Each point in that grid can
+have only one block on it.</p>
+<p>Each <a class="reference internal" href="../ref/glossary.html#term-world"><span class="xref std std-term">world</span></a> in Hytopia is based on a 256×64×264 grid (256 blocks in the
+east/west and north/south directions, and 64 blocks in the up/down direction).
+These are referred to as the <span class="math notranslate nohighlight">\(x\)</span>, <span class="math notranslate nohighlight">\(y\)</span> and <span class="math notranslate nohighlight">\(z\)</span> directions.
+(Hytopia uses a right-handed co-ordinate system.) Anything outside this grid is
+inaccessible to all players: they won’t be able
+to get through the magic forcefield surrounding your world.</p>
+<p>You’ll make the terrain of your game by placing blocks. Any area of the grid
+that doesn’t have a block placed is treated as air, which
+<a class="reference internal" href="../ref/glossary.html#term-player"><span class="xref std std-term">players</span></a> can freely walk through.</p>
+<p>Thinking back to when you played your freshly-created world, you might wonder
+why you didn’t simply fall through the floor. The answer is that <code class="docutils literal notranslate"><span class="pre">hy</span> <span class="pre">create</span></code>
+automatically places a plane of concrete blocks at <span class="math notranslate nohighlight">\(y = 15\)</span> for you, so
+you had somewhere to run around. <strong>TODO maybe not? perhaps you just stand on
+the magic floor</strong></p>
+<section id="the-hytopia-editor">
+<h2>The Hytopia Editor<a class="headerlink" href="#the-hytopia-editor" title="Link to this heading">¶</a></h2>
+<p>Switch to the <a class="reference internal" href="../ref/glossary.html#term-Hytopia-Editor"><span class="xref std std-term">Hytopia Editor</span></a> in your browser (you can always run <code class="docutils literal notranslate"><span class="pre">hy</span>
+<span class="pre">dev</span> <span class="pre">CaptureTheFlag</span></code> to re-open it).</p>
+<p>You can navigate the world in the Hytopia Editor in the following ways:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>You can translate horizontally around the world with the <kbd class="kbd docutils literal notranslate">W</kbd>, <kbd class="kbd docutils literal notranslate">S</kbd>,
+<kbd class="kbd docutils literal notranslate">A</kbd>, <kbd class="kbd docutils literal notranslate">D</kbd> keys</p></li>
+<li><p>You can translate up and down with <kbd class="kbd docutils literal notranslate">R</kbd> and <kbd class="kbd docutils literal notranslate">F</kbd></p></li>
+<li><p>You can pitch with <kbd class="kbd docutils literal notranslate">T</kbd> and <kbd class="kbd docutils literal notranslate">G</kbd></p></li>
+<li><p>You can yaw (pan) with <kbd class="kbd docutils literal notranslate">Q</kbd> and <kbd class="kbd docutils literal notranslate">E</kbd></p></li>
+<li><p>You can zoom in and out by scrolling the mousewheel</p></li>
+<li><p>If it ever becomes all too hard, <kbd class="kbd docutils literal notranslate">Z</kbd> will reset your view</p></li>
+</ul>
+</div></blockquote>
+<p><strong>TODO: All keybinds above are literally just from me looking at my keyboard
+and picking keys</strong></p>
+<p>(If you find using those keys moves your character around, you’re still in
+Playtest Mode. Press the Stop icon <strong>TODO ICON HERE</strong> to return to Edit Mode,
+where your character is not visible and you can move freely.)</p>
+<p>Practice moving around the editor for a bit, and when you’ve got the hang of
+it, move on.</p>
+</section>
+<section id="pre-defined-blocks">
+<h2>Pre-defined blocks<a class="headerlink" href="#pre-defined-blocks" title="Link to this heading">¶</a></h2>
+<p>You’ll also see that <code class="docutils literal notranslate"><span class="pre">hy</span> <span class="pre">create</span></code> has created a series of pre-defined block
+types: these are the directories under the <code class="docutils literal notranslate"><span class="pre">blocktypes</span></code> directory in your
+<code class="docutils literal notranslate"><span class="pre">CaptureTheFlag</span></code> directory.</p>
+<p>These pre-defined block types are broadly useful, and we’ll place some now.</p>
+<p>You can place blocks by clicking on the block type you want in the Block
+Palette (left-hand side of the screen), and then clicking on a place in the
+editor screen. Your mouse cursor will automatically snap so that a new block is
+placed on top of the one beneath it.</p>
+<p>You can delete a block by holding down <kbd class="kbd docutils literal notranslate">Shift</kbd> while clicking.</p>
+<p>You’ll probably find it tedious to click on each block individually to place
+it.  You can click-and-drag to quickly add a lot of blocks of the same type:
+note that when in click-and-drag mode, you’re locked to the vertical
+(<span class="math notranslate nohighlight">\(y\)</span>) position of the first block you place.</p>
+<p>Make some attractive scenery for the two teams to compete. It’s worth having
+some variation in elevation, block types, and theme.</p>
+<blockquote>
+<div><p><strong>Challenge</strong>: Build a small maze at the entrance to each team’s base, with a
+couple of ways through it. Use different block types to make the maze more
+interesting.</p>
+</div></blockquote>
+<section id="pre-defined-block-types">
+<h3>Pre-defined block types<a class="headerlink" href="#pre-defined-block-types" title="Link to this heading">¶</a></h3>
+<p>The pre-defined block types made by <code class="docutils literal notranslate"><span class="pre">hy</span> <span class="pre">create</span></code> are:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>air (special block type for grid spaces without a block)</p></li>
+<li><p>asphalt</p></li>
+<li><p>brick</p></li>
+<li><p>concrete</p></li>
+<li><p>dirt</p></li>
+<li><p>glass (semi-transparent)</p></li>
+<li><p>grass (grass on up-side only, otherwise, dirt)</p></li>
+<li><p>metal plating</p></li>
+<li><p>painted line, white (useful for roads)</p></li>
+<li><p>painted line, yellow (useful for taxiways)</p></li>
+<li><p>smoke (obscures vision somewhat, but players can walk through it)</p></li>
+<li><p>stone</p></li>
+<li><p>stone steps (non-standard block shape)</p></li>
+<li><p>wood</p></li>
+<li><p>construct (an off-white block, like in <em>The Matrix</em>)</p></li>
+</ul>
+</div></blockquote>
+<p>There’s a limit of 255 different block types in a single world, so you’re free
+to delete or repurpose any of the pre-defined block types if you’d prefer.</p>
+</section>
+</section>
+<section id="a-new-block-type">
+<h2>A new block type<a class="headerlink" href="#a-new-block-type" title="Link to this heading">¶</a></h2>
+<p>The pre-defined block types are great for terrain and some obstacles. However,
+you might want to do something a bit different. And, while we’re here, we will
+need to define a special block: the pedestal on which the player will put the
+flag.</p>
+<p>Creating a new block type is simple:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>hy<span class="w"> </span>block_type<span class="w"> </span>flag_pedestal
+</pre></div>
+</div>
+<p>(You can take a look in the Hytopia Editor and see that the new block type has
+appeared automatically.)</p>
+<p>This creates a new <a class="reference internal" href="../ref/glossary.html#term-block-type"><span class="xref std std-term">block type</span></a>, called <code class="docutils literal notranslate"><span class="pre">flag_pedestal</span></code>. Most
+practically, it creates a new directory like:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>tree<span class="w"> </span>-F<span class="w"> </span>CaptureTheFlag/blocktype/flag_pedestal
+<span class="go">CaptureTheFlag/blocktype/flag_pedestal/</span>
+<span class="go">├── top.png</span>
+<span class="go">└── properties.json</span>
+</pre></div>
+</div>
+<p>There are two files created for you.</p>
+<p>The JSON file file <code class="docutils literal notranslate"><span class="pre">properties.json</span></code> controls whether or not the block can be
+walked through. The flag pedestal isn’t such a block, so no changes are needed.</p>
+<p>The file <code class="docutils literal notranslate"><span class="pre">top.png</span></code> is the texture shown on the block’s faces. The following
+names are recognised:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">top.png</span></code> – topmost face</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bottom.png</span></code> – bottommost face</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">right.png</span></code> – rightmost face (i.e., face pointing in positive <span class="math notranslate nohighlight">\(x\)</span>
+direction)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">left.png</span></code> – leftmost face (i.e., face pointing in negative <span class="math notranslate nohighlight">\(x\)</span>
+direction)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">forwards.png</span></code> – face pointing forwards (i.e., face pointing in positive
+<span class="math notranslate nohighlight">\(z\)</span> direction)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">backwards.png</span></code> – face pointing backwards (i.e., face pointing in
+negative <span class="math notranslate nohighlight">\(z\)</span> direction)</p></li>
+</ul>
+</div></blockquote>
+<p>If a texture file is missing, Hytopia will automatically use the texture for
+the face above it in the list. This is why <code class="docutils literal notranslate"><span class="pre">hy</span></code> has only created a
+<code class="docutils literal notranslate"><span class="pre">top.png</span></code>: the same texture will be automatically used on all six faces of
+the cube.</p>
+<p>The flag pedestal will look best if it’s sitting on top of the blocks
+surrounding it. For that reason it would make sense to have a different face on
+top compared to the sides.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Create a <code class="docutils literal notranslate"><span class="pre">top.png</span></code> that looks like a flag pedestal</p></li>
+<li><p>Create a <code class="docutils literal notranslate"><span class="pre">bottom.png</span></code> that looks like a metal support. Note that this
+texture will automatically be used for the other four faces</p></li>
+</ul>
+</div></blockquote>
+<p>The <code class="docutils literal notranslate"><span class="pre">grass</span></code> predefined block type is an example of this sort of block.</p>
+<p>If you don’t have a texture you’d like to use, consider the following:</p>
+<p><strong>TODO: SAMPLE TEXTURES</strong></p>
+<blockquote>
+<div><p><strong>Challenge</strong>: In capture the flag, you want it to be quick to leave your base
+but somewhat more difficult to get in. Define a new <code class="docutils literal notranslate"><span class="pre">wooden_steps</span></code> block
+type with a stairs shape, and use it in your bases. (See stone steps for
+inspiration.)</p>
+</div></blockquote>
+</section>
+<section id="next-up-entities">
+<h2>Next up: entities<a class="headerlink" href="#next-up-entities" title="Link to this heading">¶</a></h2>
+<p>You’re ready to move on to entities… but before you do that, click the Play
+button and walk through your world!</p>
+<p>None of the game behaviors are in place yet, but you can walk through your two
+bases and work out what you might need to tweak.</p>
+<p>When you’re ready, click the Stop button to move back to Edit mode, and:</p>
+<p><a class="reference internal" href="entities.html"><span class="doc">Move to the next lesson, on entities</span></a></p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="entities.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Entities</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="getting-started.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Getting started</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2024, Hytopia
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Blocks: defining terrain</a><ul>
+<li><a class="reference internal" href="#the-hytopia-editor">The Hytopia Editor</a></li>
+<li><a class="reference internal" href="#pre-defined-blocks">Pre-defined blocks</a><ul>
+<li><a class="reference internal" href="#pre-defined-block-types">Pre-defined block types</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#a-new-block-type">A new block type</a></li>
+<li><a class="reference internal" href="#next-up-entities">Next up: entities</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=45a49711"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=5fa4622c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>
