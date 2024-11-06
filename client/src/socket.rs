@@ -1,6 +1,7 @@
 use {
     anyhow::Result,
     std::{cell::RefCell, mem, rc::Rc},
+    tokio::sync::mpsc::Receiver,
     wasm_bindgen::{prelude::Closure, JsCast},
     wasm_bindgen_futures::JsFuture,
     web_sys::{
@@ -17,29 +18,34 @@ pub fn connect_to_server(
     // Connect to server
     let ws = WebSocket::new(addr).expect("Failed to connect to server");
 
+    let (blob_tx, mut blob_rx) = tokio::sync::mpsc::channel::<Blob>(16);
     // Read incoming messages to a queue
     let onmessage = Closure::wrap(Box::new({
-        let incoming_messages = incoming_messages.clone();
         move |event: MessageEvent| {
             let message = event
                 .data()
                 .dyn_into::<Blob>()
                 .expect("Failed to read message");
 
-            // Note(ll): I think this can be done synchronously
-            let incoming_messages = incoming_messages.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                let array_buffer = JsFuture::from(message.array_buffer())
-                    .await
-                    .expect("Failed to read array buffer")
-                    .dyn_into::<ArrayBuffer>()
-                    .unwrap();
-                let array = Uint8Array::new(&array_buffer);
-                incoming_messages.borrow_mut().push(array.to_vec());
-            });
+            let _ = blob_tx.blocking_send(message);
         }
     }) as Box<dyn FnMut(MessageEvent)>);
     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+
+    // Spawn a task for reading incoming blobs in the order they are received
+    // This is necessary because `blob.array_buffer()` is asynchronous
+    wasm_bindgen_futures::spawn_local(async move {
+        while let Some(blob) = blob_rx.recv().await {
+            let array_buffer = JsFuture::from(blob.array_buffer())
+                .await
+                .expect("Failed to read array buffer")
+                .dyn_into::<ArrayBuffer>()
+                .unwrap();
+            let array = Uint8Array::new(&array_buffer);
+            let data = array.to_vec();
+            incoming_messages.borrow_mut().push(data);
+        }
+    });
 
     // Handle changes in connection states
     let onopen = Closure::wrap(Box::new({

@@ -155,9 +155,12 @@ impl Engine {
 
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
-                let Some(message) = self.incoming_messages.borrow_mut().pop() else {
+                if self.incoming_messages.borrow().is_empty() {
                     break;
-                };
+                }
+                // Incoming messages are pushed to the back of the queue, so we process them from
+                // the front
+                let message = self.incoming_messages.borrow_mut().remove(0);
 
                 let packet: net_types::ServerPacket =
                     bincode::deserialize(&message).expect("Failed to deserialize position update");

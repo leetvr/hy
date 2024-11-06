@@ -25,7 +25,7 @@ gltf = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 itertools = "0.13"
 webbrowser = "1.0.2"
-tokio = { version = "1.4.1", features = ["full"] }
+tokio = { version = "1.4.1" }
 tokio-tungstenite = "0.24.0"
 anyhow = "1.0"
 deno_core = "0.317.0"
