@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./App.css";
+import { AudioPlayer } from "./AudioPlayer";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -14,9 +15,11 @@ function App() {
       <h1>oh hey triangle this is react, what's up??</h1>
       <div className="card">
         <button onClick={handleClick}>count from Rust is {count}</button>
+        <AudioPlayer />
       </div>
     </>
   );
 }
+
 
 export default App;

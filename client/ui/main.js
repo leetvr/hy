@@ -6999,6 +6999,158 @@ var m = reactDomExports;
   createRoot = m.createRoot;
   m.hydrateRoot;
 }
+const sampleSound = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
+function AudioPlayer() {
+  const [audioContext, setAudioContext] = reactExports.useState(null);
+  const [buffer, setBuffer] = reactExports.useState(null);
+  const [source, setSource] = reactExports.useState(null);
+  const [panner, setPanner] = reactExports.useState(null);
+  const [isPlaying, setIsPlaying] = reactExports.useState(false);
+  const [isMovingLeft, setIsMovingLeft] = reactExports.useState(false);
+  const [isMovingRight, setIsMovingRight] = reactExports.useState(false);
+  const [xPosition, setXPosition] = reactExports.useState(0);
+  const [isDistortionEnabled, setIsDistortionEnabled] = reactExports.useState(false);
+  const [distortion, setDistortion] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    const context = new window.AudioContext();
+    setAudioContext(context);
+    const loadAudio = async () => {
+      const response = await fetch(sampleSound);
+      const arrayBuffer = await response.arrayBuffer();
+      const decodedBuffer = await context.decodeAudioData(arrayBuffer);
+      setBuffer(decodedBuffer);
+    };
+    loadAudio();
+    return () => {
+      if (audioContext) {
+        audioContext.close();
+      }
+    };
+  }, []);
+  const toggleSound = (x2, y2, z2) => {
+    if (!audioContext || !buffer) {
+      console.log("Audio context or buffer is not initialized");
+      return;
+    }
+    if (isPlaying) {
+      source == null ? void 0 : source.stop();
+      setSource(null);
+      setPanner(null);
+      setIsPlaying(false);
+      setIsMovingLeft(false);
+      setIsMovingRight(false);
+      setXPosition(0);
+      setIsDistortionEnabled(false);
+    } else {
+      const newSource = audioContext.createBufferSource();
+      newSource.buffer = buffer;
+      const newPanner = audioContext.createPanner();
+      newPanner.positionX.value = x2;
+      newPanner.positionY.value = y2;
+      newPanner.positionZ.value = z2;
+      newSource.connect(newPanner);
+      newPanner.connect(audioContext.destination);
+      newSource.start();
+      setSource(newSource);
+      setPanner(newPanner);
+      setIsPlaying(true);
+    }
+  };
+  const applyDistortion = () => {
+    if (!audioContext || !source || !panner) return;
+    if (!distortion) {
+      const newDistortion = audioContext.createWaveShaper();
+      const curve = new Float32Array(44100);
+      for (let i = 0; i < curve.length; i++) {
+        const x2 = i * 2 / curve.length - 1;
+        curve[i] = Math.tanh(x2 * 10);
+      }
+      newDistortion.curve = curve;
+      newDistortion.oversample = "4x";
+      source.connect(newDistortion);
+      newDistortion.connect(panner);
+      panner.connect(audioContext.destination);
+      setDistortion(newDistortion);
+    }
+  };
+  const removeDistortion = () => {
+    if (!audioContext) return;
+    if (distortion && source && panner) {
+      source.disconnect(distortion);
+      distortion.disconnect(panner);
+      source.connect(panner);
+      panner.connect(audioContext.destination);
+      setDistortion(null);
+    }
+  };
+  const toggleDistortion = () => {
+    if (isDistortionEnabled) {
+      removeDistortion();
+    } else {
+      applyDistortion();
+    }
+    setIsDistortionEnabled((prevState) => !prevState);
+  };
+  const handleMoveLeftDown = () => {
+    setIsMovingLeft(true);
+  };
+  const handleMoveLeftUp = () => {
+    setIsMovingLeft(false);
+  };
+  const handleMoveRightDown = () => {
+    setIsMovingRight(true);
+  };
+  const handleMoveRightUp = () => {
+    setIsMovingRight(false);
+  };
+  reactExports.useEffect(() => {
+    const pan_speed = 50;
+    const moveInterval = setInterval(() => {
+      if (isMovingLeft) {
+        const newX = xPosition - 1;
+        setXPosition(newX);
+        if (panner) {
+          panner.positionX.value = newX;
+        }
+      } else if (isMovingRight) {
+        const newX = xPosition + 1;
+        setXPosition(newX);
+        if (panner) {
+          panner.positionX.value = newX;
+        }
+      }
+    }, pan_speed);
+    return () => clearInterval(moveInterval);
+  }, [isMovingLeft, isMovingRight, xPosition, panner]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => toggleSound(0, 0, 0), children: isPlaying ? "Stop Sound" : "Play Sound" }),
+    isPlaying && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onMouseDown: handleMoveLeftDown,
+          onMouseUp: handleMoveLeftUp,
+          onMouseLeave: handleMoveLeftUp,
+          children: "Move Left"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onMouseDown: handleMoveRightDown,
+          onMouseUp: handleMoveRightUp,
+          onMouseLeave: handleMoveRightUp,
+          children: "Move Right"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: toggleDistortion, children: isDistortionEnabled ? "Disable Distortion" : "Enable Distortion" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        "Current X Position: ",
+        xPosition
+      ] })
+    ] })
+  ] });
+}
 function App() {
   const [count, setCount] = reactExports.useState(0);
   const handleClick = () => {
@@ -7007,10 +7159,13 @@ function App() {
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "oh hey triangle this is react, what's up??" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "card", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleClick, children: [
-      "count from Rust is ",
-      count
-    ] }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { onClick: handleClick, children: [
+        "count from Rust is ",
+        count
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AudioPlayer, {})
+    ] })
   ] });
 }
 createRoot(document.getElementById("root")).render(
