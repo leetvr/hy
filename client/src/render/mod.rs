@@ -86,15 +86,21 @@ impl Renderer {
                 );
 
                 gl.active_texture(glow::TEXTURE0);
-                gl.bind_texture(glow::TEXTURE_2D, Some(draw_call.primitive.diffuse_texture));
+                gl.bind_texture(
+                    glow::TEXTURE_2D,
+                    Some(draw_call.primitive.diffuse_texture.id),
+                );
 
                 gl.bind_vertex_array(Some(draw_call.primitive.vao));
-                gl.bind_texture(glow::TEXTURE_2D, Some(draw_call.primitive.diffuse_texture));
+                gl.bind_texture(
+                    glow::TEXTURE_2D,
+                    Some(draw_call.primitive.diffuse_texture.id),
+                );
                 gl.draw_elements(
                     glow::TRIANGLES,
                     draw_call.primitive.index_count as i32,
                     glow::UNSIGNED_INT,
-                    0,
+                    draw_call.primitive.index_start as i32 * mem::size_of::<u32>() as i32,
                 );
             }
 
@@ -107,6 +113,14 @@ impl Renderer {
         blocks: impl Iterator<Item = BlockPos>,
     ) -> RenderPrimitive {
         unsafe { blocks_primitive(&self.gl, blocks) }
+    }
+
+    pub fn create_cube_vao(&self) -> CubeVao {
+        CubeVao::new(&self.gl)
+    }
+
+    pub fn create_texture_from_color(&self, color: [u8; 4]) -> Texture {
+        Texture::new(&self.gl, &color, 1, 1)
     }
 }
 
@@ -168,7 +182,8 @@ fn compile_shaders(
 #[derive(Debug, Clone)]
 pub struct RenderPrimitive {
     vao: glow::VertexArray,
-    diffuse_texture: glow::Texture,
+    diffuse_texture: Texture,
+    index_start: u32,
     index_count: u32,
 }
 
@@ -230,44 +245,17 @@ impl RenderPrimitive {
 
             gl.bind_vertex_array(None);
 
-            let diffuse_texture = gl.create_texture().expect("Failed to create texture");
-            gl.bind_texture(glow::TEXTURE_2D, Some(diffuse_texture));
-            gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                glow::SRGB8_ALPHA8 as i32,
-                primitive.material.base_colour_texture.dimensions.x as i32,
-                primitive.material.base_colour_texture.dimensions.y as i32,
-                0,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                Some(&primitive.material.base_colour_texture.data),
-            );
-
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_S,
-                glow::CLAMP_TO_EDGE as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_T,
-                glow::CLAMP_TO_EDGE as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MIN_FILTER,
-                glow::NEAREST as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_MAG_FILTER,
-                glow::NEAREST as i32,
+            let diffuse_texture = Texture::new(
+                gl,
+                &primitive.material.base_colour_texture.data,
+                primitive.material.base_colour_texture.dimensions.x,
+                primitive.material.base_colour_texture.dimensions.y,
             );
 
             Self {
                 vao,
                 diffuse_texture,
+                index_start: 0,
                 index_count: primitive.indices.len() as u32,
             }
         }
@@ -396,6 +384,148 @@ impl Camera {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Texture {
+    id: glow::Texture,
+}
+
+impl Texture {
+    pub fn new(gl: &glow::Context, data: &[u8], width: u32, height: u32) -> Self {
+        let id = unsafe { gl.create_texture().expect("Failed to create texture") };
+        unsafe {
+            gl.bind_texture(glow::TEXTURE_2D, Some(id));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA as i32,
+                width as i32,
+                height as i32,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                Some(data),
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::NEAREST as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::NEAREST as i32,
+            );
+        }
+
+        Self { id }
+    }
+}
+
+pub struct CubeVao {
+    vao: glow::VertexArray,
+    vertex_buffer: glow::Buffer,
+    index_buffer: glow::Buffer,
+}
+
+impl CubeVao {
+    pub fn new(gl: &glow::Context) -> Self {
+        unsafe {
+            let positions = [
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(1.0, 1.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(1.0, 1.0, 1.0),
+                Vec3::new(0.0, 1.0, 1.0),
+            ];
+
+            let vao = gl
+                .create_vertex_array()
+                .expect("Failed to create vertex array");
+            gl.bind_vertex_array(Some(vao));
+
+            let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
+            gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                bytemuck::cast_slice(&positions),
+                glow::STATIC_DRAW,
+            );
+
+            let indices = [
+                0, 1, 2, 2, 3, 0, // Front
+                1, 5, 6, 6, 2, 1, // Right
+                5, 4, 7, 7, 6, 5, // Back
+                4, 0, 3, 3, 7, 4, // Left
+                3, 2, 6, 6, 7, 3, // Top
+                4, 5, 1, 1, 0, 4, // Bottom
+            ];
+
+            let index_buffer = gl.create_buffer().expect("Failed to create buffer");
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
+            gl.buffer_data_u8_slice(
+                glow::ELEMENT_ARRAY_BUFFER,
+                bytemuck::cast_slice(&indices),
+                glow::STATIC_DRAW,
+            );
+
+            let stride = mem::size_of::<Vec3>() as i32;
+
+            gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
+            gl.vertex_attrib_pointer_f32(POSITION_ATTRIBUTE, 3, glow::FLOAT, false, stride, 0);
+
+            gl.bind_vertex_array(None);
+
+            Self {
+                vao,
+                vertex_buffer,
+                index_buffer,
+            }
+        }
+    }
+}
+
+pub fn build_cube_draw_calls<'a>(
+    vao: &CubeVao,
+    blocks: impl Iterator<Item = (BlockPos, [&'a Texture; 6])>,
+) -> Vec<DrawCall> {
+    let mut draw_calls = Vec::new();
+
+    for (pos, textures) in blocks {
+        let transform = Transform::new_with_scale(pos, glam::Quat::IDENTITY, glam::Vec3::ONE);
+
+        // One texture for each face
+        for (i, texture) in textures.iter().enumerate() {
+            let base_index = i * 6;
+            let draw_call = DrawCall {
+                primitive: RenderPrimitive {
+                    vao: vao.vao,
+                    diffuse_texture: (*texture).clone(),
+                    index_start: base_index as u32,
+                    index_count: 6,
+                },
+                transform: transform.as_affine().into(),
+            };
+
+            draw_calls.push(draw_call);
+        }
+    }
+
+    draw_calls
+}
+
 unsafe fn blocks_primitive(
     gl: &glow::Context,
     blocks: impl Iterator<Item = BlockPos>,
@@ -497,11 +627,12 @@ unsafe fn blocks_primitive(
     );
     gl.bind_vertex_array(None);
 
-    let diffuse_texture = gl.create_texture().expect("Failed to create texture");
+    let diffuse_texture = Texture::new(gl, &[255, 255, 255, 255], 1, 1);
 
     RenderPrimitive {
         vao,
         diffuse_texture,
+        index_start: 0,
         index_count: indices.len() as u32,
     }
 }
