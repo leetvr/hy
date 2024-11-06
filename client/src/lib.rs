@@ -16,6 +16,7 @@ use wasm_bindgen::JsCast;
 // Import the necessary web_sys features
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
+mod context;
 mod gltf;
 mod render;
 mod socket;
@@ -28,6 +29,7 @@ struct TestGltf {
 
 #[wasm_bindgen]
 pub struct Engine {
+    context: context::Context,
     renderer: render::Renderer,
 
     elapsed_time: Duration,
@@ -78,6 +80,7 @@ impl Engine {
         };
 
         Ok(Self {
+            context: context::Context::default(),
             renderer,
             elapsed_time: Duration::ZERO,
             test: None,
