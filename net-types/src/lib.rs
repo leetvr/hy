@@ -43,8 +43,9 @@ pub struct RemovePlayer {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InitLevel {
+pub struct Init {
     pub blocks: BlockGrid,
+    pub client_player: PlayerId,
 }
 
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
@@ -55,7 +56,7 @@ pub struct SetBlock {
 
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
-    InitLevel(InitLevel),
+    Init(Init),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
     UpdatePosition(UpdatePosition),

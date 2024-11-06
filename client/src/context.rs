@@ -10,9 +10,18 @@ pub enum EngineMode {
     Edit,
 }
 
-#[derive(Default)]
 pub struct Context {
-    mode: EngineMode,
+    pub mode: EngineMode,
+    canvas: web_sys::HtmlCanvasElement,
+}
+
+impl Context {
+    pub fn new(canvas: web_sys::HtmlCanvasElement) -> Self {
+        Self {
+            mode: EngineMode::default(),
+            canvas,
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -23,5 +32,9 @@ impl Engine {
 
     pub fn ctx_get_engine_mode(&self) -> EngineMode {
         self.context.mode
+    }
+
+    pub fn ctx_get_canvas(&self) -> web_sys::HtmlCanvasElement {
+        self.context.canvas.clone()
     }
 }

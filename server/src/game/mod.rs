@@ -115,8 +115,9 @@ impl GameServer {
 
         // Send level init packet
         let _ = outgoing_tx.blocking_send(
-            net_types::InitLevel {
+            net_types::Init {
                 blocks: self.blocks.clone(),
+                client_player: player_id,
             }
             .into(),
         );

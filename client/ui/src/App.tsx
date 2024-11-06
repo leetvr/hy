@@ -65,12 +65,38 @@ function WasmWrapper() {
         };
 
         window.requestAnimationFrame(tick);
-        window.addEventListener("keydown", (event) => {
+
+        // Mouse lock and input
+        const on_mouse_move = (event: MouseEvent) => {
+          engine.mouse_move(event);
+        };
+        const on_key_down = (event: KeyboardEvent) => {
           engine.key_down(event);
+          event.preventDefault();
+        };
+        const on_key_up = (event: KeyboardEvent) => {
+          engine.key_up(event);
+          event.preventDefault();
+        };
+
+        let canvas = engine.ctx_get_canvas();
+        canvas.addEventListener("click", async (event) => {
+          event.preventDefault();
+          await canvas.requestPointerLock({
+            unadjustedMovement: true,
+          });
         });
 
-        window.addEventListener("keyup", (event) => {
-          engine.key_up(event);
+        document.addEventListener("pointerlockchange", () => {
+          if (document.pointerLockElement === canvas) {
+            window.addEventListener("keydown", on_key_down);
+            window.addEventListener("keyup", on_key_up);
+            canvas.addEventListener("mousemove", on_mouse_move);
+          } else {
+            window.removeEventListener("keydown", on_key_down);
+            window.removeEventListener("keyup", on_key_up);
+            canvas.removeEventListener("mousemove", on_mouse_move);
+          }
         });
 
         setEngine(engine);

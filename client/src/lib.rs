@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use {
+    crate::camera::FlyCamera, dolly::prelude::YawPitch, glam::EulerRot, std::collections::HashSet,
+    web_sys::MouseEvent,
+};
 
 use {
     crate::{socket::ConnectionState, transform::Transform},
@@ -17,6 +20,7 @@ use wasm_bindgen::JsCast;
 // Import the necessary web_sys features
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
+mod camera;
 mod context;
 mod gltf;
 mod render;
@@ -65,7 +69,7 @@ impl Engine {
             .ok_or("Canvas element not found")?;
         let canvas: HtmlCanvasElement = canvas.dyn_into::<HtmlCanvasElement>()?;
 
-        let renderer = render::Renderer::new(canvas)?;
+        let renderer = render::Renderer::new(canvas.clone())?;
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
         let incoming_messages = Rc::new(RefCell::new(Vec::new()));
@@ -86,7 +90,7 @@ impl Engine {
         let cube_texture = renderer.create_texture_from_color([255, 0, 0, 255]);
 
         Ok(Self {
-            context: context::Context::default(),
+            context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
 
             renderer,
@@ -137,14 +141,19 @@ impl Engine {
         self.controls.keyboard_inputs.remove(event.code().as_str());
     }
 
+    pub fn mouse_move(&mut self, event: MouseEvent) {
+        self.controls.mouse_movement = (
+            self.controls.mouse_movement.0 + event.movement_x(),
+            self.controls.mouse_movement.1 + event.movement_y(),
+        );
+    }
+
     pub fn tick(&mut self, time: f64) {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         let delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
         if *self.connection_state.borrow() == ConnectionState::Connected {
-            send_controls(&self.controls, &mut self.ws).expect("Error while sending controls");
-
             loop {
                 let Some(message) = self.incoming_messages.borrow_mut().pop() else {
                     break;
@@ -155,14 +164,20 @@ impl Engine {
 
                 match &mut self.game_state {
                     GameState::Loading => match packet {
-                        net_types::ServerPacket::InitLevel(init_level) => {
-                            tracing::info!("Loaded level of size {:?}", init_level.blocks.size());
-                            let blocks = init_level.blocks.iter_non_empty().map(|(pos, _)| pos);
-                            let blocks_primitive = self.renderer.create_block_primitive(blocks);
+                        net_types::ServerPacket::Init(net_types::Init {
+                            blocks,
+                            client_player,
+                        }) => {
+                            tracing::info!("Loaded level of size {:?}", blocks.size());
+                            let blocks_primitive = self.renderer.create_block_primitive(
+                                blocks.iter_non_empty().map(|(pos, _)| pos),
+                            );
                             self.game_state = GameState::Playing {
-                                blocks: init_level.blocks,
+                                blocks,
                                 blocks_primitive,
                                 players: HashMap::new(),
+                                client_player,
+                                camera: FlyCamera::new(Vec3::ZERO),
                             };
                         }
                         p => {
@@ -175,6 +190,7 @@ impl Engine {
                         players,
                         blocks,
                         blocks_primitive,
+                        ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
                             handle_set_block(&self.renderer, blocks, blocks_primitive, set_block)
@@ -208,40 +224,116 @@ impl Engine {
             _ => {}
         }
 
-        // Camera Input
-        if self.controls.keyboard_inputs.contains("KeyI") {
-            self.renderer.camera.translation.z += 0.1;
-        }
-        if self.controls.keyboard_inputs.contains("KeyK") {
-            self.renderer.camera.translation.z -= 0.1;
-        }
-        if self.controls.keyboard_inputs.contains("KeyJ") {
-            self.renderer.camera.translation.x += 0.1;
-        }
-        if self.controls.keyboard_inputs.contains("KeyL") {
-            self.renderer.camera.translation.x -= 0.1;
-        }
-        if self.controls.keyboard_inputs.contains("KeyU") {
-            self.renderer.camera.translation.y += 0.1;
-        }
-        if self.controls.keyboard_inputs.contains("KeyO") {
-            self.renderer.camera.translation.y -= 0.1;
-        }
+        match &mut self.game_state {
+            GameState::Playing {
+                players,
+                client_player,
+                camera,
+                ..
+            } => {
+                let delta_yaw = -self.controls.mouse_movement.0 as f32 * MOUSE_SENSITIVITY_X;
+                let delta_pitch = -self.controls.mouse_movement.1 as f32 * MOUSE_SENSITIVITY_Y;
 
-        if self.controls.keyboard_inputs.contains("ArrowUp") {
-            self.renderer.camera.rotation.x -= 0.02;
-        }
-        if self.controls.keyboard_inputs.contains("ArrowDown") {
-            self.renderer.camera.rotation.x += 0.02;
-        }
-        if self.controls.keyboard_inputs.contains("ArrowLeft") {
-            self.renderer.camera.rotation.y -= 0.02;
-        }
-        if self.controls.keyboard_inputs.contains("ArrowRight") {
-            self.renderer.camera.rotation.y += 0.02;
+                match self.context.mode {
+                    context::EngineMode::Play => {
+                        // Player camera
+                        self.controls.yaw =
+                            (self.controls.yaw + delta_yaw).rem_euclid(std::f32::consts::TAU);
+                        self.controls.pitch = (self.controls.pitch + delta_pitch)
+                            .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+
+                        let player_position = players
+                            .get(client_player)
+                            .map(|p| p.position)
+                            .unwrap_or_default();
+                        let rotation = glam::Quat::from_euler(
+                            EulerRot::YXZ,
+                            self.controls.yaw,
+                            self.controls.pitch,
+                            0.,
+                        );
+
+                        let look_dir = rotation * -glam::Vec3::Z;
+                        let position = player_position - (look_dir * CAMERA_DISTANCE)
+                            + (glam::Vec3::Y * CAMERA_HEIGHT);
+
+                        self.renderer.camera.translation = position;
+                        self.renderer.camera.rotation = rotation;
+
+                        // Keep editor camera in sync with player camera
+                        camera.set_position_and_rotation(
+                            position,
+                            YawPitch::new().rotation_quat(rotation),
+                        );
+                        camera.update(delta_time.as_secs_f32());
+
+                        // Player input
+                        let mut move_dir = Vec2::ZERO;
+                        if self.controls.keyboard_inputs.contains("KeyW") {
+                            move_dir.y += 1.0;
+                        }
+                        if self.controls.keyboard_inputs.contains("KeyS") {
+                            move_dir.y -= 1.0;
+                        }
+                        if self.controls.keyboard_inputs.contains("KeyA") {
+                            move_dir.x -= 1.0;
+                        }
+                        if self.controls.keyboard_inputs.contains("KeyD") {
+                            move_dir.x += 1.0;
+                        }
+                        move_dir = Vec2::from_angle(move_dir.to_angle() + self.controls.yaw)
+                            * move_dir.length();
+                        let controls = net_types::Controls {
+                            move_direction: move_dir.normalize_or_zero(),
+                            jump: self.controls.keyboard_pressed.contains("Space"),
+                        };
+                        let message = bincode::serialize(&controls).unwrap();
+                        self.ws
+                            .send_with_u8_array(&message)
+                            .expect("Failed to send controls");
+                    }
+                    context::EngineMode::Edit => {
+                        // Camera input
+                        let key_state = |code| -> f32 {
+                            self.controls
+                                .keyboard_inputs
+                                .contains(code)
+                                .then(|| 1.0)
+                                .unwrap_or(0.0)
+                        };
+
+                        camera.movement_forward = key_state("KeyW");
+                        camera.movement_backward = key_state("KeyS");
+                        camera.movement_left = key_state("KeyA");
+                        camera.movement_right = key_state("KeyD");
+                        camera.movement_up = key_state("Space");
+                        camera.movement_down = key_state("ShiftLeft");
+                        camera.boost = key_state("CtrlLeft");
+                        camera.rotate(delta_yaw.to_degrees(), delta_pitch.to_degrees());
+
+                        camera.update(delta_time.as_secs_f32());
+
+                        let (position, rotation) = camera.position_and_rotation();
+                        self.renderer.camera.translation = position;
+                        self.renderer.camera.rotation = rotation;
+
+                        // Send empty player input
+                        let controls = net_types::Controls {
+                            move_direction: Vec2::ZERO,
+                            jump: false,
+                        };
+                        let message = bincode::serialize(&controls).unwrap();
+                        self.ws
+                            .send_with_u8_array(&message)
+                            .expect("Failed to send controls");
+                    }
+                }
+            }
+            _ => {}
         }
 
         self.controls.keyboard_pressed.clear();
+        self.controls.mouse_movement = (0, 0);
 
         self.render();
     }
@@ -298,6 +390,11 @@ pub fn increment(count: i32) -> i32 {
 struct Controls {
     keyboard_inputs: HashSet<String>,
     keyboard_pressed: HashSet<String>,
+    mouse_movement: (i32, i32),
+
+    // Yaw and pitch, radians
+    yaw: f32,
+    pitch: f32,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -305,43 +402,17 @@ struct Player {
     position: Vec3,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 enum GameState {
     #[default]
     Loading,
     Playing {
         blocks: BlockGrid,
+        client_player: PlayerId,
+        camera: FlyCamera,
         blocks_primitive: render::RenderPrimitive,
         players: HashMap<PlayerId, Player>,
     },
-}
-
-// Networking
-
-/// Send outgoing controls packet
-fn send_controls(controls: &Controls, ws: &WebSocket) -> Result<()> {
-    let mut move_dir = Vec2::ZERO;
-    if controls.keyboard_inputs.contains("KeyW") {
-        move_dir.y += 1.0;
-    }
-    if controls.keyboard_inputs.contains("KeyS") {
-        move_dir.y -= 1.0;
-    }
-    if controls.keyboard_inputs.contains("KeyA") {
-        move_dir.x -= 1.0;
-    }
-    if controls.keyboard_inputs.contains("KeyD") {
-        move_dir.x += 1.0;
-    }
-    let controls = net_types::Controls {
-        move_direction: move_dir.normalize_or_zero(),
-        jump: controls.keyboard_pressed.contains("Space"),
-    };
-    let message = bincode::serialize(&controls).context("Failed to serialize controls")?;
-    ws.send_with_u8_array(&message)
-        .expect("Failed to send controls");
-
-    Ok(())
 }
 
 // Handlers for incoming packets
@@ -388,3 +459,9 @@ fn handle_update_position(
     player.position = position;
     Ok(())
 }
+
+const MOUSE_SENSITIVITY_X: f32 = 0.005;
+const MOUSE_SENSITIVITY_Y: f32 = 0.005;
+
+const CAMERA_DISTANCE: f32 = 15.0;
+const CAMERA_HEIGHT: f32 = 2.0;
