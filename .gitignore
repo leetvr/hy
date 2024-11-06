@@ -11,4 +11,9 @@ target/
 # npm
 node_modules/
 
+# Build output from vite
+client/ui/dist
+assets/index*
+assets/client_bg*wasm
+
 .DS_Store
