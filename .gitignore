@@ -13,9 +13,7 @@ node_modules/
 
 # Build output from vite
 client/ui/dist
-assets/main.js
-assets/main.css
+assets/index*
 assets/client_bg*wasm
-assets/index.html
 
 .DS_Store
