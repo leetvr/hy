@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { AudioPlayer } from "./AudioPlayer";
-import init, { Engine } from "../../pkg/client.js";
-
-// sigh: https://github.com/rustwasm/wasm-bindgen/issues/2407
-enum EngineMode {
-  Play = 0,
-  Edit = 1,
-}
+import init, { Engine, EngineMode } from "../../pkg/client.js";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
