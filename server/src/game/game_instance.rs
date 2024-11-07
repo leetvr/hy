@@ -7,14 +7,14 @@ use tokio::sync::mpsc;
 use super::{
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
     world::World,
-    GameState, Player,
+    GameState, NextServerState, Player,
 };
 
 pub struct GameInstance {
-    world: World,
+    pub world: World,
     game_state: GameState,
     next_client_id: ClientId,
-    clients: HashMap<ClientId, Client>,
+    pub clients: HashMap<ClientId, Client>,
 
     next_player_id: u64,
     players: HashMap<PlayerId, Player>,
@@ -34,9 +34,17 @@ impl GameInstance {
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn from_editor(world: World, editor_client: Client) -> Self {
+        let mut instance = GameInstance::new(world, Default::default()); // TODO: kmrw
+
+        // Pop the editor client into the instance
+        instance.handle_new_client((editor_client.incoming_rx, editor_client.outgoing_tx));
+        instance
+    }
+
+    pub fn tick(&mut self) -> Option<NextServerState> {
         // Handle client messages
-        self.client_net_updates();
+        let maybe_next_state = self.client_net_updates();
 
         // Add forces/velocities
         for client in self.clients.values() {
@@ -62,6 +70,8 @@ impl GameInstance {
         for player in self.players.values_mut() {
             player.position = self.world.physics_world.get_position(&player.body);
         }
+
+        maybe_next_state
     }
 
     pub fn handle_new_client(
@@ -101,8 +111,9 @@ impl GameInstance {
         tracing::info!("New client connected: {:?}", client_id);
     }
 
-    fn client_net_updates(&mut self) {
+    fn client_net_updates(&mut self) -> Option<NextServerState> {
         let mut disconnected = Vec::new();
+        let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
         'client_loop: for (client_id, client) in self.clients.iter_mut() {
             while let Some(packet) = match client.incoming_rx.try_recv() {
@@ -120,9 +131,15 @@ impl GameInstance {
                     net_types::ClientPacket::Controls(controls) => {
                         client.last_controls = controls;
                     }
-                    net_types::ClientPacket::Start => todo!(),
-                    net_types::ClientPacket::Pause => todo!(),
-                    net_types::ClientPacket::Edit => todo!(),
+                    net_types::ClientPacket::Start => {
+                        maybe_next_state = Some(NextServerState::Playing)
+                    }
+                    net_types::ClientPacket::Pause => {
+                        maybe_next_state = Some(NextServerState::Paused)
+                    }
+                    net_types::ClientPacket::Edit => {
+                        maybe_next_state = Some(NextServerState::Editing(*client_id))
+                    }
                 }
             }
 
@@ -180,6 +197,9 @@ impl GameInstance {
                 true
             }
         });
+
+        // If we need to transition to a new state, return that
+        maybe_next_state
     }
 }
 

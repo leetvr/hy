@@ -6,8 +6,9 @@ use {
     crate::game::network::{Client, ClientMessageReceiver, ServerMessageSender},
     crossbeam::queue::SegQueue,
     game_instance::GameInstance,
+    network::ClientId,
     physics::PhysicsWorld,
-    std::sync::Arc,
+    std::{fmt::Display, sync::Arc},
     world::World,
 };
 
@@ -56,10 +57,15 @@ impl GameServer {
         }
 
         // Tick
-        match &mut self.state {
+        let next_state = match &mut self.state {
             ServerState::Playing(instance) | ServerState::Paused(instance) => instance.tick(),
-            _ => {}
-        }
+            _ => None,
+        };
+
+        // Do we need to transition to a different state?
+        let Some(next_state) = next_state else { return };
+
+        self.state.transition(next_state);
     }
 }
 
@@ -70,6 +76,94 @@ enum ServerState {
     Playing(GameInstance),
     Paused(GameInstance),
     Editing(World, Client),
+    Transitioning,
+}
+
+impl Display for ServerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            ServerState::Playing(_) => "Playing",
+            ServerState::Paused(_) => "Paused",
+            ServerState::Editing(_, _) => "Editing",
+            ServerState::Transitioning => "Transitioning",
+        };
+
+        f.write_str(name)
+    }
+}
+
+impl ServerState {
+    // state machines, my beloved
+    fn transition(&mut self, next_state: NextServerState) {
+        // Take the current state so we can move it
+        let current_state = std::mem::replace(self, ServerState::Transitioning);
+
+        match (current_state, next_state) {
+            // Playing -> Paused
+            (ServerState::Playing(instance), NextServerState::Paused) => {
+                *self = ServerState::Paused(instance);
+            }
+            // Playing -> Editing
+            (ServerState::Playing(mut instance), NextServerState::Editing(client_id)) => {
+                if let Some(editor_client) = instance.clients.remove(&client_id) {
+                    *self = ServerState::Editing(instance.world, editor_client);
+                } else {
+                    tracing::warn!(
+                        "Can't transition to editing - client {client_id:?} does not exist"
+                    );
+                    *self = ServerState::Playing(instance)
+                }
+            }
+            // Paused -> Playing
+            (ServerState::Paused(instance), NextServerState::Playing) => {
+                *self = ServerState::Playing(instance);
+            }
+            // Paused -> Editing
+            (ServerState::Paused(mut instance), NextServerState::Editing(client_id)) => {
+                if let Some(editor_client) = instance.clients.remove(&client_id) {
+                    *self = ServerState::Editing(instance.world, editor_client);
+                } else {
+                    tracing::warn!(
+                        "Can't transition to editing - client {client_id:?} does not exist"
+                    );
+                    *self = ServerState::Paused(instance)
+                }
+            }
+            // Editing -> Playing
+            (ServerState::Editing(world, editor_client), NextServerState::Playing) => {
+                let instance = GameInstance::from_editor(world, editor_client);
+                *self = ServerState::Playing(instance);
+            }
+            // Editing -> Paused
+            (ServerState::Editing(world, editor_client), NextServerState::Paused) => {
+                let instance = GameInstance::from_editor(world, editor_client);
+                *self = ServerState::Paused(instance);
+            }
+            // Invalid transition
+            (current, invalid) => {
+                tracing::warn!("Can't transition from {current} to {invalid}");
+                *self = current
+            }
+        }
+    }
+}
+
+enum NextServerState {
+    Playing,
+    Paused,
+    Editing(ClientId), // the client that wants to edit
+}
+
+impl Display for NextServerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            NextServerState::Playing => "Playing",
+            NextServerState::Paused => "Paused",
+            NextServerState::Editing(_) => "Editing",
+        };
+
+        f.write_str(name)
+    }
 }
 
 #[derive(Default)]
