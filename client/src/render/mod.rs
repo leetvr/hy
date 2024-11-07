@@ -59,7 +59,7 @@ impl Renderer {
         })
     }
 
-    pub fn render(&self, elapsed_time: Duration, draw_calls: &[DrawCall]) {
+    pub fn render(&self, draw_calls: &[DrawCall]) {
         let gl = &self.gl;
 
         unsafe {

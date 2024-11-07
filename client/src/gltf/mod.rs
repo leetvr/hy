@@ -18,14 +18,34 @@ pub struct GLTFModel {
     pub root_node_idx: usize,
 }
 
+impl GLTFModel {
+    pub fn play_animation(&mut self, name: &str, fade_in: f32) {
+        let Some((idx, layer)) = self
+            .animations
+            .iter_mut()
+            .enumerate()
+            .find(|(_, a)| a.name == name)
+        else {
+            tracing::warn!("Unable to find animation {}", name);
+            return;
+        };
+
+        layer.animation_time = 0.0;
+
+        self.animation_state.play(idx, fade_in);
+    }
+
+    pub fn stop_animation(&mut self, fade_out: f32) {
+        self.animation_state.stop(fade_out);
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub enum AnimationState {
     // Animation is enabled and gaining time every frame
     Playing {
         anim_index: usize,
     },
-    // Animation enabled but is not gaining time.
-    Paused,
     // Animation is fading from one to another
     Transitioning {
         from_index: Option<usize>,
@@ -39,6 +59,47 @@ pub enum AnimationState {
     #[default]
     Disabled,
 }
+
+impl AnimationState {
+    fn play(&mut self, anim_index: usize, fade_in: f32) {
+        let most_recent = self.most_recent_animation();
+
+        if most_recent == Some(anim_index) {
+            return;
+        }
+
+        *self = AnimationState::Transitioning {
+            from_index: most_recent,
+            to_index: Some(anim_index),
+            duration: fade_in,
+            progress: 0.0,
+        };
+    }
+
+    fn stop(&mut self, fade_out: f32) {
+        let most_recent = self.most_recent_animation();
+
+        if most_recent.is_none() {
+            return;
+        }
+
+        *self = AnimationState::Transitioning {
+            from_index: most_recent,
+            to_index: None,
+            duration: fade_out,
+            progress: 0.0,
+        };
+    }
+
+    fn most_recent_animation(&self) -> Option<usize> {
+        match *self {
+            AnimationState::Playing { anim_index } => Some(anim_index),
+            AnimationState::Transitioning { to_index, .. } => to_index,
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnimationLayer {
     pub name: String,
@@ -428,15 +489,20 @@ where
     })
 }
 
-pub fn animate_model(model: &mut GLTFModel, time: Duration) {
-    // For each node, store the animated value for each animation
-
+pub fn animate_model(model: &mut GLTFModel, delta_time: Duration) {
     'state_change: loop {
+        tracing::info!("Animating model {:?}", model.animation_state);
         match model.animation_state {
             AnimationState::Playing { anim_index } => {
                 let animation = &mut model.animations[anim_index];
-                animation.animation_time +=
-                    (animation.animation_time + time.as_secs_f32()) % animation.duration;
+                animation.animation_time =
+                    (animation.animation_time + delta_time.as_secs_f32()) % animation.duration;
+
+                tracing::info!(
+                    "Playing animation {}, {:.2}",
+                    animation.name,
+                    animation.animation_time
+                );
 
                 for channel in &animation.channels {
                     let Some(value) = get_next_value_for_channel(channel, animation.animation_time)
@@ -449,14 +515,13 @@ pub fn animate_model(model: &mut GLTFModel, time: Duration) {
                     apply_value_to_node(node, channel.path, value);
                 }
             }
-            AnimationState::Paused => {}
             AnimationState::Transitioning {
                 from_index,
                 to_index,
                 duration,
                 ref mut progress,
             } => {
-                *progress += time.as_secs_f32();
+                *progress += delta_time.as_secs_f32();
 
                 if *progress >= duration {
                     if let Some(to_index) = to_index {
@@ -466,7 +531,7 @@ pub fn animate_model(model: &mut GLTFModel, time: Duration) {
                     } else {
                         model.animation_state = AnimationState::Disabled;
                     }
-                    break 'state_change;
+                    continue 'state_change;
                 }
 
                 let lerp_weight = *progress / duration;
@@ -478,7 +543,7 @@ pub fn animate_model(model: &mut GLTFModel, time: Duration) {
                 let from_animation = from_index.map(|i| &mut model.animations[i]);
                 if let Some(from) = from_animation {
                     from.animation_time =
-                        (from.animation_time + time.as_secs_f32()) % from.duration;
+                        (from.animation_time + delta_time.as_secs_f32()) % from.duration;
 
                     for channel in &from.channels {
                         let Some(value) = get_next_value_for_channel(channel, from.animation_time)
@@ -495,10 +560,12 @@ pub fn animate_model(model: &mut GLTFModel, time: Duration) {
 
                 let to_animation = to_index.map(|i| &mut model.animations[i]);
                 if let Some(to) = to_animation {
-                    to.animation_time = (to.animation_time + time.as_secs_f32()) % to.duration;
+                    to.animation_time =
+                        (to.animation_time + delta_time.as_secs_f32()) % to.duration;
 
                     for channel in &to.channels {
-                        let Some(value) = get_next_value_for_channel(channel, 0.0) else {
+                        let Some(value) = get_next_value_for_channel(channel, to.animation_time)
+                        else {
                             continue;
                         };
 
@@ -614,16 +681,12 @@ fn get_next_value_for_channel(channel: &AnimationChannel, current_time: f32) -> 
     // position of the current_time, between the previous_time and the next_time:
     let interpolation_value = (current_time - previous_time) / (next_time - previous_time);
 
-    let next_value = match channel.path {
-        AnimationPath::Rotation => Quat::from_array(previous_output.to_array())
-            .slerp(
-                Quat::from_array(next_output.to_array()),
-                interpolation_value,
-            )
-            .to_array()
-            .into(),
-        _ => previous_output.lerp(next_output, interpolation_value),
-    };
+    let next_value = lerp_anim(
+        channel.path,
+        previous_output,
+        next_output,
+        interpolation_value,
+    );
 
     Some(next_value)
 }
