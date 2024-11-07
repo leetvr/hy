@@ -305,7 +305,9 @@ impl Engine {
                             move_direction: move_dir.normalize_or_zero(),
                             jump: self.controls.keyboard_pressed.contains("Space"),
                         };
-                        let message = bincode::serialize(&controls).unwrap();
+                        let message =
+                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
+                                .unwrap();
                         self.ws
                             .send_with_u8_array(&message)
                             .expect("Failed to send controls");
@@ -340,7 +342,9 @@ impl Engine {
                             move_direction: Vec2::ZERO,
                             jump: false,
                         };
-                        let message = bincode::serialize(&controls).unwrap();
+                        let message =
+                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
+                                .unwrap();
                         self.ws
                             .send_with_u8_array(&message)
                             .expect("Failed to send controls");

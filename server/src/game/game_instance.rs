@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use super::{
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
     world::World,
-    GameState, Player, ServerState,
+    GameState, Player,
 };
 
 pub struct GameInstance {
@@ -105,7 +105,7 @@ impl GameInstance {
         let mut disconnected = Vec::new();
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
         'client_loop: for (client_id, client) in self.clients.iter_mut() {
-            while let Some(controls) = match client.incoming_rx.try_recv() {
+            while let Some(packet) = match client.incoming_rx.try_recv() {
                 Ok(v) => Some(v),
                 Err(e) => match e {
                     mpsc::error::TryRecvError::Empty => None,
@@ -116,7 +116,14 @@ impl GameInstance {
                     }
                 },
             } {
-                client.last_controls = controls;
+                match packet {
+                    net_types::ClientPacket::Controls(controls) => {
+                        client.last_controls = controls;
+                    }
+                    net_types::ClientPacket::Start => todo!(),
+                    net_types::ClientPacket::Pause => todo!(),
+                    net_types::ClientPacket::Edit => todo!(),
+                }
             }
 
             let known_players = client.known_players.keys().copied().collect::<HashSet<_>>();

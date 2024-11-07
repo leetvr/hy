@@ -1,7 +1,6 @@
 use {
     anyhow::Result,
     std::{cell::RefCell, mem, rc::Rc},
-    tokio::sync::mpsc::Receiver,
     wasm_bindgen::{prelude::Closure, JsCast},
     wasm_bindgen_futures::JsFuture,
     web_sys::{
