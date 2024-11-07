@@ -8,10 +8,13 @@ use {
     std::ops::{Add, Index, IndexMut, Sub},
 };
 
+use wasm_bindgen::prelude::*;
+
 pub type BlockId = u8;
 
 pub const EMPTY_BLOCK: BlockId = 0;
 
+#[wasm_bindgen]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BlockPos {
     pub x: u32,

@@ -26,6 +26,7 @@ pub enum ClientPacket {
     Start,
     Pause,
     Edit,
+    SetBlock(SetBlock), // used by editor
 }
 
 // Packets from the server to the client

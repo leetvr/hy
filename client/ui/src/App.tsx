@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { AudioPlayer } from "./AudioPlayer";
 import init, { Engine, EngineMode } from "../../pkg/client.js";
+import Editor from "./Editor.js";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
@@ -26,6 +27,7 @@ function App({ engine }: { engine: Engine }) {
         <button onClick={handleClick}>
           Switch to {getEngineModeText(nextEngineMode(currentMode))}
         </button>
+        {currentMode === EngineMode.Edit && <Editor engine={engine} />}
         <AudioPlayer />
       </div>
     </>
@@ -78,8 +80,16 @@ function WasmWrapper() {
           engine.key_up(event);
           event.preventDefault();
         };
+        const on_mouse_down = (event: MouseEvent) => {
+          engine.mouse_down(event);
+          event.preventDefault();
+        };
+        const on_mouse_up = (event: MouseEvent) => {
+          engine.mouse_up(event);
+          event.preventDefault();
+        };
 
-        let canvas = engine.ctx_get_canvas();
+        const canvas = engine.ctx_get_canvas();
         canvas.addEventListener("click", async (event) => {
           event.preventDefault();
           await canvas.requestPointerLock({
@@ -92,10 +102,14 @@ function WasmWrapper() {
             window.addEventListener("keydown", on_key_down);
             window.addEventListener("keyup", on_key_up);
             canvas.addEventListener("mousemove", on_mouse_move);
+            canvas.addEventListener("mousedown", on_mouse_down);
+            canvas.addEventListener("mouseup", on_mouse_up);
           } else {
             window.removeEventListener("keydown", on_key_down);
             window.removeEventListener("keyup", on_key_up);
             canvas.removeEventListener("mousemove", on_mouse_move);
+            canvas.removeEventListener("mousedown", on_mouse_down);
+            canvas.removeEventListener("mouseup", on_mouse_up);
           }
         });
 

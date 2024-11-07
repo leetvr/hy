@@ -5,7 +5,7 @@ use {
 
 use {
     crate::{socket::ConnectionState, transform::Transform},
-    anyhow::{Context, Result},
+    anyhow::Result,
     blocks::BlockGrid,
     glam::{Mat4, Quat, Vec2, Vec3},
     net_types::PlayerId,
@@ -13,7 +13,12 @@ use {
     web_sys::WebSocket,
 };
 
-use blocks::BlockPos;
+use blocks::BlockId;
+// Re-exports
+pub use blocks::BlockPos;
+
+use context::EngineMode;
+use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -51,7 +56,7 @@ pub struct Engine {
     cube_mesh_data: render::CubeVao,
     cube_texture: render::Texture,
 
-    game_state: GameState,
+    state: GameState,
 }
 
 #[wasm_bindgen]
@@ -108,7 +113,7 @@ impl Engine {
 
             cube_texture,
 
-            game_state: Default::default(),
+            state: Default::default(),
         })
     }
 
@@ -163,6 +168,22 @@ impl Engine {
         );
     }
 
+    pub fn mouse_up(&mut self, event: MouseEvent) {
+        match event.button() {
+            0 => self.controls.mouse_left = false,
+            2 => self.controls.mouse_right = false,
+            _ => {}
+        }
+    }
+
+    pub fn mouse_down(&mut self, event: MouseEvent) {
+        match event.button() {
+            0 => self.controls.mouse_left = true,
+            2 => self.controls.mouse_right = true,
+            _ => {}
+        }
+    }
+
     pub fn tick(&mut self, time: f64) {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         self.delta_time = current_time - self.elapsed_time;
@@ -181,31 +202,23 @@ impl Engine {
                 let packet: net_types::ServerPacket =
                     bincode::deserialize(&message).expect("Failed to deserialize position update");
 
-                match &mut self.game_state {
+                match &mut self.state {
                     GameState::Loading => match packet {
-                        net_types::ServerPacket::Init(net_types::Init {
-                            blocks,
-                            client_player,
-                        }) => {
+                        net_types::ServerPacket::Init(net_types::Init { blocks, .. }) => {
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             let blocks_primitive = self.renderer.create_block_primitive(
                                 blocks.iter_non_empty().map(|(pos, _)| pos),
                             );
 
-                            self.game_state = GameState::Playing {
+                            self.state = GameState::Editing {
                                 blocks,
                                 blocks_primitive,
-                                players: HashMap::new(),
-                                client_player,
                                 camera: FlyCamera::new(Vec3::ZERO),
+                                selected_block_id: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
-                            self.ws
-                                .send_with_u8_array(
-                                    &bincode::serialize(&net_types::ClientPacket::Edit).unwrap(),
-                                )
-                                .expect("Failed to send message");
+                            self.send_packet(net_types::ClientPacket::Edit);
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -234,6 +247,7 @@ impl Engine {
                             handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
+                        // Sent by the server when we leave edit mode
                         net_types::ServerPacket::Reset(net_types::Reset {
                             new_client_player,
                             ..
@@ -247,6 +261,7 @@ impl Engine {
                             break;
                         }
                     },
+                    GameState::Editing { .. } => {}
                 }
             }
         }
@@ -260,7 +275,7 @@ impl Engine {
         }
 
         // Send packets
-        match &mut self.game_state {
+        match &mut self.state {
             GameState::Playing {
                 players,
                 client_player,
@@ -270,135 +285,169 @@ impl Engine {
                 let delta_yaw = -self.controls.mouse_movement.0 as f32 * MOUSE_SENSITIVITY_X;
                 let delta_pitch = -self.controls.mouse_movement.1 as f32 * MOUSE_SENSITIVITY_Y;
 
-                match self.context.mode {
-                    context::EngineMode::Play => {
-                        // Player camera
-                        self.controls.yaw =
-                            (self.controls.yaw + delta_yaw).rem_euclid(std::f32::consts::TAU);
-                        self.controls.pitch = (self.controls.pitch + delta_pitch)
-                            .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+                // Player camera
+                self.controls.yaw =
+                    (self.controls.yaw + delta_yaw).rem_euclid(std::f32::consts::TAU);
+                self.controls.pitch = (self.controls.pitch + delta_pitch)
+                    .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
 
-                        let player_position = players
-                            .get(client_player)
-                            .map(|p| p.position)
-                            .unwrap_or_default();
-                        let rotation = glam::Quat::from_euler(
-                            EulerRot::YXZ,
-                            self.controls.yaw,
-                            self.controls.pitch,
-                            0.,
-                        );
+                let player_position = players
+                    .get(client_player)
+                    .map(|p| p.position)
+                    .unwrap_or_default();
+                let rotation = glam::Quat::from_euler(
+                    EulerRot::YXZ,
+                    self.controls.yaw,
+                    self.controls.pitch,
+                    0.,
+                );
 
-                        let look_dir = rotation * -glam::Vec3::Z;
-                        let position = player_position - (look_dir * CAMERA_DISTANCE)
-                            + (glam::Vec3::Y * CAMERA_HEIGHT);
+                let look_dir = rotation * -glam::Vec3::Z;
+                let position = player_position - (look_dir * CAMERA_DISTANCE)
+                    + (glam::Vec3::Y * CAMERA_HEIGHT);
 
-                        self.renderer.camera.translation = position;
-                        self.renderer.camera.rotation = rotation;
+                self.renderer.camera.translation = position;
+                self.renderer.camera.rotation = rotation;
 
-                        // Keep editor camera in sync with player camera
-                        camera.set_position_and_rotation(
-                            position,
-                            YawPitch::new().rotation_quat(rotation),
-                        );
-                        camera.update(self.delta_time.as_secs_f32());
+                // Keep editor camera in sync with player camera
+                camera.set_position_and_rotation(position, YawPitch::new().rotation_quat(rotation));
+                camera.update(self.delta_time.as_secs_f32());
 
-                        // Player input
-                        let mut move_dir = Vec2::ZERO;
-                        if self.controls.keyboard_inputs.contains("KeyW") {
-                            move_dir.y += 1.0;
-                        }
-                        if self.controls.keyboard_inputs.contains("KeyS") {
-                            move_dir.y -= 1.0;
-                        }
-                        if self.controls.keyboard_inputs.contains("KeyA") {
-                            move_dir.x -= 1.0;
-                        }
-                        if self.controls.keyboard_inputs.contains("KeyD") {
-                            move_dir.x += 1.0;
-                        }
-                        move_dir = Vec2::from_angle(move_dir.to_angle() + self.controls.yaw)
-                            * move_dir.length();
-                        let controls = net_types::Controls {
-                            move_direction: move_dir.normalize_or_zero(),
-                            jump: self.controls.keyboard_pressed.contains("Space"),
-                        };
-                        let message =
-                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
-                                .unwrap();
-                        self.ws
-                            .send_with_u8_array(&message)
-                            .expect("Failed to send controls");
-                    }
-                    context::EngineMode::Edit => {
-                        // Camera input
-                        let key_state = |code| -> f32 {
-                            self.controls
-                                .keyboard_inputs
-                                .contains(code)
-                                .then(|| 1.0)
-                                .unwrap_or(0.0)
-                        };
-
-                        camera.movement_forward = key_state("KeyW");
-                        camera.movement_backward = key_state("KeyS");
-                        camera.movement_left = key_state("KeyA");
-                        camera.movement_right = key_state("KeyD");
-                        camera.movement_up = key_state("Space");
-                        camera.movement_down = key_state("ShiftLeft");
-                        camera.boost = key_state("CtrlLeft");
-                        camera.rotate(delta_yaw.to_degrees(), delta_pitch.to_degrees());
-
-                        camera.update(self.delta_time.as_secs_f32());
-
-                        let (position, rotation) = camera.position_and_rotation();
-                        self.renderer.camera.translation = position;
-                        self.renderer.camera.rotation = rotation;
-
-                        // Send empty player input
-                        let controls = net_types::Controls {
-                            move_direction: Vec2::ZERO,
-                            jump: false,
-                        };
-                        let message =
-                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
-                                .unwrap();
-                        self.ws
-                            .send_with_u8_array(&message)
-                            .expect("Failed to send controls");
-                    }
+                // Player input
+                let mut move_dir = Vec2::ZERO;
+                if self.controls.keyboard_inputs.contains("KeyW") {
+                    move_dir.y += 1.0;
                 }
+                if self.controls.keyboard_inputs.contains("KeyS") {
+                    move_dir.y -= 1.0;
+                }
+                if self.controls.keyboard_inputs.contains("KeyA") {
+                    move_dir.x -= 1.0;
+                }
+                if self.controls.keyboard_inputs.contains("KeyD") {
+                    move_dir.x += 1.0;
+                }
+                move_dir =
+                    Vec2::from_angle(move_dir.to_angle() + self.controls.yaw) * move_dir.length();
+                let controls = net_types::Controls {
+                    move_direction: move_dir.normalize_or_zero(),
+                    jump: self.controls.keyboard_pressed.contains("Space"),
+                };
+                self.send_packet(net_types::ClientPacket::Controls(controls));
+            }
+            GameState::Editing { camera, .. } => {
+                // Camera input
+                let key_state = |code| -> f32 {
+                    self.controls
+                        .keyboard_inputs
+                        .contains(code)
+                        .then(|| 1.0)
+                        .unwrap_or(0.0)
+                };
+
+                let delta_yaw = -self.controls.mouse_movement.0 as f32 * MOUSE_SENSITIVITY_X;
+                let delta_pitch = -self.controls.mouse_movement.1 as f32 * MOUSE_SENSITIVITY_Y;
+
+                // Collect camera movement
+                camera.movement_forward = key_state("KeyW");
+                camera.movement_backward = key_state("KeyS");
+                camera.movement_left = key_state("KeyA");
+                camera.movement_right = key_state("KeyD");
+                camera.movement_up = key_state("Space");
+                camera.movement_down = key_state("ShiftLeft");
+                camera.boost = key_state("CtrlLeft");
+                camera.rotate(delta_yaw.to_degrees(), delta_pitch.to_degrees());
+
+                // Update camera
+                camera.update(self.delta_time.as_secs_f32());
+                let (position, rotation) = camera.position_and_rotation();
+                self.renderer.camera.translation = position;
+                self.renderer.camera.rotation = rotation;
+
+                if self.controls.mouse_left {
+                    self.place_block();
+                }
+
+                // Send empty player input
+                let controls = net_types::Controls {
+                    move_direction: Vec2::ZERO,
+                    jump: false,
+                };
+                self.send_packet(net_types::ClientPacket::Controls(controls));
             }
             _ => {}
         }
 
         self.controls.keyboard_pressed.clear();
         self.controls.mouse_movement = (0, 0);
+        self.controls.mouse_left = false;
+        self.controls.mouse_right = false;
 
         self.render();
+    }
+
+    fn send_packet(&mut self, packet: ClientPacket) {
+        let message = bincode::serialize(&packet).unwrap();
+        self.ws
+            .send_with_u8_array(&message)
+            .expect("Failed to send controls");
+    }
+
+    fn place_block(&mut self) {
+        // Ensure we're in the editing state and we have a selected block ID
+        let GameState::Editing {
+            blocks,
+            blocks_primitive,
+            selected_block_id: Some(block_id),
+            ..
+        } = &mut self.state
+        else {
+            return;
+        };
+
+        let block_id = *block_id;
+        let position = BlockPos::new(6, 6, 6); // TODO
+        let set_block = net_types::SetBlock { position, block_id };
+
+        tracing::debug!("Setting block at {position:?} to {block_id}");
+
+        handle_set_block(&mut self.renderer, blocks, blocks_primitive, set_block)
+            .expect("place block");
+
+        self.send_packet(ClientPacket::SetBlock(set_block));
     }
 
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
 
-        if let GameState::Playing {
-            players,
-            blocks_primitive,
-            ..
-        } = &self.game_state
-        {
-            for player in players.values() {
-                draw_calls.extend(render::build_render_plan(
-                    slice::from_ref(&self.player_model.gltf),
-                    slice::from_ref(&self.player_model.render_model),
-                    Transform::new(player.position, Quat::IDENTITY),
-                ));
-            }
+        match &self.state {
+            GameState::Playing {
+                players,
+                blocks_primitive,
+                ..
+            } => {
+                for player in players.values() {
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&self.player_model.gltf),
+                        slice::from_ref(&self.player_model.render_model),
+                        Transform::new(player.position, Quat::IDENTITY),
+                    ));
+                }
 
-            draw_calls.push(render::DrawCall {
-                primitive: blocks_primitive.clone(),
-                transform: Mat4::IDENTITY,
-            });
+                draw_calls.push(render::DrawCall {
+                    primitive: blocks_primitive.clone(),
+                    transform: Mat4::IDENTITY,
+                });
+            }
+            GameState::Editing {
+                blocks_primitive, ..
+            } => {
+                draw_calls.push(render::DrawCall {
+                    primitive: blocks_primitive.clone(),
+                    transform: Mat4::IDENTITY,
+                });
+            }
+            _ => (),
         }
 
         if let Some(ref mut test) = self.test {
@@ -419,16 +468,14 @@ impl Engine {
         self.renderer.render(&draw_calls);
     }
 }
-#[wasm_bindgen]
-pub fn increment(count: i32) -> i32 {
-    count + 1
-}
 
 #[derive(Clone, Default)]
 struct Controls {
     keyboard_inputs: HashSet<String>,
     keyboard_pressed: HashSet<String>,
     mouse_movement: (i32, i32),
+    mouse_left: bool,
+    mouse_right: bool,
 
     // Yaw and pitch, radians
     yaw: f32,
@@ -451,6 +498,56 @@ enum GameState {
         blocks_primitive: render::RenderPrimitive,
         players: HashMap<PlayerId, Player>,
     },
+    Editing {
+        blocks: BlockGrid,
+        camera: FlyCamera,
+        blocks_primitive: render::RenderPrimitive,
+        selected_block_id: Option<BlockId>,
+    },
+}
+
+impl GameState {
+    pub fn transition(&mut self, next_state: EngineMode) {
+        let current_state = std::mem::replace(self, GameState::Loading);
+        match (current_state, next_state) {
+            // Playing -> Editing
+            (
+                GameState::Playing {
+                    blocks,
+                    camera,
+                    blocks_primitive,
+                    ..
+                },
+                EngineMode::Edit,
+            ) => {
+                *self = GameState::Editing {
+                    blocks,
+                    camera,
+                    blocks_primitive,
+                    selected_block_id: None,
+                }
+            }
+            // Editing -> Playing
+            (
+                GameState::Editing {
+                    blocks,
+                    camera,
+                    blocks_primitive,
+                    ..
+                },
+                EngineMode::Play,
+            ) => {
+                *self = GameState::Playing {
+                    blocks,
+                    camera,
+                    blocks_primitive,
+                    client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
+                    players: Default::default(),
+                }
+            }
+            _ => {}
+        };
+    }
 }
 
 // Handlers for incoming packets

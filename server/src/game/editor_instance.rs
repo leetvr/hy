@@ -1,3 +1,4 @@
+use net_types::SetBlock;
 use tokio::sync::mpsc;
 
 use super::{network::Client, world::World, NextServerState};
@@ -17,9 +18,8 @@ impl EditorInstance {
 
     pub(crate) fn tick(&mut self) -> Option<super::NextServerState> {
         let mut maybe_next_state = None;
-        let client = &mut self.editor_client;
 
-        while let Some(packet) = match client.incoming_rx.try_recv() {
+        while let Some(packet) = match self.editor_client.incoming_rx.try_recv() {
             Ok(v) => Some(v),
             Err(e) => match e {
                 mpsc::error::TryRecvError::Empty => None,
@@ -33,10 +33,21 @@ impl EditorInstance {
             match packet {
                 net_types::ClientPacket::Start => maybe_next_state = Some(NextServerState::Playing),
                 net_types::ClientPacket::Pause => maybe_next_state = Some(NextServerState::Paused),
+                net_types::ClientPacket::SetBlock(set_block) => {
+                    self.set_block(set_block);
+                }
                 _ => {}
             }
         }
 
         maybe_next_state
+    }
+
+    fn set_block(&mut self, set_block: SetBlock) {
+        let SetBlock { position, block_id } = set_block;
+        tracing::debug!("Setting block at {position:?} to {block_id}");
+        self.world.blocks[position] = block_id;
+
+        // TODO persist
     }
 }

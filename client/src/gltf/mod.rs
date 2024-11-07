@@ -2,8 +2,8 @@ use std::{collections::HashMap, path::Path, time::Duration};
 
 use anyhow::{anyhow, Context};
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
-use gltf::{Animation, Glb, Mesh, Node};
+use glam::{Quat, UVec2, Vec3, Vec4};
+use gltf::{Animation, Mesh, Node};
 use image::buffer::ConvertBuffer;
 use itertools::izip;
 
