@@ -5,7 +5,7 @@ use {
 
 use {
     crate::{socket::ConnectionState, transform::Transform},
-    anyhow::{Context, Result},
+    anyhow::Result,
     blocks::BlockGrid,
     glam::{Mat4, Quat, Vec2, Vec3},
     net_types::PlayerId,
@@ -13,7 +13,10 @@ use {
     web_sys::WebSocket,
 };
 
-use blocks::BlockPos;
+// Re-exports
+pub use blocks::BlockPos;
+
+use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -163,6 +166,22 @@ impl Engine {
         );
     }
 
+    pub fn mouse_up(&mut self, event: MouseEvent) {
+        match event.button() {
+            0 => self.controls.mouse_left = false,
+            2 => self.controls.mouse_right = false,
+            _ => {}
+        }
+    }
+
+    pub fn mouse_down(&mut self, event: MouseEvent) {
+        match event.button() {
+            0 => self.controls.mouse_left = true,
+            2 => self.controls.mouse_right = true,
+            _ => {}
+        }
+    }
+
     pub fn tick(&mut self, time: f64) {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         self.delta_time = current_time - self.elapsed_time;
@@ -201,11 +220,7 @@ impl Engine {
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
-                            self.ws
-                                .send_with_u8_array(
-                                    &bincode::serialize(&net_types::ClientPacket::Edit).unwrap(),
-                                )
-                                .expect("Failed to send message");
+                            self.send_packet(net_types::ClientPacket::Edit);
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -234,6 +249,7 @@ impl Engine {
                             handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
+                        // Sent by the server when we leave edit mode
                         net_types::ServerPacket::Reset(net_types::Reset {
                             new_client_player,
                             ..
@@ -265,6 +281,8 @@ impl Engine {
                 players,
                 client_player,
                 camera,
+                blocks,
+                blocks_primitive,
                 ..
             } => {
                 let delta_yaw = -self.controls.mouse_movement.0 as f32 * MOUSE_SENSITIVITY_X;
@@ -323,12 +341,7 @@ impl Engine {
                             move_direction: move_dir.normalize_or_zero(),
                             jump: self.controls.keyboard_pressed.contains("Space"),
                         };
-                        let message =
-                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
-                                .unwrap();
-                        self.ws
-                            .send_with_u8_array(&message)
-                            .expect("Failed to send controls");
+                        self.send_packet(net_types::ClientPacket::Controls(controls));
                     }
                     context::EngineMode::Edit => {
                         // Camera input
@@ -340,6 +353,7 @@ impl Engine {
                                 .unwrap_or(0.0)
                         };
 
+                        // Collect camera movement
                         camera.movement_forward = key_state("KeyW");
                         camera.movement_backward = key_state("KeyS");
                         camera.movement_left = key_state("KeyA");
@@ -349,23 +363,22 @@ impl Engine {
                         camera.boost = key_state("CtrlLeft");
                         camera.rotate(delta_yaw.to_degrees(), delta_pitch.to_degrees());
 
+                        // Update camera
                         camera.update(self.delta_time.as_secs_f32());
-
                         let (position, rotation) = camera.position_and_rotation();
                         self.renderer.camera.translation = position;
                         self.renderer.camera.rotation = rotation;
+
+                        if self.controls.mouse_left {
+                            self.place_block();
+                        }
 
                         // Send empty player input
                         let controls = net_types::Controls {
                             move_direction: Vec2::ZERO,
                             jump: false,
                         };
-                        let message =
-                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
-                                .unwrap();
-                        self.ws
-                            .send_with_u8_array(&message)
-                            .expect("Failed to send controls");
+                        self.send_packet(net_types::ClientPacket::Controls(controls));
                     }
                 }
             }
@@ -374,8 +387,39 @@ impl Engine {
 
         self.controls.keyboard_pressed.clear();
         self.controls.mouse_movement = (0, 0);
+        self.controls.mouse_left = false;
+        self.controls.mouse_right = false;
 
         self.render();
+    }
+
+    fn send_packet(&mut self, packet: ClientPacket) {
+        let message = bincode::serialize(&packet).unwrap();
+        self.ws
+            .send_with_u8_array(&message)
+            .expect("Failed to send controls");
+    }
+
+    fn place_block(&mut self) {
+        let GameState::Playing {
+            blocks,
+            blocks_primitive,
+            ..
+        } = &mut self.game_state
+        else {
+            return;
+        };
+
+        let position = BlockPos::new(6, 6, 6); // TODO
+        let block_id = 1; // TODO
+        let set_block = net_types::SetBlock { position, block_id };
+
+        tracing::debug!("Setting block at {position:?} to {block_id}");
+
+        handle_set_block(&mut self.renderer, blocks, blocks_primitive, set_block)
+            .expect("place block");
+
+        self.send_packet(ClientPacket::SetBlock(set_block));
     }
 
     fn render(&mut self) {
@@ -419,16 +463,14 @@ impl Engine {
         self.renderer.render(&draw_calls);
     }
 }
-#[wasm_bindgen]
-pub fn increment(count: i32) -> i32 {
-    count + 1
-}
 
 #[derive(Clone, Default)]
 struct Controls {
     keyboard_inputs: HashSet<String>,
     keyboard_pressed: HashSet<String>,
     mouse_movement: (i32, i32),
+    mouse_left: bool,
+    mouse_right: bool,
 
     // Yaw and pitch, radians
     yaw: f32,

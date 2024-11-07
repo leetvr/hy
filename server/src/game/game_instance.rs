@@ -176,6 +176,7 @@ impl GameInstance {
                     net_types::ClientPacket::Edit => {
                         maybe_next_state = Some(NextServerState::Editing(*client_id))
                     }
+                    _ => {}
                 }
             }
 

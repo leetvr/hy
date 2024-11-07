@@ -29,7 +29,9 @@ impl Context {
 impl Engine {
     pub fn ctx_set_engine_mode(&mut self, mode: EngineMode) {
         self.context.mode = mode;
-        let message = match mode {
+
+        // Transition to next state
+        let packet = match mode {
             EngineMode::Play => ClientPacket::Start,
             EngineMode::Edit => {
                 // Clear out all players from the world
@@ -44,9 +46,8 @@ impl Engine {
             }
         };
 
-        self.ws
-            .send_with_u8_array(&bincode::serialize(&message).unwrap())
-            .expect("Send new edit mode");
+        // Tell the server about the new state
+        self.send_packet(packet);
     }
 
     pub fn ctx_get_engine_mode(&self) -> EngineMode {
