@@ -17,3 +17,5 @@ assets/index*
 assets/client_bg*wasm
 
 .DS_Store
+
+.vscode
