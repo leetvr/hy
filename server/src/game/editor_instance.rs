@@ -47,7 +47,6 @@ impl EditorInstance {
         let SetBlock { position, block_id } = set_block;
         tracing::debug!("Setting block at {position:?} to {block_id}");
         self.world.blocks[position] = block_id;
-
-        // TODO persist
+        self.world.save().expect("save world");
     }
 }
