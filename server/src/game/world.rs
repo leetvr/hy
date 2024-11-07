@@ -5,9 +5,11 @@ use {
     std::{collections::HashMap, mem},
 };
 
+const BLOCKS_PATH: &str = "game_data/blocks.json";
+
 pub struct World {
     pub physics_world: PhysicsWorld,
-    _colliders: Vec<PhysicsCollider>,
+    colliders: Vec<PhysicsCollider>,
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
     pub entities: hecs::World,
@@ -16,7 +18,7 @@ pub struct World {
 impl World {
     pub fn load() -> Self {
         let size = 32;
-        let blocks = generate_map(size, size);
+        let blocks = load_blocks().unwrap_or(generate_map(size, size));
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
 
@@ -24,12 +26,24 @@ impl World {
 
         Self {
             physics_world,
-            _colliders: colliders,
+            colliders,
             blocks,
             block_registry: Default::default(),
             entities: Default::default(),
         }
     }
+
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        bake_terrain_colliders(&mut self.physics_world, &self.blocks, &mut self.colliders);
+        let blocks = serde_json::to_vec(&self.blocks)?;
+        std::fs::write(BLOCKS_PATH, blocks)?;
+        Ok(())
+    }
+}
+
+fn load_blocks() -> anyhow::Result<BlockGrid> {
+    let blocks = serde_json::from_slice(&std::fs::read(BLOCKS_PATH)?)?;
+    Ok(blocks)
 }
 
 /// Generate a simple map for testing
@@ -53,6 +67,10 @@ fn generate_map(x: u32, z: u32) -> BlockGrid {
             blocks[[x, 1, z].into()] = 1;
         }
     }
+
+    // Write the blocks to disk
+    let blocks_json = serde_json::to_vec(&blocks).unwrap();
+    std::fs::write(BLOCKS_PATH, blocks_json).unwrap();
 
     blocks
 }

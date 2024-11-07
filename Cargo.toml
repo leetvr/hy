@@ -36,6 +36,7 @@ console_error_panic_hook = "0.1.7"
 tracing-subscriber = "0.3.18"
 bincode = "1.3.3"
 serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "^1.0.48" # Deno wants this version
 wasm-bindgen-futures = "0.4.45"
 crossbeam = "0.8.4"
 derive_more = { version = "1.0.0", features = ["from"] }

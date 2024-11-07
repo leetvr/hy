@@ -1812,6 +1812,7 @@ dependencies = [
  "hecs",
  "net-types",
  "physics",
+ "serde_json",
  "tokio",
  "tokio-tungstenite",
  "tracing",
