@@ -881,6 +881,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "hecs"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cbc675ee8d97b4d206a985137f8ad59666538f56f906474f554467a63c776d"
+dependencies = [
+ "hashbrown 0.14.5",
+ "spin",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1798,6 +1808,7 @@ dependencies = [
  "deno_core",
  "futures-util",
  "glam 0.29.1",
+ "hecs",
  "net-types",
  "physics",
  "tokio",
@@ -1934,6 +1945,12 @@ dependencies = [
  "robust",
  "smallvec",
 ]
+
+[[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "stable_deref_trait"

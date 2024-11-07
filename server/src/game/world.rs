@@ -1,12 +1,39 @@
 use {
-    blocks::{BlockGrid, BlockPos, EMPTY_BLOCK},
+    blocks::{BlockGrid, BlockPos, BlockRegistry, EMPTY_BLOCK},
     glam::Vec3,
     physics::{PhysicsCollider, PhysicsWorld},
     std::{collections::HashMap, mem},
 };
 
+pub struct World {
+    pub physics_world: PhysicsWorld,
+    _colliders: Vec<PhysicsCollider>,
+    pub blocks: BlockGrid,
+    pub block_registry: BlockRegistry,
+    pub entities: hecs::World,
+}
+
+impl World {
+    pub fn load() -> Self {
+        let size = 32;
+        let blocks = generate_map(size, size);
+        let mut physics_world = PhysicsWorld::new();
+        let mut colliders = Vec::new();
+
+        bake_terrain_colliders(&mut physics_world, &blocks, &mut colliders);
+
+        Self {
+            physics_world,
+            _colliders: colliders,
+            blocks,
+            block_registry: Default::default(),
+            entities: Default::default(),
+        }
+    }
+}
+
 /// Generate a simple map for testing
-pub fn generate_map(x: u32, z: u32) -> BlockGrid {
+fn generate_map(x: u32, z: u32) -> BlockGrid {
     let mut blocks = BlockGrid::new(x, 16, z);
 
     // Generate flat ground

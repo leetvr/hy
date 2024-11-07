@@ -144,3 +144,49 @@ fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
     let (x, y, z) = (pos.x as usize, pos.y as usize, pos.z as usize);
     x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize)
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BlockType {
+    name: String,
+    north_texture: String,
+    south_texture: String,
+    east_texture: String,
+    west_texture: String,
+    top_texture: String,
+    bottom_texture: String,
+    metallic_factor: f32,
+    roughness_factor: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct BlockRegistry {
+    block_types: Vec<BlockType>,
+}
+
+impl BlockRegistry {
+    pub fn get(&self, block_id: BlockId) -> Option<&BlockType> {
+        if block_id == EMPTY_BLOCK {
+            return None;
+        };
+
+        // note(KMRW):
+        // We need to subtract 1 here to avoid having to store the empty block which has ID 0.
+        // This may be a dumb idea.
+        let index = block_id as usize - 1;
+        self.block_types.get(index)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    // The client should *never* be able to mutate the block registry.
+    pub fn insert(&mut self, block_type: BlockType) -> BlockId {
+        self.block_types.push(block_type);
+
+        // note(KMRW):
+        // We check the length of `block_types` *after* we insert the block to avoid having to
+        // store an empty block.
+        // This may be a dumb idea.
+        let block_id = self.block_types.len() as BlockId;
+
+        block_id
+    }
+}

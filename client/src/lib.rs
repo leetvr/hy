@@ -168,6 +168,7 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
+        // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
                 if self.incoming_messages.borrow().is_empty() {
@@ -190,6 +191,7 @@ impl Engine {
                             let blocks_primitive = self.renderer.create_block_primitive(
                                 blocks.iter_non_empty().map(|(pos, _)| pos),
                             );
+
                             self.game_state = GameState::Playing {
                                 blocks,
                                 blocks_primitive,
@@ -197,6 +199,13 @@ impl Engine {
                                 client_player,
                                 camera: FlyCamera::new(Vec3::ZERO),
                             };
+
+                            // When we've connected, tell the server we want to switch to edit mode.
+                            self.ws
+                                .send_with_u8_array(
+                                    &bincode::serialize(&net_types::ClientPacket::Edit).unwrap(),
+                                )
+                                .expect("Failed to send message");
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -208,6 +217,7 @@ impl Engine {
                         players,
                         blocks,
                         blocks_primitive,
+                        client_player,
                         ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
@@ -218,12 +228,18 @@ impl Engine {
                             handle_add_player(players, add_player).expect("Failed to add player");
                         }
                         net_types::ServerPacket::UpdatePosition(update_position) => {
-                            handle_update_position(players, update_position)
-                                .expect("Failed to update position");
+                            handle_update_position(players, update_position);
                         }
                         net_types::ServerPacket::RemovePlayer(remove_player) => {
                             handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
+                        }
+                        net_types::ServerPacket::Reset(net_types::Reset {
+                            new_client_player,
+                            ..
+                        }) => {
+                            players.clear();
+                            *client_player = new_client_player;
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -235,6 +251,7 @@ impl Engine {
             }
         }
 
+        // Check for errors
         match &*self.connection_state.borrow() {
             ConnectionState::Error(e) => {
                 panic!("Error in websocket connection: {e:#}");
@@ -242,6 +259,7 @@ impl Engine {
             _ => {}
         }
 
+        // Send packets
         match &mut self.game_state {
             GameState::Playing {
                 players,
@@ -305,7 +323,9 @@ impl Engine {
                             move_direction: move_dir.normalize_or_zero(),
                             jump: self.controls.keyboard_pressed.contains("Space"),
                         };
-                        let message = bincode::serialize(&controls).unwrap();
+                        let message =
+                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
+                                .unwrap();
                         self.ws
                             .send_with_u8_array(&message)
                             .expect("Failed to send controls");
@@ -340,7 +360,9 @@ impl Engine {
                             move_direction: Vec2::ZERO,
                             jump: false,
                         };
-                        let message = bincode::serialize(&controls).unwrap();
+                        let message =
+                            bincode::serialize(&net_types::ClientPacket::Controls(controls))
+                                .unwrap();
                         self.ws
                             .send_with_u8_array(&message)
                             .expect("Failed to send controls");
@@ -468,12 +490,12 @@ fn handle_remove_player(
 fn handle_update_position(
     players: &mut HashMap<PlayerId, Player>,
     net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
-) -> Result<()> {
-    let player = players
-        .get_mut(&id)
-        .context("Received position update for unknown player")?;
+) {
+    let Some(player) = players.get_mut(&id) else {
+        tracing::warn!("Received update position for unknown player {id:?}");
+        return;
+    };
     player.position = position;
-    Ok(())
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;

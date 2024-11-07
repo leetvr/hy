@@ -35,7 +35,7 @@ pub struct Client {
     pub known_players: HashMap<PlayerId, glam::Vec3>,
 
     // The packet channels for this client
-    pub incoming_rx: Receiver<net_types::Controls>,
+    pub incoming_rx: Receiver<net_types::ClientPacket>,
     pub outgoing_tx: Sender<net_types::ServerPacket>,
 }
 
@@ -73,8 +73,8 @@ pub async fn start_client_listener(
                             };
 
                             // Deserialize the message and pass it to the client's incoming channel
-                            let controls = match message {
-                                Ok(v) => match bincode::deserialize::<net_types::Controls>(&v.into_data()) {
+                            let client_packet = match message {
+                                Ok(v) => match bincode::deserialize::<net_types::ClientPacket>(&v.into_data()) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         tracing::warn!("Error deserializing controls: {}", e);
@@ -87,7 +87,7 @@ pub async fn start_client_listener(
                                 }
                             };
 
-                            incoming_tx.send(controls).await.unwrap();
+                            incoming_tx.send(client_packet).await.unwrap();
                         }
                         // Handle outgoing messages
                         message = outgoing_rx.recv() => {
@@ -113,5 +113,5 @@ pub async fn start_client_listener(
     Ok(())
 }
 
-pub type ClientMessageReceiver = Receiver<net_types::Controls>;
+pub type ClientMessageReceiver = Receiver<net_types::ClientPacket>;
 pub type ServerMessageSender = Sender<net_types::ServerPacket>;
