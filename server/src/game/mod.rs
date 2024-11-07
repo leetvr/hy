@@ -98,6 +98,8 @@ impl ServerState {
         // Take the current state so we can move it
         let current_state = std::mem::replace(self, ServerState::Transitioning);
 
+        tracing::info!("Transitioning from {current_state} to {next_state}.");
+
         match (current_state, next_state) {
             // Playing -> Paused
             (ServerState::Playing(instance), NextServerState::Paused) => {

@@ -168,6 +168,7 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
+        // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
                 if self.incoming_messages.borrow().is_empty() {
@@ -235,6 +236,7 @@ impl Engine {
             }
         }
 
+        // Check for errors
         match &*self.connection_state.borrow() {
             ConnectionState::Error(e) => {
                 panic!("Error in websocket connection: {e:#}");
@@ -242,6 +244,7 @@ impl Engine {
             _ => {}
         }
 
+        // Send packets
         match &mut self.game_state {
             GameState::Playing {
                 players,

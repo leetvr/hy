@@ -1,3 +1,4 @@
+use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 
 use crate::Engine;
@@ -28,6 +29,14 @@ impl Context {
 impl Engine {
     pub fn ctx_set_engine_mode(&mut self, mode: EngineMode) {
         self.context.mode = mode;
+        let message = match mode {
+            EngineMode::Play => ClientPacket::Start,
+            EngineMode::Edit => ClientPacket::Edit,
+        };
+
+        self.ws
+            .send_with_u8_array(&bincode::serialize(&message).unwrap())
+            .expect("Send new edit mode");
     }
 
     pub fn ctx_get_engine_mode(&self) -> EngineMode {
