@@ -1,10 +1,12 @@
+mod editor_instance;
 mod game_instance;
 mod network;
 mod world;
 
 use {
-    crate::game::network::{Client, ClientMessageReceiver, ServerMessageSender},
+    crate::game::network::{ClientMessageReceiver, ServerMessageSender},
     crossbeam::queue::SegQueue,
+    editor_instance::EditorInstance,
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
@@ -26,15 +28,11 @@ impl GameServer {
 
         spawner.spawn(network::start_client_listener(incoming_connections.clone()));
 
-        // Roughly in the center of the map
-        let player_spawn_point =
-            glam::Vec3::new(WORLD_SIZE as f32 / 2., 16., WORLD_SIZE as f32 / 2.);
-
         // Load the world
         let world = World::load();
 
         // Set the initial state
-        let initial_state = ServerState::Paused(GameInstance::new(world, player_spawn_point));
+        let initial_state = ServerState::Paused(GameInstance::new(world));
 
         Self {
             spawner,
@@ -59,7 +57,8 @@ impl GameServer {
         // Tick
         let next_state = match &mut self.state {
             ServerState::Playing(instance) | ServerState::Paused(instance) => instance.tick(),
-            _ => None,
+            ServerState::Editing(instance) => instance.tick(),
+            invalid => panic!("Invalid server state: {invalid}"),
         };
 
         // Do we need to transition to a different state?
@@ -75,7 +74,7 @@ pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 enum ServerState {
     Playing(GameInstance),
     Paused(GameInstance),
-    Editing(World, Client),
+    Editing(EditorInstance),
     Transitioning,
 }
 
@@ -84,7 +83,7 @@ impl Display for ServerState {
         let name = match self {
             ServerState::Playing(_) => "Playing",
             ServerState::Paused(_) => "Paused",
-            ServerState::Editing(_, _) => "Editing",
+            ServerState::Editing(_) => "Editing",
             ServerState::Transitioning => "Transitioning",
         };
 
@@ -106,39 +105,41 @@ impl ServerState {
                 *self = ServerState::Paused(instance);
             }
             // Playing -> Editing
-            (ServerState::Playing(mut instance), NextServerState::Editing(client_id)) => {
-                if let Some(editor_client) = instance.clients.remove(&client_id) {
-                    *self = ServerState::Editing(instance.world, editor_client);
+            (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
+                if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    let editor_instance = EditorInstance::new(game_instance.world, editor_client);
+                    *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
                         "Can't transition to editing - client {client_id:?} does not exist"
                     );
-                    *self = ServerState::Playing(instance)
+                    *self = ServerState::Playing(game_instance)
                 }
             }
             // Paused -> Playing
-            (ServerState::Paused(instance), NextServerState::Playing) => {
-                *self = ServerState::Playing(instance);
+            (ServerState::Paused(game_instance), NextServerState::Playing) => {
+                *self = ServerState::Playing(game_instance);
             }
             // Paused -> Editing
-            (ServerState::Paused(mut instance), NextServerState::Editing(client_id)) => {
-                if let Some(editor_client) = instance.clients.remove(&client_id) {
-                    *self = ServerState::Editing(instance.world, editor_client);
+            (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
+                if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    let editor_instance = EditorInstance::new(game_instance.world, editor_client);
+                    *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
                         "Can't transition to editing - client {client_id:?} does not exist"
                     );
-                    *self = ServerState::Paused(instance)
+                    *self = ServerState::Paused(game_instance)
                 }
             }
             // Editing -> Playing
-            (ServerState::Editing(world, editor_client), NextServerState::Playing) => {
-                let instance = GameInstance::from_editor(world, editor_client);
+            (ServerState::Editing(editor_instance), NextServerState::Playing) => {
+                let instance = GameInstance::from_editor(editor_instance);
                 *self = ServerState::Playing(instance);
             }
             // Editing -> Paused
-            (ServerState::Editing(world, editor_client), NextServerState::Paused) => {
-                let instance = GameInstance::from_editor(world, editor_client);
+            (ServerState::Editing(editor_instance), NextServerState::Paused) => {
+                let instance = GameInstance::from_editor(editor_instance);
                 *self = ServerState::Paused(instance);
             }
             // Invalid transition

@@ -5,9 +5,10 @@ use net_types::PlayerId;
 use tokio::sync::mpsc;
 
 use super::{
+    editor_instance::EditorInstance,
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
     world::World,
-    GameState, NextServerState, Player,
+    GameState, NextServerState, Player, WORLD_SIZE,
 };
 
 pub struct GameInstance {
@@ -22,7 +23,11 @@ pub struct GameInstance {
 }
 
 impl GameInstance {
-    pub fn new(world: World, player_spawn_point: glam::Vec3) -> Self {
+    pub fn new(world: World) -> Self {
+        // Roughly in the center of the map
+        let player_spawn_point =
+            glam::Vec3::new(WORLD_SIZE as f32 / 2., 16., WORLD_SIZE as f32 / 2.);
+
         Self {
             world,
             player_spawn_point,
@@ -34,12 +39,43 @@ impl GameInstance {
         }
     }
 
-    pub fn from_editor(world: World, editor_client: Client) -> Self {
-        let mut instance = GameInstance::new(world, Default::default()); // TODO: kmrw
+    pub fn from_editor(editor_instance: EditorInstance) -> Self {
+        let EditorInstance {
+            world,
+            mut editor_client,
+        } = editor_instance;
+        let mut game_instance = GameInstance::new(world);
 
-        // Pop the editor client into the instance
-        instance.handle_new_client((editor_client.incoming_rx, editor_client.outgoing_tx));
-        instance
+        // IMPORTANT: We need the client to forget about any players it's seen
+        editor_client.known_players.clear();
+
+        // Create a player for the editor client
+        let player_id = PlayerId::new(game_instance.next_player_id);
+        game_instance.next_player_id += 1;
+        game_instance.players.insert(
+            player_id,
+            Player::new(
+                &mut game_instance.world.physics_world,
+                game_instance.player_spawn_point,
+            ),
+        );
+
+        // Set the player ID on the editor client
+        editor_client.player_id = player_id;
+
+        let client_id = game_instance.next_client_id;
+        game_instance.next_client_id = game_instance.next_client_id + 1;
+
+        // Send reset packet
+        let _ = editor_client.outgoing_tx.blocking_send(
+            net_types::Reset {
+                new_client_player: player_id,
+            }
+            .into(),
+        );
+
+        game_instance.clients.insert(client_id, editor_client);
+        game_instance
     }
 
     pub fn tick(&mut self) -> Option<NextServerState> {
@@ -88,7 +124,7 @@ impl GameInstance {
         let client_id = self.next_client_id;
         self.next_client_id = self.next_client_id + 1;
 
-        // Send level init packet
+        // Send world init packet
         let _ = outgoing_tx.blocking_send(
             net_types::Init {
                 blocks: self.world.blocks.clone(),

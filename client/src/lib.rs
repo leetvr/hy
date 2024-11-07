@@ -209,6 +209,7 @@ impl Engine {
                         players,
                         blocks,
                         blocks_primitive,
+                        client_player,
                         ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
@@ -219,12 +220,18 @@ impl Engine {
                             handle_add_player(players, add_player).expect("Failed to add player");
                         }
                         net_types::ServerPacket::UpdatePosition(update_position) => {
-                            handle_update_position(players, update_position)
-                                .expect("Failed to update position");
+                            handle_update_position(players, update_position);
                         }
                         net_types::ServerPacket::RemovePlayer(remove_player) => {
                             handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
+                        }
+                        net_types::ServerPacket::Reset(net_types::Reset {
+                            new_client_player,
+                            ..
+                        }) => {
+                            players.clear();
+                            *client_player = new_client_player;
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -475,12 +482,12 @@ fn handle_remove_player(
 fn handle_update_position(
     players: &mut HashMap<PlayerId, Player>,
     net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
-) -> Result<()> {
-    let player = players
-        .get_mut(&id)
-        .context("Received position update for unknown player")?;
+) {
+    let Some(player) = players.get_mut(&id) else {
+        tracing::warn!("Received update position for unknown player {id:?}");
+        return;
+    };
     player.position = position;
-    Ok(())
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;

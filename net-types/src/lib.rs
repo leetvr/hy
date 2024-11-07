@@ -56,6 +56,11 @@ pub struct Init {
     pub client_player: PlayerId,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Reset {
+    pub new_client_player: PlayerId,
+}
+
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct SetBlock {
     pub position: BlockPos,
@@ -65,6 +70,7 @@ pub struct SetBlock {
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
+    Reset(Reset),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
     UpdatePosition(UpdatePosition),
