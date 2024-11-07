@@ -306,7 +306,7 @@ impl Engine {
                 let position = player_position - (look_dir * CAMERA_DISTANCE)
                     + (glam::Vec3::Y * CAMERA_HEIGHT);
 
-                self.renderer.camera.translation = position;
+                self.renderer.camera.position = position;
                 self.renderer.camera.rotation = rotation;
 
                 // Keep editor camera in sync with player camera
@@ -335,7 +335,12 @@ impl Engine {
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
-            GameState::Editing { camera, .. } => {
+            GameState::Editing {
+                camera,
+                blocks,
+                selected_block_id,
+                ..
+            } => {
                 // Camera input
                 let key_state = |code| -> f32 {
                     self.controls
@@ -361,10 +366,18 @@ impl Engine {
                 // Update camera
                 camera.update(self.delta_time.as_secs_f32());
                 let (position, rotation) = camera.position_and_rotation();
-                self.renderer.camera.translation = position;
+                self.renderer.camera.position = position;
                 self.renderer.camera.rotation = rotation;
 
                 if self.controls.mouse_left {
+                    let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
+
+                    let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
+
+                    tracing::info!("Ray: pos {position:?} {ray_dir:?}");
+
+                    let hit_block = blocks.raycast(position, ray_dir);
+                    tracing::info!("Raycast hit block: {:?}", hit_block);
                     self.place_block();
                 }
 
