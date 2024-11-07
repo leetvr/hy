@@ -31,7 +31,17 @@ impl Engine {
         self.context.mode = mode;
         let message = match mode {
             EngineMode::Play => ClientPacket::Start,
-            EngineMode::Edit => ClientPacket::Edit,
+            EngineMode::Edit => {
+                // Clear out all players from the world
+                match &mut self.game_state {
+                    crate::GameState::Playing { players, .. } => {
+                        tracing::debug!("Clearing players");
+                        players.clear()
+                    }
+                    _ => {}
+                };
+                ClientPacket::Edit
+            }
         };
 
         self.ws

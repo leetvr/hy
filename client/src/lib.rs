@@ -191,6 +191,7 @@ impl Engine {
                             let blocks_primitive = self.renderer.create_block_primitive(
                                 blocks.iter_non_empty().map(|(pos, _)| pos),
                             );
+
                             self.game_state = GameState::Playing {
                                 blocks,
                                 blocks_primitive,
@@ -198,6 +199,13 @@ impl Engine {
                                 client_player,
                                 camera: FlyCamera::new(Vec3::ZERO),
                             };
+
+                            // When we've connected, tell the server we want to switch to edit mode.
+                            self.ws
+                                .send_with_u8_array(
+                                    &bincode::serialize(&net_types::ClientPacket::Edit).unwrap(),
+                                )
+                                .expect("Failed to send message");
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
