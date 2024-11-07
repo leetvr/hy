@@ -1,11 +1,10 @@
 use {
     blocks::BlockPos,
-    bytemuck::{Pod, Zeroable},
     glam::Quat,
-    std::{mem, slice, time::Duration},
+    std::{mem, slice},
 };
 
-use bytemuck::offset_of;
+use bytemuck::{offset_of, Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};

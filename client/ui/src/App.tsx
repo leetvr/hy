@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { AudioPlayer } from "./AudioPlayer";
 import init, { Engine, EngineMode } from "../../pkg/client.js";
+import Editor from "./Editor.js";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
@@ -26,6 +27,7 @@ function App({ engine }: { engine: Engine }) {
         <button onClick={handleClick}>
           Switch to {getEngineModeText(nextEngineMode(currentMode))}
         </button>
+        {currentMode === EngineMode.Edit && <Editor engine={engine} />}
         <AudioPlayer />
       </div>
     </>
