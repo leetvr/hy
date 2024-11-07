@@ -15,6 +15,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 glam.workspace = true
 bincode.workspace = true
 crossbeam.workspace = true
+hecs.workspace = true
 
 net-types.workspace = true
 blocks.workspace = true

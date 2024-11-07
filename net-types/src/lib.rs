@@ -20,6 +20,14 @@ pub struct Controls {
     pub jump: bool,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum ClientPacket {
+    Controls(Controls),
+    Start,
+    Pause,
+    Edit,
+}
+
 // Packets from the server to the client
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

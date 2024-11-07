@@ -1,5 +1,5 @@
 [workspace]
-members = [ "blocks", "cli", "client", "net-types", "physics", "server"]
+members = ["blocks", "cli", "client", "net-types", "physics", "server"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -22,6 +22,7 @@ bytemuck = { version = "1.9.1", features = ["derive"] }
 futures-util = "0.3.31"
 glam = { version = "0.29", features = ["bytemuck", "serde", "mint"] }
 gltf = "1"
+hecs = "0.10.5"
 image = { version = "0.25", default-features = false, features = ["png"] }
 itertools = "0.13"
 webbrowser = "1.0.2"
