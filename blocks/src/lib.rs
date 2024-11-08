@@ -8,7 +8,8 @@ use {
     std::ops::{Add, Index, IndexMut, Sub},
 };
 
-use glam::{IVec3, UVec3, Vec3};
+use glam::{UVec3, Vec3};
+pub use raycast::RaycastMode;
 use wasm_bindgen::prelude::*;
 
 mod raycast;
@@ -18,6 +19,7 @@ pub use raycast::RayHit;
 pub type BlockId = u8;
 
 pub const EMPTY_BLOCK: BlockId = 0;
+pub const MAX_BLOCK_HEIGHT: u32 = 64;
 
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -140,8 +142,13 @@ impl BlockGrid {
         })
     }
 
-    pub fn raycast(&self, start: Vec3, direction: glam::Vec3) -> Option<raycast::RayHit> {
-        raycast::raycast(self, start, direction, 0.0)
+    pub fn raycast(
+        &self,
+        start: Vec3,
+        direction: glam::Vec3,
+        mode: RaycastMode,
+    ) -> Option<raycast::RayHit> {
+        raycast::raycast(self, start, direction, 0.0, mode)
     }
 }
 

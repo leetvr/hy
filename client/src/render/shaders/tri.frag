@@ -8,10 +8,10 @@ in vec2 uvInterpolant;
 layout(location = 0) out vec4 fragColor;
 
 uniform sampler2D tex;
+uniform vec4 tint;
 
 void main() {
-    fragColor = texture(tex, uvInterpolant);
-
+    fragColor = texture(tex, uvInterpolant) * tint;
     if (fragColor.a < 1.0) {
         discard;
     }

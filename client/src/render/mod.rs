@@ -25,10 +25,12 @@ const UV_ATTRIBUTE: u32 = 2;
 
 pub struct Renderer {
     gl: glow::Context,
+    canvas: HtmlCanvasElement,
 
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
     texture_location: Option<glow::UniformLocation>,
+    tint_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
 }
@@ -50,30 +52,36 @@ impl Renderer {
         let program = compile_shaders(&gl, vertex_shader_source, fragment_shader_source);
         let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
         let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
+        let tint_location = unsafe { gl.get_uniform_location(program, "tint") };
 
         let camera = Camera::default();
 
         Ok(Self {
             gl,
+            canvas,
             program,
             matrix_location,
             texture_location,
+            tint_location,
             camera,
         })
     }
 
     pub fn render(&self, draw_calls: &[DrawCall]) {
         let gl = &self.gl;
+        let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
             gl.enable(glow::DEPTH_TEST);
+            gl.enable(glow::CULL_FACE);
+            gl.cull_face(glow::BACK);
 
             // Set the clear color
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
             let projection_matrix =
-                Mat4::perspective_rh_gl(45.0_f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
+                Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
             let view_matrix = self.camera.view_matrix();
 
@@ -83,23 +91,26 @@ impl Renderer {
             for draw_call in draw_calls {
                 let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
 
+                // Set matrix
                 gl.uniform_matrix_4_f32_slice(
                     self.matrix_location.as_ref(),
                     false,
                     bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
                 );
 
+                // Set tex
                 gl.active_texture(glow::TEXTURE0);
                 gl.bind_texture(
                     glow::TEXTURE_2D,
                     Some(draw_call.primitive.diffuse_texture.id),
                 );
 
+                // Set tint
+                let tint = draw_call.tint.unwrap_or(glam::Vec4::ONE);
+                gl.uniform_4_f32(self.tint_location.as_ref(), tint.x, tint.y, tint.z, tint.w);
+
                 gl.bind_vertex_array(Some(draw_call.primitive.vao));
-                gl.bind_texture(
-                    glow::TEXTURE_2D,
-                    Some(draw_call.primitive.diffuse_texture.id),
-                );
+
                 gl.draw_elements(
                     glow::TRIANGLES,
                     draw_call.primitive.index_count as i32,
@@ -337,6 +348,7 @@ fn build_render_plan_recursive(
             draw_calls.push(DrawCall {
                 primitive: primitive.clone(),
                 transform: transform.as_affine().into(),
+                tint: None,
             });
         }
     }
@@ -350,6 +362,7 @@ fn build_render_plan_recursive(
 pub struct DrawCall {
     pub primitive: RenderPrimitive,
     pub transform: glam::Mat4,
+    pub tint: Option<glam::Vec4>,
 }
 
 // This is the only thing keeping us from building this crate on non-wasm32 targets
@@ -433,6 +446,7 @@ impl Texture {
 pub fn build_cube_draw_calls<'a>(
     vao: &CubeVao,
     blocks: impl Iterator<Item = (BlockPos, &'a [Texture; 6])>,
+    tint: Option<glam::Vec4>,
 ) -> Vec<DrawCall> {
     let mut draw_calls = Vec::new();
 
@@ -450,6 +464,7 @@ pub fn build_cube_draw_calls<'a>(
                     index_count: 6,
                 },
                 transform: transform.as_affine().into(),
+                tint,
             };
 
             draw_calls.push(draw_call);
