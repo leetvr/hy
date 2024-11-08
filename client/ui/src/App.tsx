@@ -3,6 +3,9 @@ import "./App.css";
 import { AudioPlayer } from "./AudioPlayer";
 import init, { Engine, EngineMode } from "../../pkg/client.js";
 import Editor from "./Editor.js";
+import TopBar from "./TopBar.tsx";
+import LeftBar from "./LeftBar.tsx";
+import RightBar from "./RightBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
@@ -18,9 +21,16 @@ function App({ engine }: { engine: Engine }) {
     engine.ctx_set_engine_mode(nextMode);
   };
 
+  const edit_class = getEngineModeText(currentMode);
+
   return (
     <>
-      <div className="card">
+      <div className={edit_class}>
+        <TopBar />
+        <LeftBar />
+        <RightBar />
+    </div>
+      <div className="cardx">
         <p>
           We are currently in <strong>{getEngineModeText(currentMode)}</strong> mode
         </p>

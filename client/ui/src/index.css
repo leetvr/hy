@@ -13,6 +13,13 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.editor-only {
+    display: none;
+}
+.mode-Edit .editor-only {
+    display: block;
+}
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -52,6 +59,33 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
+}
+
+#toolbox {
+    position: absolute;
+    top: 10%;
+    height: 75%;
+    width: 15%;
+    left: 5%;
+    background-color: #0f0;
+}
+#propbox {
+    position: absolute;
+    background-color: #00f;
+    bottom: 20%;
+    height: 40%;
+    right: 5%;
+    width: 15%;
+}
+#editorcontrols {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    top: 2%;
+}
+#editorcontrols>.ec-content {
+    background-color: #f00;
 }
 
 @media (prefers-color-scheme: light) {
