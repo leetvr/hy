@@ -1,3 +1,10 @@
+mod cube_vao;
+mod vertex;
+
+// Re-exports
+pub use cube_vao::CubeVao;
+pub use vertex::Vertex;
+
 use {
     blocks::BlockPos,
     glam::Quat,
@@ -10,10 +17,7 @@ use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::{
-    gltf::{GLTFPrimitive, GLTFVertex},
-    transform::Transform,
-};
+use crate::{gltf::GLTFPrimitive, transform::Transform};
 
 const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
@@ -204,7 +208,7 @@ impl RenderPrimitive {
                 glow::STATIC_DRAW,
             );
 
-            let stride = mem::size_of::<crate::gltf::GLTFVertex>() as i32;
+            let stride = mem::size_of::<Vertex>() as i32;
 
             gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
             gl.vertex_attrib_pointer_f32(
@@ -213,7 +217,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, position) as i32,
+                offset_of!(Vertex, position) as i32,
             );
 
             gl.enable_vertex_attrib_array(NORMAL_ATTRIBUTE);
@@ -223,7 +227,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, normal) as i32,
+                offset_of!(Vertex, normal) as i32,
             );
 
             gl.enable_vertex_attrib_array(UV_ATTRIBUTE);
@@ -233,7 +237,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, uv) as i32,
+                offset_of!(Vertex, uv) as i32,
             );
 
             gl.bind_vertex_array(None);
@@ -423,218 +427,6 @@ impl Texture {
         }
 
         Self { id }
-    }
-}
-
-pub struct CubeVao {
-    vao: glow::VertexArray,
-    vertex_buffer: glow::Buffer,
-    index_buffer: glow::Buffer,
-}
-
-impl CubeVao {
-    pub fn new(gl: &glow::Context) -> Self {
-        unsafe {
-            let vertices: [GLTFVertex; 24] = [
-                // Front face (z = 1.0, normal (0, 0, 1))
-                GLTFVertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [0.0, 1.0],
-                },
-                // Back face (z = 0.0, normal (0, 0, -1))
-                GLTFVertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [0.0, 1.0],
-                },
-                // Left face (x = 0.0, normal (-1, 0, 0))
-                GLTFVertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
-                // Right face (x = 1.0, normal (1, 0, 0))
-                GLTFVertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
-                // Top face (y = 1.0, normal (0, 1, 0))
-                GLTFVertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
-                // Bottom face (y = 0.0, normal (0, -1, 0))
-                GLTFVertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                GLTFVertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                GLTFVertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
-            ];
-
-            let vao = gl
-                .create_vertex_array()
-                .expect("Failed to create vertex array");
-            gl.bind_vertex_array(Some(vao));
-
-            let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&vertices),
-                glow::STATIC_DRAW,
-            );
-
-            let indices: [u16; 36] = [
-                // Front face
-                0, 1, 2, 2, 3, 0, // Back face
-                4, 5, 6, 6, 7, 4, // Left face
-                8, 9, 10, 10, 11, 8, // Right face
-                12, 13, 14, 14, 15, 12, // Top face
-                16, 17, 18, 18, 19, 16, // Bottom face
-                20, 21, 22, 22, 23, 20,
-            ];
-
-            let index_buffer = gl.create_buffer().expect("Failed to create buffer");
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
-            gl.buffer_data_u8_slice(
-                glow::ELEMENT_ARRAY_BUFFER,
-                bytemuck::cast_slice(&indices),
-                glow::STATIC_DRAW,
-            );
-
-            let stride = mem::size_of::<crate::gltf::GLTFVertex>() as i32;
-
-            gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
-            gl.vertex_attrib_pointer_f32(
-                POSITION_ATTRIBUTE,
-                3,
-                glow::FLOAT,
-                false,
-                stride,
-                offset_of!(GLTFVertex, position) as i32,
-            );
-
-            gl.enable_vertex_attrib_array(NORMAL_ATTRIBUTE);
-            gl.vertex_attrib_pointer_f32(
-                NORMAL_ATTRIBUTE,
-                3,
-                glow::FLOAT,
-                false,
-                stride,
-                offset_of!(GLTFVertex, normal) as i32,
-            );
-
-            gl.enable_vertex_attrib_array(UV_ATTRIBUTE);
-            gl.vertex_attrib_pointer_f32(
-                UV_ATTRIBUTE,
-                2,
-                glow::FLOAT,
-                false,
-                stride,
-                offset_of!(GLTFVertex, uv) as i32,
-            );
-
-            gl.bind_vertex_array(None);
-
-            Self {
-                vao,
-                vertex_buffer,
-                index_buffer,
-            }
-        }
     }
 }
 

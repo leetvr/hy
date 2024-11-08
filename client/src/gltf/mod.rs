@@ -1,13 +1,12 @@
 use std::{collections::HashMap, path::Path, time::Duration};
 
 use anyhow::{anyhow, Context};
-use bytemuck::{Pod, Zeroable};
 use glam::{Quat, UVec2, Vec3, Vec4};
 use gltf::{Animation, Mesh, Node};
 use image::buffer::ConvertBuffer;
 use itertools::izip;
 
-use crate::transform::Transform;
+use crate::{render::Vertex, transform::Transform};
 
 #[derive(Debug, Default, Clone)]
 pub struct GLTFModel {
@@ -126,14 +125,6 @@ pub enum AnimationPath {
     Scale,
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
-pub struct GLTFVertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct GLTFMesh {
     pub primitives: Vec<GLTFPrimitive>,
@@ -143,11 +134,11 @@ pub struct GLTFMesh {
 pub struct GLTFMaterial {
     pub base_colour_texture: Option<GLTFTexture>,
     pub base_colour_factor: Vec4,
-    pub roughness_factor: f32,
-    pub metallic_factor: f32,
-    pub normal_texture: Option<GLTFTexture>,
-    pub metallic_roughness_ao_texture: Option<GLTFTexture>,
-    pub emissive_texture: Option<GLTFTexture>,
+    pub _roughness_factor: f32,
+    pub _metallic_factor: f32,
+    pub _normal_texture: Option<GLTFTexture>,
+    pub _metallic_roughness_ao_texture: Option<GLTFTexture>,
+    pub _emissive_texture: Option<GLTFTexture>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -177,7 +168,7 @@ impl std::fmt::Debug for GLTFTexture {
 
 #[derive(Clone)]
 pub struct GLTFPrimitive {
-    pub vertices: Vec<GLTFVertex>,
+    pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub material: GLTFMaterial,
 }
@@ -349,10 +340,7 @@ fn load_mesh(
     Ok(parsed)
 }
 
-fn import_vertices(
-    primitive: &gltf::Primitive<'_>,
-    blob: &[u8],
-) -> anyhow::Result<Vec<GLTFVertex>> {
+fn import_vertices(primitive: &gltf::Primitive<'_>, blob: &[u8]) -> anyhow::Result<Vec<Vertex>> {
     let reader = primitive.reader(|_| Some(blob));
     let position_reader = reader
         .read_positions()
@@ -366,7 +354,7 @@ fn import_vertices(
         .ok_or_else(|| anyhow!("Primitive has no UVs"))?
         .into_f32();
     let vertices = izip!(position_reader, normal_reader, uv_reader)
-        .map(|(position, normal, uv)| GLTFVertex {
+        .map(|(position, normal, uv)| Vertex {
             position,
             normal,
             uv,
@@ -414,11 +402,11 @@ fn load_material(
     Ok(GLTFMaterial {
         base_colour_texture,
         base_colour_factor,
-        roughness_factor,
-        metallic_factor,
-        normal_texture,
-        metallic_roughness_ao_texture,
-        emissive_texture,
+        _roughness_factor: roughness_factor,
+        _metallic_factor: metallic_factor,
+        _normal_texture: normal_texture,
+        _metallic_roughness_ao_texture: metallic_roughness_ao_texture,
+        _emissive_texture: emissive_texture,
     })
 }
 
