@@ -214,6 +214,7 @@ impl Engine {
                                 blocks,
                                 blocks_primitive,
                                 camera: FlyCamera::new(Vec3::ZERO),
+                                target_block: None,
                                 selected_block_id: None,
                             };
 
@@ -338,7 +339,7 @@ impl Engine {
             GameState::Editing {
                 camera,
                 blocks,
-                selected_block_id,
+                target_block,
                 ..
             } => {
                 // Camera input
@@ -369,15 +370,14 @@ impl Engine {
                 self.renderer.camera.position = position;
                 self.renderer.camera.rotation = rotation;
 
+                // Block Selection
+                let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
+                let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
+
+                *target_block = blocks.raycast(position, ray_dir).map(|hit| hit.position);
+
                 if self.controls.mouse_left {
-                    let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
-
-                    let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
-
-                    tracing::info!("Ray: pos {position:?} {ray_dir:?}");
-
-                    let hit_block = blocks.raycast(position, ray_dir);
-                    tracing::info!("Raycast hit block: {:?}", hit_block);
+                    tracing::debug!("Placing block at {target_block:?}");
                     self.place_block();
                 }
 
@@ -411,6 +411,7 @@ impl Engine {
         let GameState::Editing {
             blocks,
             blocks_primitive,
+            target_block: Some(target_block),
             selected_block_id: Some(block_id),
             ..
         } = &mut self.state
@@ -419,7 +420,7 @@ impl Engine {
         };
 
         let block_id = *block_id;
-        let position = BlockPos::new(6, 6, 6); // TODO
+        let position = *target_block;
         let set_block = net_types::SetBlock { position, block_id };
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
@@ -515,6 +516,7 @@ enum GameState {
         blocks: BlockGrid,
         camera: FlyCamera,
         blocks_primitive: render::RenderPrimitive,
+        target_block: Option<BlockPos>,
         selected_block_id: Option<BlockId>,
     },
 }
@@ -537,6 +539,7 @@ impl GameState {
                     blocks,
                     camera,
                     blocks_primitive,
+                    target_block: None,
                     selected_block_id: None,
                 }
             }
@@ -572,7 +575,7 @@ fn handle_set_block(
     blocks_primitive: &mut render::RenderPrimitive,
     net_types::SetBlock { position, block_id }: net_types::SetBlock,
 ) -> Result<()> {
-    blocks[position] = block_id;
+    blocks.get_mut(position).map(|b| *b = block_id);
     *blocks_primitive =
         renderer.create_block_primitive(blocks.iter_non_empty().map(|(pos, _)| pos));
     Ok(())

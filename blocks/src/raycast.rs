@@ -40,9 +40,7 @@ pub(crate) fn raycast(
     // Sanitize the NaNs
     let t_delta = Vec3::select(ray_dir_zero, Vec3::INFINITY, t_delta);
 
-    for i in 0..100 {
-        tracing::trace!("{i}: Current voxel: {current_voxel:?}");
-
+    for i in 0..1000 {
         let blockpos = BlockPos::from_signed(current_voxel);
         let block = blockpos.and_then(|pos| blocks.get(pos)).copied();
         let block_is_empty = block.map_or(true, |block| block == EMPTY_BLOCK);
@@ -64,20 +62,17 @@ pub(crate) fn raycast(
 
         // X is the lowest of the t_max values. A YZ voxel boundary is nearest.
         if t_max.x == min_element_of_t_max {
-            tracing::trace!("{i}: X lowest");
             current_voxel.x += step.x;
             t_max.x += t_delta.x;
         }
         // Y is the lowest of the t_max values. A XZ voxel boundary is nearest.
         else if t_max.y == min_element_of_t_max {
-            tracing::trace!("{i}: Y lowest");
             current_voxel.y += step.y;
             t_max.y += t_delta.y;
         }
         // Z is the lowest of the t_max values. A XY voxel boundary is nearest.
         else {
             debug_assert_eq!(t_max.z, min_element_of_t_max);
-            tracing::trace!("{i}: Z lowest");
             current_voxel.z += step.z;
             t_max.z += t_delta.z;
         }
