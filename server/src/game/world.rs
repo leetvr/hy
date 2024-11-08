@@ -14,7 +14,7 @@ pub struct World {
     colliders: Vec<PhysicsCollider>,
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub entities: hecs::World,
+    pub _entities: hecs::World,
 }
 
 impl World {
@@ -33,14 +33,15 @@ impl World {
             colliders,
             blocks,
             block_registry,
-            entities: Default::default(),
+            _entities: Default::default(),
         })
     }
 
-    pub fn save(&mut self) -> anyhow::Result<()> {
+    pub fn save(&mut self, storage_dir: impl AsRef<Path>) -> anyhow::Result<()> {
+        let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
         bake_terrain_colliders(&mut self.physics_world, &self.blocks, &mut self.colliders);
         let blocks = serde_json::to_string(&self.blocks)?;
-        std::fs::write(BLOCKS_PATH, blocks)?;
+        std::fs::write(blocks_path, blocks)?;
         Ok(())
     }
 }

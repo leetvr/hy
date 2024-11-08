@@ -13,7 +13,7 @@ use super::{
 
 pub struct GameInstance {
     pub world: World,
-    game_state: GameState,
+    _game_state: GameState,
     next_client_id: ClientId,
     pub clients: HashMap<ClientId, Client>,
 
@@ -31,7 +31,7 @@ impl GameInstance {
         Self {
             world,
             player_spawn_point,
-            game_state: Default::default(),
+            _game_state: Default::default(),
             next_client_id: Default::default(),
             clients: Default::default(),
             next_player_id: 0,
