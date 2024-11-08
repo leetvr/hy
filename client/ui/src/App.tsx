@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { AudioPlayer } from "./AudioPlayer";
-import init, { Engine, EngineMode } from "../../pkg/client.js";
+import init, { Engine, EngineMode, BlockRegistry } from "../../pkg/client.js";
 import Editor from "./Editor.js";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
   const [currentMode, setMode] = useState(initialEngineMode);
+  const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
 
   useEffect(() => {
-    console.log("App has been mounted probably");
-  }, []);
+    engine.ctx_on_init(setBlockRegistry);
+  }, [engine]);
 
   const handleClick = () => {
     const nextMode = nextEngineMode(currentMode);
@@ -27,7 +28,9 @@ function App({ engine }: { engine: Engine }) {
         <button onClick={handleClick}>
           Switch to {getEngineModeText(nextEngineMode(currentMode))}
         </button>
-        {currentMode === EngineMode.Edit && <Editor engine={engine} />}
+        {currentMode === EngineMode.Edit && (
+          <Editor engine={engine} blockRegistry={blockRegistry} />
+        )}
         <AudioPlayer />
       </div>
     </>

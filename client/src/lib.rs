@@ -233,6 +233,14 @@ impl Engine {
                                 self.assets.get(&block_type.south_texture);
                             }
 
+                            // Tell the React frontend
+                            if let Some(on_init) = self.context.on_init_callback.take() {
+                                let data = serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                on_init
+                                    .call1(&JsValue::NULL, &data)
+                                    .expect("Unable to call on_init!");
+                            }
+
                             self.state = GameState::Editing {
                                 blocks,
                                 block_registry,
@@ -490,8 +498,6 @@ impl Engine {
                         render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
                             .into_iter(),
                     );
-
-                    tracing::trace!("Rendered {} faces", draw_calls.len());
                 }
             }
             _ => {}
@@ -704,7 +710,7 @@ fn collect_block_textures(
             let south = assets.get(&block_type.south_texture).and_then(load_image)?;
 
             // TODO(ll): I just threw these in here, I don't know that they are in the right order
-            Some([top, bottom, east, west, north, south])
+            Some([north, south, east, west, top, bottom])
         })
         .collect::<Option<Vec<_>>>()
 }
