@@ -1,19 +1,23 @@
+mod cube_vao;
+mod vertex;
+
+// Re-exports
+pub use cube_vao::CubeVao;
+pub use vertex::Vertex;
+
 use {
     blocks::BlockPos,
     glam::Quat,
     std::{mem, slice},
 };
 
-use bytemuck::{offset_of, Pod, Zeroable};
+use bytemuck::offset_of;
 use glam::{Mat4, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::{
-    gltf::{GLTFPrimitive, GLTFVertex},
-    transform::Transform,
-};
+use crate::{gltf::GLTFPrimitive, transform::Transform};
 
 const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
@@ -108,19 +112,12 @@ impl Renderer {
         }
     }
 
-    pub fn create_block_primitive(
-        &self,
-        blocks: impl Iterator<Item = BlockPos>,
-    ) -> RenderPrimitive {
-        unsafe { blocks_primitive(&self.gl, blocks) }
-    }
-
     pub fn create_cube_vao(&self) -> CubeVao {
         CubeVao::new(&self.gl)
     }
 
-    pub fn create_texture_from_color(&self, color: [u8; 4]) -> Texture {
-        Texture::new(&self.gl, &color, 1, 1)
+    pub fn create_texture_from_image(&self, data: &[u8], width: u32, height: u32) -> Texture {
+        Texture::new(&self.gl, data, width, height)
     }
 }
 
@@ -211,7 +208,7 @@ impl RenderPrimitive {
                 glow::STATIC_DRAW,
             );
 
-            let stride = mem::size_of::<crate::gltf::GLTFVertex>() as i32;
+            let stride = mem::size_of::<Vertex>() as i32;
 
             gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
             gl.vertex_attrib_pointer_f32(
@@ -220,7 +217,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, position) as i32,
+                offset_of!(Vertex, position) as i32,
             );
 
             gl.enable_vertex_attrib_array(NORMAL_ATTRIBUTE);
@@ -230,7 +227,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, normal) as i32,
+                offset_of!(Vertex, normal) as i32,
             );
 
             gl.enable_vertex_attrib_array(UV_ATTRIBUTE);
@@ -240,7 +237,7 @@ impl RenderPrimitive {
                 glow::FLOAT,
                 false,
                 stride,
-                offset_of!(GLTFVertex, uv) as i32,
+                offset_of!(Vertex, uv) as i32,
             );
 
             gl.bind_vertex_array(None);
@@ -433,75 +430,9 @@ impl Texture {
     }
 }
 
-pub struct CubeVao {
-    vao: glow::VertexArray,
-    vertex_buffer: glow::Buffer,
-    index_buffer: glow::Buffer,
-}
-
-impl CubeVao {
-    pub fn new(gl: &glow::Context) -> Self {
-        unsafe {
-            let positions = [
-                Vec3::new(0.0, 0.0, 0.0),
-                Vec3::new(1.0, 0.0, 0.0),
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(0.0, 1.0, 0.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                Vec3::new(1.0, 0.0, 1.0),
-                Vec3::new(1.0, 1.0, 1.0),
-                Vec3::new(0.0, 1.0, 1.0),
-            ];
-
-            let vao = gl
-                .create_vertex_array()
-                .expect("Failed to create vertex array");
-            gl.bind_vertex_array(Some(vao));
-
-            let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&positions),
-                glow::STATIC_DRAW,
-            );
-
-            let indices = [
-                0, 1, 2, 2, 3, 0, // Front
-                1, 5, 6, 6, 2, 1, // Right
-                5, 4, 7, 7, 6, 5, // Back
-                4, 0, 3, 3, 7, 4, // Left
-                3, 2, 6, 6, 7, 3, // Top
-                4, 5, 1, 1, 0, 4, // Bottom
-            ];
-
-            let index_buffer = gl.create_buffer().expect("Failed to create buffer");
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
-            gl.buffer_data_u8_slice(
-                glow::ELEMENT_ARRAY_BUFFER,
-                bytemuck::cast_slice(&indices),
-                glow::STATIC_DRAW,
-            );
-
-            let stride = mem::size_of::<Vec3>() as i32;
-
-            gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
-            gl.vertex_attrib_pointer_f32(POSITION_ATTRIBUTE, 3, glow::FLOAT, false, stride, 0);
-
-            gl.bind_vertex_array(None);
-
-            Self {
-                vao,
-                vertex_buffer,
-                index_buffer,
-            }
-        }
-    }
-}
-
 pub fn build_cube_draw_calls<'a>(
     vao: &CubeVao,
-    blocks: impl Iterator<Item = (BlockPos, [&'a Texture; 6])>,
+    blocks: impl Iterator<Item = (BlockPos, &'a [Texture; 6])>,
 ) -> Vec<DrawCall> {
     let mut draw_calls = Vec::new();
 
@@ -526,115 +457,4 @@ pub fn build_cube_draw_calls<'a>(
     }
 
     draw_calls
-}
-
-unsafe fn blocks_primitive(
-    gl: &glow::Context,
-    blocks: impl Iterator<Item = BlockPos>,
-) -> RenderPrimitive {
-    #[repr(C)]
-    #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
-    struct CubeVertex {
-        position: glam::Vec3,
-    }
-
-    let cube_iter = blocks.enumerate().map(|(i, pos)| {
-        let pos = glam::Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
-        let vertices = [
-            CubeVertex {
-                position: pos + Vec3::new(0.0, 0.0, 0.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(1.0, 0.0, 0.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(1.0, 1.0, 0.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(0.0, 1.0, 0.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(0.0, 0.0, 1.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(1.0, 0.0, 1.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(1.0, 1.0, 1.0),
-            },
-            CubeVertex {
-                position: pos + Vec3::new(0.0, 1.0, 1.0),
-            },
-        ]
-        .into_iter();
-
-        let idx_start = i as u32 * 8;
-        let indices = [
-            0, 1, 2, 2, 3, 0, // Front
-            1, 5, 6, 6, 2, 1, // Right
-            5, 4, 7, 7, 6, 5, // Back
-            4, 0, 3, 3, 7, 4, // Left
-            3, 2, 6, 6, 7, 3, // Top
-            4, 5, 1, 1, 0, 4, // Bottom
-        ]
-        .map(|i| idx_start + i)
-        .into_iter();
-
-        (vertices, indices)
-    });
-
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
-    for (v, i) in cube_iter {
-        vertices.extend(v);
-        indices.extend(i);
-    }
-    tracing::info!(
-        "Built {} vertices and {} indices",
-        vertices.len(),
-        indices.len()
-    );
-
-    let vao = gl
-        .create_vertex_array()
-        .expect("Failed to create vertex array");
-    gl.bind_vertex_array(Some(vao));
-
-    let vertex_buffer = gl.create_buffer().expect("Failed to create buffer");
-    gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
-    gl.buffer_data_u8_slice(
-        glow::ARRAY_BUFFER,
-        bytemuck::cast_slice(&vertices),
-        glow::STATIC_DRAW,
-    );
-
-    let index_buffer = gl.create_buffer().expect("Failed to create buffer");
-    gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
-    gl.buffer_data_u8_slice(
-        glow::ELEMENT_ARRAY_BUFFER,
-        bytemuck::cast_slice(&indices),
-        glow::STATIC_DRAW,
-    );
-
-    let stride = mem::size_of::<CubeVertex>() as i32;
-
-    gl.enable_vertex_attrib_array(POSITION_ATTRIBUTE);
-    gl.vertex_attrib_pointer_f32(
-        POSITION_ATTRIBUTE,
-        3,
-        glow::FLOAT,
-        false,
-        stride,
-        offset_of!(CubeVertex, position) as i32,
-    );
-    gl.bind_vertex_array(None);
-
-    let diffuse_texture = Texture::new(gl, &[255, 255, 255, 255], 1, 1);
-
-    RenderPrimitive {
-        vao,
-        diffuse_texture,
-        index_start: 0,
-        index_count: indices.len() as u32,
-    }
 }

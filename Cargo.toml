@@ -15,6 +15,8 @@ web-sys = { version = "0.3.72", features = [
     "MessageEvent",
     "Blob",
     "MouseEvent",
+    "XmlHttpRequest",
+    "XmlHttpRequestResponseType",
     "console",
 ] }
 wasm-bindgen = "0.2"
@@ -43,6 +45,8 @@ derive_more = { version = "1.0.0", features = ["from"] }
 rapier3d = "0.22.0"
 nalgebra = "0.33.2"
 dolly = "0.6.0"
+thiserror = "2.0.0"
+
 
 net-types.path = "net-types"
 blocks.path = "blocks"

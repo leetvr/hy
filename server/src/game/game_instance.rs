@@ -128,6 +128,7 @@ impl GameInstance {
         let _ = outgoing_tx.blocking_send(
             net_types::Init {
                 blocks: self.world.blocks.clone(),
+                block_registry: self.world.block_registry.clone(),
                 client_player: player_id,
             }
             .into(),

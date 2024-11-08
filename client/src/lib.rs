@@ -1,5 +1,10 @@
 use {
-    crate::camera::FlyCamera, dolly::prelude::YawPitch, glam::EulerRot, std::collections::HashSet,
+    crate::{assets::Assets, camera::FlyCamera},
+    blocks::BlockRegistry,
+    dolly::prelude::YawPitch,
+    glam::EulerRot,
+    image::GenericImageView,
+    std::collections::HashSet,
     web_sys::MouseEvent,
 };
 
@@ -7,7 +12,7 @@ use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::Result,
     blocks::BlockGrid,
-    glam::{Mat4, Quat, Vec2, Vec3},
+    glam::{Quat, Vec2, Vec3},
     net_types::PlayerId,
     std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
@@ -25,6 +30,7 @@ use wasm_bindgen::JsCast;
 // Import the necessary web_sys features
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
+mod assets;
 mod camera;
 mod context;
 mod gltf;
@@ -54,8 +60,12 @@ pub struct Engine {
     player_model: TestGltf,
 
     cube_mesh_data: render::CubeVao,
-    cube_texture: render::Texture,
+    // Textures by path
+    // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
+    // and vacant for a texture that is still loading
+    block_textures: Option<Vec<[render::Texture; 6]>>,
 
+    assets: assets::Assets,
     state: GameState,
 }
 
@@ -93,11 +103,10 @@ impl Engine {
             TestGltf { gltf, render_model }
         };
 
-        let cube_texture = renderer.create_texture_from_color([255, 0, 0, 255]);
-
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
+            block_textures: None,
 
             renderer,
             delta_time: Duration::ZERO,
@@ -111,8 +120,7 @@ impl Engine {
             controls: Default::default(),
             player_model,
 
-            cube_texture,
-
+            assets: Assets::new(),
             state: Default::default(),
         })
     }
@@ -189,6 +197,9 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
+        // Maintain assets, loading pending assets from remote requests
+        self.assets.maintain();
+
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
@@ -204,15 +215,27 @@ impl Engine {
 
                 match &mut self.state {
                     GameState::Loading => match packet {
-                        net_types::ServerPacket::Init(net_types::Init { blocks, .. }) => {
+                        net_types::ServerPacket::Init(net_types::Init {
+                            blocks,
+                            block_registry,
+                            ..
+                        }) => {
                             tracing::info!("Loaded level of size {:?}", blocks.size());
-                            let blocks_primitive = self.renderer.create_block_primitive(
-                                blocks.iter_non_empty().map(|(pos, _)| pos),
-                            );
+                            tracing::info!("Block registry: {:#?}", block_registry);
+
+                            // Start fetching textures
+                            for block_type in block_registry.iter() {
+                                self.assets.get(&block_type.top_texture);
+                                self.assets.get(&block_type.bottom_texture);
+                                self.assets.get(&block_type.east_texture);
+                                self.assets.get(&block_type.west_texture);
+                                self.assets.get(&block_type.north_texture);
+                                self.assets.get(&block_type.south_texture);
+                            }
 
                             self.state = GameState::Editing {
                                 blocks,
-                                blocks_primitive,
+                                block_registry,
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_block: None,
                                 selected_block_id: None,
@@ -230,13 +253,11 @@ impl Engine {
                     GameState::Playing {
                         players,
                         blocks,
-                        blocks_primitive,
                         client_player,
                         ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
-                            handle_set_block(&self.renderer, blocks, blocks_primitive, set_block)
-                                .expect("Failed to set block");
+                            handle_set_block(blocks, set_block).expect("Failed to set block");
                         }
                         net_types::ServerPacket::AddPlayer(add_player) => {
                             handle_add_player(players, add_player).expect("Failed to add player");
@@ -410,7 +431,6 @@ impl Engine {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
             blocks,
-            blocks_primitive,
             target_block: Some(target_block),
             selected_block_id: Some(block_id),
             ..
@@ -425,8 +445,7 @@ impl Engine {
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
-        handle_set_block(&mut self.renderer, blocks, blocks_primitive, set_block)
-            .expect("place block");
+        handle_set_block(blocks, set_block).expect("place block");
 
         self.send_packet(ClientPacket::SetBlock(set_block));
     }
@@ -436,10 +455,37 @@ impl Engine {
 
         match &self.state {
             GameState::Playing {
-                players,
-                blocks_primitive,
+                blocks,
+                block_registry,
+                ..
+            }
+            | GameState::Editing {
+                blocks,
+                block_registry,
                 ..
             } => {
+                if self.block_textures.is_none() {
+                    // Try to collect textures for all block types. If any are missing, just wait for all of them to arrive.
+                    self.block_textures =
+                        collect_block_textures(block_registry, &self.renderer, &mut self.assets);
+                }
+
+                if let Some(block_textures) = &self.block_textures {
+                    let blocks = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
+                        Some((pos, &block_textures[block_id as usize - 1]))
+                    });
+                    draw_calls.extend(
+                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks).into_iter(),
+                    );
+
+                    tracing::info!("Rendered {} faces", draw_calls.len());
+                }
+            }
+            _ => {}
+        };
+
+        match &self.state {
+            GameState::Playing { players, .. } => {
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&self.player_model.gltf),
@@ -447,20 +493,8 @@ impl Engine {
                         Transform::new(player.position, Quat::IDENTITY),
                     ));
                 }
-
-                draw_calls.push(render::DrawCall {
-                    primitive: blocks_primitive.clone(),
-                    transform: Mat4::IDENTITY,
-                });
             }
-            GameState::Editing {
-                blocks_primitive, ..
-            } => {
-                draw_calls.push(render::DrawCall {
-                    primitive: blocks_primitive.clone(),
-                    transform: Mat4::IDENTITY,
-                });
-            }
+            GameState::Editing { .. } => {}
             _ => (),
         }
 
@@ -473,11 +507,6 @@ impl Engine {
                 Transform::IDENTITY,
             ));
         }
-
-        draw_calls.extend(render::build_cube_draw_calls(
-            &self.cube_mesh_data,
-            [(BlockPos::new(0, 0, 0), [&self.cube_texture; 6])].into_iter(),
-        ));
 
         self.renderer.render(&draw_calls);
     }
@@ -507,15 +536,15 @@ enum GameState {
     Loading,
     Playing {
         blocks: BlockGrid,
+        block_registry: BlockRegistry,
         client_player: PlayerId,
         camera: FlyCamera,
-        blocks_primitive: render::RenderPrimitive,
         players: HashMap<PlayerId, Player>,
     },
     Editing {
         blocks: BlockGrid,
+        block_registry: BlockRegistry,
         camera: FlyCamera,
-        blocks_primitive: render::RenderPrimitive,
         target_block: Option<BlockPos>,
         selected_block_id: Option<BlockId>,
     },
@@ -529,16 +558,16 @@ impl GameState {
             (
                 GameState::Playing {
                     blocks,
+                    block_registry,
                     camera,
-                    blocks_primitive,
                     ..
                 },
                 EngineMode::Edit,
             ) => {
                 *self = GameState::Editing {
                     blocks,
+                    block_registry,
                     camera,
-                    blocks_primitive,
                     target_block: None,
                     selected_block_id: None,
                 }
@@ -547,16 +576,16 @@ impl GameState {
             (
                 GameState::Editing {
                     blocks,
+                    block_registry,
                     camera,
-                    blocks_primitive,
                     ..
                 },
                 EngineMode::Play,
             ) => {
                 *self = GameState::Playing {
                     blocks,
+                    block_registry,
                     camera,
-                    blocks_primitive,
                     client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
                     players: Default::default(),
                 }
@@ -570,14 +599,10 @@ impl GameState {
 
 /// Handle a `SetBlock` packet
 fn handle_set_block(
-    renderer: &render::Renderer,
     blocks: &mut BlockGrid,
-    blocks_primitive: &mut render::RenderPrimitive,
     net_types::SetBlock { position, block_id }: net_types::SetBlock,
 ) -> Result<()> {
-    blocks.get_mut(position).map(|b| *b = block_id);
-    *blocks_primitive =
-        renderer.create_block_primitive(blocks.iter_non_empty().map(|(pos, _)| pos));
+    blocks[position] = block_id;
     Ok(())
 }
 
@@ -609,6 +634,45 @@ fn handle_update_position(
         return;
     };
     player.position = position;
+}
+
+fn collect_block_textures(
+    block_registry: &BlockRegistry,
+    renderer: &render::Renderer,
+    assets: &mut Assets,
+) -> Option<Vec<[render::Texture; 6]>> {
+    block_registry
+        .iter()
+        .map(|block_type| {
+            let load_image = |data: &Vec<u8>| match image::load_from_memory(data) {
+                Ok(img) => {
+                    let (width, height) = img.dimensions();
+                    let data = img.as_rgba8()?.as_raw();
+                    tracing::info!(
+                        "Loaded image for block {}: {width}x{height}",
+                        block_type.name
+                    );
+                    Some(renderer.create_texture_from_image(data, width, height))
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load image: {e}");
+                    None
+                }
+            };
+
+            let top = assets.get(&block_type.top_texture).and_then(load_image)?;
+            let bottom = assets
+                .get(&block_type.bottom_texture)
+                .and_then(load_image)?;
+            let east = assets.get(&block_type.east_texture).and_then(load_image)?;
+            let west = assets.get(&block_type.west_texture).and_then(load_image)?;
+            let north = assets.get(&block_type.north_texture).and_then(load_image)?;
+            let south = assets.get(&block_type.south_texture).and_then(load_image)?;
+
+            // TODO(ll): I just threw these in here, I don't know that they are in the right order
+            Some([top, bottom, east, west, north, south])
+        })
+        .collect::<Option<Vec<_>>>()
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;
