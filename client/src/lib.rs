@@ -361,6 +361,7 @@ impl Engine {
                 camera,
                 blocks,
                 target_block,
+                selected_block_id,
                 ..
             } => {
                 // Camera input
@@ -395,7 +396,15 @@ impl Engine {
                 let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
                 let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
 
-                *target_block = blocks.raycast(position, ray_dir).map(|hit| hit.position);
+                // If we're *placing* blocks, ie. not removing them, we actually want to place a
+                // block *above* the raycast target.
+                let mode = match selected_block_id {
+                    None | Some(0) => blocks::RaycastMode::Selecting,
+                    _ => blocks::RaycastMode::Placing,
+                };
+                *target_block = blocks
+                    .raycast(position, ray_dir, mode)
+                    .map(|hit| hit.position);
 
                 if self.controls.mouse_left {
                     tracing::debug!("Placing block at {target_block:?}");
@@ -453,6 +462,7 @@ impl Engine {
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
 
+        // Gather blocks
         match &self.state {
             GameState::Playing {
                 blocks,
@@ -474,17 +484,22 @@ impl Engine {
                     let blocks = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
                         Some((pos, &block_textures[block_id as usize - 1]))
                     });
+
+                    // TODO: If we're trying to *remove* a block, we need to not render a block at that position.
                     draw_calls.extend(
-                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks).into_iter(),
+                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
+                            .into_iter(),
                     );
 
-                    tracing::info!("Rendered {} faces", draw_calls.len());
+                    tracing::trace!("Rendered {} faces", draw_calls.len());
                 }
             }
             _ => {}
         };
 
+        // Gather state-specific extras
         match &self.state {
+            // Players
             GameState::Playing { players, .. } => {
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
@@ -494,7 +509,26 @@ impl Engine {
                     ));
                 }
             }
-            GameState::Editing { .. } => {}
+            // Ghost block
+            GameState::Editing {
+                target_block: Some(block_pos),
+                selected_block_id: Some(block_id),
+                ..
+            } if *block_id != 0 => {
+                if let Some(block_textures) = &self.block_textures {
+                    let textures = &block_textures[*block_id as usize - 1];
+                    let blocks = [(*block_pos, textures)];
+
+                    draw_calls.extend(
+                        render::build_cube_draw_calls(
+                            &self.cube_mesh_data,
+                            blocks.into_iter(),
+                            Some([0., 1.0, 0., 1.0].into()),
+                        )
+                        .into_iter(),
+                    );
+                }
+            }
             _ => (),
         }
 

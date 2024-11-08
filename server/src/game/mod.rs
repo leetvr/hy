@@ -10,7 +10,7 @@ use {
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
-    std::{fmt::Display, path::Path, sync::Arc},
+    std::{fmt::Display, path::PathBuf, sync::Arc},
     world::World,
 };
 
@@ -20,16 +20,18 @@ pub struct GameServer {
     spawner: tokio::runtime::Handle,
     state: ServerState,
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
+    storage_dir: PathBuf,
 }
 
 impl GameServer {
-    pub fn new(spawner: tokio::runtime::Handle, storage_dir: impl AsRef<Path>) -> Self {
+    pub fn new(spawner: tokio::runtime::Handle, storage_dir: impl Into<PathBuf>) -> Self {
         let incoming_connections = Arc::new(SegQueue::new());
 
         spawner.spawn(network::start_client_listener(incoming_connections.clone()));
 
         // Load the world
-        let world = World::load(storage_dir).expect("Failed to load world");
+        let storage_dir = storage_dir.into();
+        let world = World::load(&storage_dir).expect("Failed to load world");
 
         // Set the initial state
         let initial_state = ServerState::Paused(GameInstance::new(world));
@@ -38,6 +40,7 @@ impl GameServer {
             spawner,
             incoming_connections,
             state: initial_state,
+            storage_dir,
         }
     }
 
@@ -57,7 +60,7 @@ impl GameServer {
         // Tick
         let next_state = match &mut self.state {
             ServerState::Playing(instance) | ServerState::Paused(instance) => instance.tick(),
-            ServerState::Editing(instance) => instance.tick(),
+            ServerState::Editing(instance) => instance.tick(&self.storage_dir),
             invalid => panic!("Invalid server state: {invalid}"),
         };
 
@@ -171,8 +174,8 @@ impl Display for NextServerState {
 
 #[derive(Default)]
 struct GameState {
-    red_points: u32,
-    blue_points: u32,
+    _red_points: u32,
+    _blue_points: u32,
 }
 
 #[derive(Debug)]
