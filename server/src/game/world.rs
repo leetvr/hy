@@ -17,7 +17,7 @@ pub struct World {
 
 impl World {
     pub fn load() -> Self {
-        let size = 32;
+        let size = 16;
         let blocks = load_blocks().unwrap_or(generate_map(size, size));
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();

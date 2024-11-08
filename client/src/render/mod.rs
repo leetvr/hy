@@ -367,14 +367,14 @@ fn get_gl_context(_webgl2_context: WebGl2RenderingContext) -> glow::Context {
 
 #[derive(Debug)]
 pub struct Camera {
-    pub translation: Vec3,
+    pub position: Vec3,
     pub rotation: Quat,
 }
 
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            translation: Vec3::new(0.0, 0.0, -5.0),
+            position: Vec3::new(0.0, 0.0, -5.0),
             rotation: Default::default(),
         }
     }
@@ -382,7 +382,7 @@ impl Default for Camera {
 
 impl Camera {
     pub fn view_matrix(&self) -> Mat4 {
-        (Mat4::from_translation(self.translation) * Mat4::from_quat(self.rotation)).inverse()
+        (Mat4::from_translation(self.position) * Mat4::from_quat(self.rotation)).inverse()
     }
 }
 

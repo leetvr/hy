@@ -8,7 +8,12 @@ use {
     std::ops::{Add, Index, IndexMut, Sub},
 };
 
+use glam::{IVec3, UVec3, Vec3};
 use wasm_bindgen::prelude::*;
+
+mod raycast;
+
+pub use raycast::RayHit;
 
 pub type BlockId = u8;
 
@@ -25,6 +30,18 @@ pub struct BlockPos {
 impl BlockPos {
     pub fn new(x: u32, y: u32, z: u32) -> Self {
         Self { x, y, z }
+    }
+
+    pub fn from_signed(vec: Vec3) -> Option<Self> {
+        if vec.cmplt(Vec3::ZERO).any() {
+            return None;
+        }
+
+        Some(Self {
+            x: vec.x as u32,
+            y: vec.y as u32,
+            z: vec.z as u32,
+        })
     }
 }
 
@@ -61,6 +78,16 @@ impl Add<BlockPos> for BlockPos {
 impl From<[u32; 3]> for BlockPos {
     fn from([x, y, z]: [u32; 3]) -> Self {
         Self { x, y, z }
+    }
+}
+
+impl From<UVec3> for BlockPos {
+    fn from(vec: UVec3) -> Self {
+        Self {
+            x: vec.x,
+            y: vec.y,
+            z: vec.z,
+        }
     }
 }
 
@@ -111,6 +138,10 @@ impl BlockGrid {
                 }
             })
         })
+    }
+
+    pub fn raycast(&self, start: Vec3, direction: glam::Vec3) -> Option<raycast::RayHit> {
+        raycast::raycast(self, start, direction, 0.0)
     }
 }
 
