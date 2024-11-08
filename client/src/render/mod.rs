@@ -25,6 +25,7 @@ const UV_ATTRIBUTE: u32 = 2;
 
 pub struct Renderer {
     gl: glow::Context,
+    canvas: HtmlCanvasElement,
 
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
@@ -57,6 +58,7 @@ impl Renderer {
 
         Ok(Self {
             gl,
+            canvas,
             program,
             matrix_location,
             texture_location,
@@ -67,16 +69,19 @@ impl Renderer {
 
     pub fn render(&self, draw_calls: &[DrawCall]) {
         let gl = &self.gl;
+        let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
             gl.enable(glow::DEPTH_TEST);
+            gl.enable(glow::CULL_FACE);
+            gl.cull_face(glow::BACK);
 
             // Set the clear color
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
             let projection_matrix =
-                Mat4::perspective_rh_gl(45.0_f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
+                Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
             let view_matrix = self.camera.view_matrix();
 
