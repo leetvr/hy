@@ -1,11 +1,13 @@
 use {
+    anyhow::Result,
     blocks::{BlockGrid, BlockPos, BlockRegistry, EMPTY_BLOCK},
     glam::Vec3,
     physics::{PhysicsCollider, PhysicsWorld},
-    std::{collections::HashMap, mem},
+    std::{collections::HashMap, mem, path::Path},
 };
 
-const BLOCKS_PATH: &str = "game_data/blocks.json";
+const BLOCKS_PATH: &str = "blocks.json";
+const BLOCK_TYPES_PATH: &str = "block_types.json";
 
 pub struct World {
     pub physics_world: PhysicsWorld,
@@ -16,34 +18,31 @@ pub struct World {
 }
 
 impl World {
-    pub fn load() -> Self {
-        let size = 32;
-        let blocks = load_blocks().unwrap_or(generate_map(size, size));
+    pub fn load(storage_dir: impl AsRef<Path>) -> Result<Self> {
+        let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
+        let blocks = serde_json::from_slice(&std::fs::read(blocks_path)?)?;
+        let block_types_path = storage_dir.as_ref().join(BLOCK_TYPES_PATH);
+        let block_registry = serde_json::from_slice(&std::fs::read(&block_types_path)?)?;
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
 
         bake_terrain_colliders(&mut physics_world, &blocks, &mut colliders);
 
-        Self {
+        Ok(Self {
             physics_world,
             colliders,
             blocks,
-            block_registry: Default::default(),
+            block_registry,
             entities: Default::default(),
-        }
+        })
     }
 
     pub fn save(&mut self) -> anyhow::Result<()> {
         bake_terrain_colliders(&mut self.physics_world, &self.blocks, &mut self.colliders);
-        let blocks = serde_json::to_vec(&self.blocks)?;
+        let blocks = serde_json::to_string(&self.blocks)?;
         std::fs::write(BLOCKS_PATH, blocks)?;
         Ok(())
     }
-}
-
-fn load_blocks() -> anyhow::Result<BlockGrid> {
-    let blocks = serde_json::from_slice(&std::fs::read(BLOCKS_PATH)?)?;
-    Ok(blocks)
 }
 
 /// Generate a simple map for testing

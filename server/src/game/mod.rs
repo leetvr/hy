@@ -10,7 +10,7 @@ use {
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
-    std::{fmt::Display, sync::Arc},
+    std::{fmt::Display, path::Path, sync::Arc},
     world::World,
 };
 
@@ -23,13 +23,13 @@ pub struct GameServer {
 }
 
 impl GameServer {
-    pub fn new(spawner: tokio::runtime::Handle) -> Self {
+    pub fn new(spawner: tokio::runtime::Handle, storage_dir: impl AsRef<Path>) -> Self {
         let incoming_connections = Arc::new(SegQueue::new());
 
         spawner.spawn(network::start_client_listener(incoming_connections.clone()));
 
         // Load the world
-        let world = World::load();
+        let world = World::load(storage_dir).expect("Failed to load world");
 
         // Set the initial state
         let initial_state = ServerState::Paused(GameInstance::new(world));

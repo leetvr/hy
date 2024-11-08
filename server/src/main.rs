@@ -6,7 +6,7 @@ mod http;
 mod js;
 
 use {
-    std::time::Instant,
+    std::{str::FromStr, time::Instant},
     tracing_subscriber::{
         filter::{EnvFilter, LevelFilter},
         layer::SubscriberExt,
@@ -30,9 +30,16 @@ fn main() {
         .unwrap();
 
     // Start game server on a new thread
+    let args = std::env::args().collect::<Vec<_>>();
+    if args.len() != 2 {
+        tracing::error!("Usage: {} <world directory>", args[0]);
+        return;
+    }
+    let storage_dir = std::path::PathBuf::from_str(&args[1]).expect("Invalid storage dir path");
+
     let spawner = runtime.handle().clone();
     std::thread::spawn(move || {
-        let mut server = game::GameServer::new(spawner);
+        let mut server = game::GameServer::new(spawner, storage_dir);
 
         let mut last_tick = Instant::now();
         loop {

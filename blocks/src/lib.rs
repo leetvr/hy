@@ -150,15 +150,15 @@ fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlockType {
-    name: String,
-    north_texture: String,
-    south_texture: String,
-    east_texture: String,
-    west_texture: String,
-    top_texture: String,
-    bottom_texture: String,
-    metallic_factor: f32,
-    roughness_factor: f32,
+    pub name: String,
+    pub north_texture: String,
+    pub south_texture: String,
+    pub east_texture: String,
+    pub west_texture: String,
+    pub top_texture: String,
+    pub bottom_texture: String,
+    pub metallic_factor: f32,
+    pub roughness_factor: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -177,6 +177,10 @@ impl BlockRegistry {
         // This may be a dumb idea.
         let index = block_id as usize - 1;
         self.block_types.get(index)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &BlockType> {
+        self.block_types.iter()
     }
 
     #[cfg(not(target_arch = "wasm32"))]

@@ -1,5 +1,5 @@
 use {
-    blocks::{BlockGrid, BlockPos},
+    blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
     serde::{Deserialize, Serialize},
 };
@@ -54,6 +54,7 @@ pub struct RemovePlayer {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Init {
     pub blocks: BlockGrid,
+    pub block_registry: BlockRegistry,
     pub client_player: PlayerId,
 }
 

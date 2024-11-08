@@ -1,0 +1,15 @@
+{
+    "block_types": [
+        {
+            "name": "block",
+            "north_texture": "kibble_ctf/block_top.png",
+            "south_texture": "kibble_ctf/block_top.png",
+            "east_texture": "kibble_ctf/block_side.png",
+            "west_texture": "kibble_ctf/block_side.png",
+            "top_texture": "kibble_ctf/block_side.png",
+            "bottom_texture": "kibble_ctf/block_side.png",
+            "metallic_factor": 0.2,
+            "roughness_factor": 0.5
+        }
+    ]
+}
