@@ -1,6 +1,7 @@
-import { PlayerState } from "./lib/player";
+import { PlayerState, PlayerControls } from "./lib/player";
 
-function updatePlayerState(playerState: PlayerState): PlayerState {
-    playerState.position += 1;
-    return playerState;
+export function update(controls: PlayerControls, state: PlayerState): PlayerState {
+    state.x += controls.move_x * 10.;
+    state.y += controls.move_y * 10.;
+    return state;
 }
