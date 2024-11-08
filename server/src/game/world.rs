@@ -45,35 +45,6 @@ impl World {
     }
 }
 
-/// Generate a simple map for testing
-fn generate_map(x: u32, z: u32) -> BlockGrid {
-    let mut blocks = BlockGrid::new(x, 16, z);
-
-    // Generate flat ground
-    for x in 0..x {
-        for y in 0..1 {
-            for z in 0..z {
-                blocks[[x, y, z].into()] = 1;
-            }
-        }
-    }
-
-    // Platform in the middle
-    let mid_x = x / 2;
-    let mid_z = z / 2;
-    for x in mid_x - 2..mid_x + 2 {
-        for z in mid_z - 2..mid_z + 2 {
-            blocks[[x, 1, z].into()] = 1;
-        }
-    }
-
-    // Write the blocks to disk
-    let blocks_json = serde_json::to_vec(&blocks).unwrap();
-    std::fs::write(BLOCKS_PATH, blocks_json).unwrap();
-
-    blocks
-}
-
 /// Rebuilds the terrain colliders from the block grid
 ///
 /// This builds trimesh colliders, two for each layer along each axis: X+, X-, Y+, Y-, Z+, Z-

@@ -51,3 +51,6 @@ thiserror = "2.0.0"
 net-types.path = "net-types"
 blocks.path = "blocks"
 physics.path = "physics"
+
+[profile.release]
+debug = "line-tables-only"
