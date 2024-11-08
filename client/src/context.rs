@@ -1,6 +1,7 @@
 use blocks::BlockId;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
+use web_sys::js_sys;
 
 use crate::{Engine, GameState};
 
@@ -14,11 +15,15 @@ pub enum EngineMode {
 
 pub struct Context {
     canvas: web_sys::HtmlCanvasElement,
+    pub on_init_callback: Option<js_sys::Function>,
 }
 
 impl Context {
     pub fn new(canvas: web_sys::HtmlCanvasElement) -> Self {
-        Self { canvas }
+        Self {
+            canvas,
+            on_init_callback: None,
+        }
     }
 }
 
@@ -39,6 +44,11 @@ impl Engine {
 
     pub fn ctx_get_canvas(&self) -> web_sys::HtmlCanvasElement {
         self.context.canvas.clone()
+    }
+
+    pub fn ctx_on_init(&mut self, cb: js_sys::Function) {
+        // Store the callback to keep it alive
+        self.context.on_init_callback = Some(cb);
     }
 
     pub fn ctx_set_editor_block_id(&mut self, block_id: BlockId) {

@@ -8,3 +8,4 @@ glam.workspace = true
 tracing.workspace = true
 serde.workspace = true
 wasm-bindgen.workspace = true
+tsify.workspace = true

@@ -20,7 +20,7 @@ impl CubeVao {
             gl.bind_vertex_array(Some(vao));
 
             let vertices: [Vertex; 24] = [
-                // Front face (z = 1.0, normal (0, 0, 1))
+                // North face (z = 1.0, normal (0, 0, 1))
                 Vertex {
                     position: [0.0, 0.0, 1.0],
                     normal: [0.0, 0.0, 1.0],
@@ -41,7 +41,7 @@ impl CubeVao {
                     normal: [0.0, 0.0, 1.0],
                     uv: [0.0, 1.0],
                 },
-                // Back face (z = 0.0, normal (0, 0, -1))
+                // South face (z = 0.0, normal (0, 0, -1))
                 Vertex {
                     position: [1.0, 0.0, 0.0],
                     normal: [0.0, 0.0, -1.0],
@@ -62,7 +62,7 @@ impl CubeVao {
                     normal: [0.0, 0.0, -1.0],
                     uv: [0.0, 1.0],
                 },
-                // Left face (x = 0.0, normal (-1, 0, 0))
+                // East face (x = 0.0, normal (-1, 0, 0))
                 Vertex {
                     position: [0.0, 0.0, 0.0],
                     normal: [-1.0, 0.0, 0.0],
@@ -83,7 +83,7 @@ impl CubeVao {
                     normal: [-1.0, 0.0, 0.0],
                     uv: [0.0, 1.0],
                 },
-                // Right face (x = 1.0, normal (1, 0, 0))
+                // West face (x = 1.0, normal (1, 0, 0))
                 Vertex {
                     position: [1.0, 0.0, 1.0],
                     normal: [1.0, 0.0, 0.0],
