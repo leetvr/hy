@@ -435,15 +435,133 @@ pub struct CubeVao {
 impl CubeVao {
     pub fn new(gl: &glow::Context) -> Self {
         unsafe {
-            let positions = [
-                Vec3::new(0.0, 0.0, 0.0),
-                Vec3::new(1.0, 0.0, 0.0),
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec3::new(0.0, 1.0, 0.0),
-                Vec3::new(0.0, 0.0, 1.0),
-                Vec3::new(1.0, 0.0, 1.0),
-                Vec3::new(1.0, 1.0, 1.0),
-                Vec3::new(0.0, 1.0, 1.0),
+            let vertices: [GLTFVertex; 24] = [
+                // Front face (z = 1.0, normal (0, 0, 1))
+                GLTFVertex {
+                    position: [0.0, 0.0, 1.0],
+                    normal: [0.0, 0.0, 1.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 0.0, 1.0],
+                    normal: [0.0, 0.0, 1.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 1.0],
+                    normal: [0.0, 0.0, 1.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 1.0, 1.0],
+                    normal: [0.0, 0.0, 1.0],
+                    uv: [0.0, 1.0],
+                },
+                // Back face (z = 0.0, normal (0, 0, -1))
+                GLTFVertex {
+                    position: [1.0, 0.0, 0.0],
+                    normal: [0.0, 0.0, -1.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 0.0, 0.0],
+                    normal: [0.0, 0.0, -1.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 1.0, 0.0],
+                    normal: [0.0, 0.0, -1.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 0.0],
+                    normal: [0.0, 0.0, -1.0],
+                    uv: [0.0, 1.0],
+                },
+                // Left face (x = 0.0, normal (-1, 0, 0))
+                GLTFVertex {
+                    position: [0.0, 0.0, 0.0],
+                    normal: [-1.0, 0.0, 0.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 0.0, 1.0],
+                    normal: [-1.0, 0.0, 0.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 1.0, 1.0],
+                    normal: [-1.0, 0.0, 0.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 1.0, 0.0],
+                    normal: [-1.0, 0.0, 0.0],
+                    uv: [0.0, 1.0],
+                },
+                // Right face (x = 1.0, normal (1, 0, 0))
+                GLTFVertex {
+                    position: [1.0, 0.0, 1.0],
+                    normal: [1.0, 0.0, 0.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 0.0, 0.0],
+                    normal: [1.0, 0.0, 0.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 0.0],
+                    normal: [1.0, 0.0, 0.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 1.0],
+                    normal: [1.0, 0.0, 0.0],
+                    uv: [0.0, 1.0],
+                },
+                // Top face (y = 1.0, normal (0, 1, 0))
+                GLTFVertex {
+                    position: [0.0, 1.0, 1.0],
+                    normal: [0.0, 1.0, 0.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 1.0],
+                    normal: [0.0, 1.0, 0.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 1.0, 0.0],
+                    normal: [0.0, 1.0, 0.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 1.0, 0.0],
+                    normal: [0.0, 1.0, 0.0],
+                    uv: [0.0, 1.0],
+                },
+                // Bottom face (y = 0.0, normal (0, -1, 0))
+                GLTFVertex {
+                    position: [0.0, 0.0, 0.0],
+                    normal: [0.0, -1.0, 0.0],
+                    uv: [0.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 0.0, 0.0],
+                    normal: [0.0, -1.0, 0.0],
+                    uv: [1.0, 0.0],
+                },
+                GLTFVertex {
+                    position: [1.0, 0.0, 1.0],
+                    normal: [0.0, -1.0, 0.0],
+                    uv: [1.0, 1.0],
+                },
+                GLTFVertex {
+                    position: [0.0, 0.0, 1.0],
+                    normal: [0.0, -1.0, 0.0],
+                    uv: [0.0, 1.0],
+                },
             ];
 
             let vao = gl
@@ -455,17 +573,18 @@ impl CubeVao {
             gl.bind_buffer(glow::ARRAY_BUFFER, Some(vertex_buffer));
             gl.buffer_data_u8_slice(
                 glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&positions),
+                bytemuck::cast_slice(&vertices),
                 glow::STATIC_DRAW,
             );
 
-            let indices = [
-                0, 1, 2, 2, 3, 0, // Front
-                1, 5, 6, 6, 2, 1, // Right
-                5, 4, 7, 7, 6, 5, // Back
-                4, 0, 3, 3, 7, 4, // Left
-                3, 2, 6, 6, 7, 3, // Top
-                4, 5, 1, 1, 0, 4, // Bottom
+            let indices: [u16; 36] = [
+                // Front face
+                0, 1, 2, 2, 3, 0, // Back face
+                4, 5, 6, 6, 7, 4, // Left face
+                8, 9, 10, 10, 11, 8, // Right face
+                12, 13, 14, 14, 15, 12, // Top face
+                16, 17, 18, 18, 19, 16, // Bottom face
+                20, 21, 22, 22, 23, 20,
             ];
 
             let index_buffer = gl.create_buffer().expect("Failed to create buffer");
