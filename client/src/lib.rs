@@ -453,6 +453,7 @@ impl Engine {
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
 
+        // Gather blocks
         match &self.state {
             GameState::Playing {
                 blocks,
@@ -478,12 +479,13 @@ impl Engine {
                         render::build_cube_draw_calls(&self.cube_mesh_data, blocks).into_iter(),
                     );
 
-                    tracing::info!("Rendered {} faces", draw_calls.len());
+                    tracing::trace!("Rendered {} faces", draw_calls.len());
                 }
             }
             _ => {}
         };
 
+        // Gather state-specific extras
         match &self.state {
             GameState::Playing { players, .. } => {
                 for player in players.values() {
@@ -494,7 +496,21 @@ impl Engine {
                     ));
                 }
             }
-            GameState::Editing { .. } => {}
+            GameState::Editing {
+                target_block: Some(block_pos),
+                selected_block_id: Some(block_id),
+                ..
+            } => {
+                if let Some(block_textures) = &self.block_textures {
+                    let textures = &block_textures[*block_id as usize - 1];
+                    let blocks = [(*block_pos, textures)];
+
+                    draw_calls.extend(
+                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks.into_iter())
+                            .into_iter(),
+                    );
+                }
+            }
             _ => (),
         }
 
