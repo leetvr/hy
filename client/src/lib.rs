@@ -23,6 +23,7 @@ use blocks::BlockId;
 pub use blocks::BlockPos;
 
 use context::EngineMode;
+use glam::UVec2;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -190,6 +191,10 @@ impl Engine {
             2 => self.controls.mouse_right = true,
             _ => {}
         }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.renderer.resize(UVec2::new(width, height));
     }
 
     pub fn tick(&mut self, time: f64) {

@@ -12,7 +12,7 @@ use {
 };
 
 use bytemuck::offset_of;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, UVec2, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
@@ -33,6 +33,7 @@ pub struct Renderer {
     tint_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
+    resolution: UVec2,
 }
 
 impl Renderer {
@@ -64,7 +65,12 @@ impl Renderer {
             texture_location,
             tint_location,
             camera,
+            resolution: UVec2::new(640, 480),
         })
+    }
+
+    pub fn resize(&mut self, dimension: UVec2) {
+        self.resolution = dimension;
     }
 
     pub fn render(&self, draw_calls: &[DrawCall]) {
@@ -72,6 +78,9 @@ impl Renderer {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
+            self.gl
+                .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
+
             gl.enable(glow::DEPTH_TEST);
             gl.enable(glow::CULL_FACE);
             gl.cull_face(glow::BACK);

@@ -100,6 +100,25 @@ function WasmWrapper() {
           });
         });
 
+        new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target !== canvas) {
+              console.warn("Unexpected resize observer target", entry.target);
+              continue;
+            }
+
+            const size = entry.devicePixelContentBoxSize[0];
+
+            const height = size.blockSize;
+            const width = size.inlineSize;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            engine.resize(width, height);
+          }
+        }).observe(canvas);
+
         document.addEventListener("pointerlockchange", () => {
           if (document.pointerLockElement === canvas) {
             window.addEventListener("keydown", on_key_down);
