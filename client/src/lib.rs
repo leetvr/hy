@@ -31,6 +31,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
 mod assets;
+mod audio;
 mod camera;
 mod context;
 mod gltf;
@@ -67,6 +68,8 @@ pub struct Engine {
 
     assets: assets::Assets,
     state: GameState,
+
+    audio_manager: audio::AudioManager,
 }
 
 #[wasm_bindgen]
@@ -103,6 +106,8 @@ impl Engine {
             TestGltf { gltf, render_model }
         };
 
+        let audio_manager = audio::AudioManager::new()?;
+
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
@@ -122,8 +127,20 @@ impl Engine {
 
             assets: Assets::new(),
             state: Default::default(),
+            audio_manager,
         })
     }
+
+    // Expose a simplified method to start playing a sound using specified URL
+    pub async fn load_and_play_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        self.audio_manager.debug_load_and_play_sound(url).await
+    }
+
+    // pub fn start_player_footsteps(&mut self) {
+    //     let footstep_sound = audio_manager.load_sound("url_to_your_footstep_sound.mp3").await?;
+    //     // Play the sound when this function is called, e.g., when the player starts moving
+    //     self.audio_manager.play_sound(&self.footstep_sound).expect("Failed to play sound");
+    // }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
         if event.code() == "KeyR" {
