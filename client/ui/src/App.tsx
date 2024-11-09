@@ -9,16 +9,17 @@ import RightBar from "./RightBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
-  const [currentMode, setMode] = useState(initialEngineMode);
+  const [currentMode, setModeState] = useState(initialEngineMode);
 
   useEffect(() => {
     console.log("App has been mounted probably");
   }, []);
 
-  const handleClick = () => {
-    const nextMode = nextEngineMode(currentMode);
-    setMode(nextMode);
-    engine.ctx_set_engine_mode(nextMode);
+  const setMode = (newMode: EngineMode) => {
+    if(newMode != currentMode) {
+        setModeState(newMode);
+        engine.ctx_set_engine_mode(newMode);
+    }
   };
 
   const editClass = getEngineModeText(currentMode);
@@ -26,17 +27,11 @@ function App({ engine }: { engine: Engine }) {
   return (
     <>
       <div className={"mode-"+editClass}>
-        <TopBar />
+        <TopBar setMode={setMode} />
         <LeftBar />
         <RightBar />
     </div>
       <div className="cardx">
-        <p>
-          We are currently in <strong>{getEngineModeText(currentMode)}</strong> mode
-        </p>
-        <button onClick={handleClick}>
-          Switch to {getEngineModeText(nextEngineMode(currentMode))}
-        </button>
         {currentMode === EngineMode.Edit && <Editor engine={engine} />}
         <AudioPlayer />
       </div>
