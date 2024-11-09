@@ -15,7 +15,7 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
     let theContent;
     if(currentTab === LeftBarTab.Blocks) {
-        theContent = <BlockList blockRegistry={blockRegistry} />;
+        theContent = <BlockList blockRegistry={blockRegistry} setEngineBlockIndex={(idx) => { engine.ctx_set_editor_block_id(idx) }} />;
     } else if(currentTab === LeftBarTab.Entities) {
         theContent = <p>What even <i>is</i> an entity, man?</p>;
     } else {
