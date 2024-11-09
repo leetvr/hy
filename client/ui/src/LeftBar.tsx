@@ -1,6 +1,8 @@
 // The "left bar": the block/entity palettes
 import { useState } from "react";
+import { AudioPlayer } from "./AudioPlayer";
 import { EngineMode } from "../../pkg/client.js";
+import Editor from "./Editor.js";
 
 enum LeftBarTab {
     Blocks,
@@ -8,9 +10,19 @@ enum LeftBarTab {
     Debug,
 };
 
-export default function LeftBar() {
+export default function LeftBar({ engine, currentMode }: { Engine, EngineMode }) {
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
-    let theContent = <p>hi - {currentTab}</p>;
+    let theContent;
+    if(currentTab === LeftBarTab.Blocks) {
+        theContent = <p>blocks</p>;
+    } else if(currentTab === LeftBarTab.Entities) {
+        theContent = <p>entities</p>;
+    } else {
+        theContent = <div>
+            <AudioPlayer />
+            {currentMode === EngineMode.Edit && <Editor engine={engine} />}
+        </div>;
+    }
     // TODO: If we ever need to use it for anything else, this tab-bar business
     // can sensibly be separated into its own component
     return <div className="editor-panel" id="toolbox">

@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { AudioPlayer } from "./AudioPlayer";
 import init, { Engine, EngineMode } from "../../pkg/client.js";
-import Editor from "./Editor.js";
 import TopBar from "./TopBar.tsx";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
@@ -25,17 +23,11 @@ function App({ engine }: { engine: Engine }) {
   const editClass = getEngineModeText(currentMode);
 
   return (
-    <>
-      <div className={"mode-"+editClass}>
+    <div className={"mode-"+editClass}>
         <TopBar setMode={setMode} />
-        <LeftBar />
+        <LeftBar engine={engine} currentMode={currentMode} />
         <RightBar />
     </div>
-      <div className="cardx">
-        {currentMode === EngineMode.Edit && <Editor engine={engine} />}
-        <AudioPlayer />
-      </div>
-    </>
   );
 }
 
