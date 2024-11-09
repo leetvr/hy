@@ -9,6 +9,9 @@
    id="svg5"
    inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
    sodipodi:docname="block-generic.svg"
+   inkscape:export-filename="../public/block-generic.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -61,7 +64,7 @@
        y="0.39687482" />
     <path
        id="rect6282"
-       style="fill:#ffffff;fill-rule:evenodd;stroke:#b3b3b3;stroke-width:0.264583;stop-color:#000000"
+       style="fill:none;fill-rule:evenodd;stroke:#b3b3b3;stroke-width:0.264583;stop-color:#000000"
        d="M 2.5135416 2.778125 L 2.5135416 5.6885416 L 6.2177082 5.6885416 L 6.2177082 2.778125 L 2.5135416 2.778125 z " />
     <path
        style="fill:none;stroke:#b3b3b3;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
