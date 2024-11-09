@@ -27,7 +27,7 @@ function App({ engine }: { engine: Engine }) {
     <div className={"mode-"+editClass}>
         <TopBar setMode={setMode} />
         <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} />
-        <RightBar />
+        <RightBar selectedEntity={false} />
     </div>
   );
 }
