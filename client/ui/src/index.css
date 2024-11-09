@@ -69,6 +69,25 @@ a:hover {
     border: 1px solid #a9a9a9;
     background-color: #a9a9a9;
 }
+.block-button {
+    line-height: 32px;
+    border: 3px solid #f9f9f9;
+    margin: 4px 4px 4px 0px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+}
+.block-button img {
+    display: inline-block;
+    vertical-align: middle;
+}
+.block-button.button-on {
+    background-color: #a9a9a9;
+    border: 3px solid #ff7538;
+}
+.block-button-container {
+    /* todo: scroll behaviour here, when we have more blocks */
+}
 
 body {
   margin: 0;

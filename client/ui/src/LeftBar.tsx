@@ -1,6 +1,7 @@
 // The "left bar": the block/entity palettes
 import { useState } from "react";
 import { AudioPlayer } from "./AudioPlayer";
+import BlockList from "./BlockList.tsx";
 import { BlockRegistry, Engine, EngineMode } from "../../pkg/client.js";
 import Editor from "./Editor.js";
 
@@ -14,9 +15,9 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
     let theContent;
     if(currentTab === LeftBarTab.Blocks) {
-        theContent = <p>blocks</p>;
+        theContent = <BlockList blockRegistry={blockRegistry} />;
     } else if(currentTab === LeftBarTab.Entities) {
-        theContent = <p>entities</p>;
+        theContent = <p>What even <i>is</i> an entity, man?</p>;
     } else {
         theContent = <div>
             <AudioPlayer />
