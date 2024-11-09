@@ -20,6 +20,25 @@
     display: block;
 }
 
+#editorcontrols span {
+    font-size: 400%;
+    padding: 0 12px;
+    line-height: 0.8;
+    transition: background-color 0.3s;
+}
+.mode-Edit #stop-button,
+.mode-Play #play-button,
+.mode-Pause #pause-button {
+    text-shadow: 0 0 8px #ff7538;
+    background-color: #a9a9a9;
+}
+
+.editor-panel {
+    background-color: #d9d9d9;
+    border-radius: 8px;
+    padding: 8px;
+}
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -67,11 +86,9 @@ button:focus-visible {
     height: 75%;
     width: 15%;
     left: 5%;
-    background-color: #0f0;
 }
 #propbox {
     position: absolute;
-    background-color: #00f;
     bottom: 20%;
     height: 40%;
     right: 5%;
@@ -85,7 +102,7 @@ button:focus-visible {
     top: 2%;
 }
 #editorcontrols>.ec-content {
-    background-color: #f00;
+    overflow: hidden;
 }
 
 @media (prefers-color-scheme: light) {

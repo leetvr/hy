@@ -21,11 +21,11 @@ function App({ engine }: { engine: Engine }) {
     engine.ctx_set_engine_mode(nextMode);
   };
 
-  const edit_class = getEngineModeText(currentMode);
+  const editClass = getEngineModeText(currentMode);
 
   return (
     <>
-      <div className={edit_class}>
+      <div className={"mode-"+editClass}>
         <TopBar />
         <LeftBar />
         <RightBar />

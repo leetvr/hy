@@ -1,8 +1,18 @@
 // The "top bar": play/pause/stop controls
-export default function TopBar() {
+import EngineMode from "../../pkg/client.js";
+
+export default function TopBar({ editorMode }: { editorMode: EngineMode }) {
     return <div id="editorcontrols">
-        <div className="ec-content">
-            <p>I am the walrus</p>
+        <div className="ec-content editor-panel">
+            <span id="play-button">
+             ⏵
+            </span>
+            <span id="pause-button">
+             ⏸
+            </span>
+            <span id="stop-button">
+             ⏹
+            </span>
         </div>
     </div>;
 }
