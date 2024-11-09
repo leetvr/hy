@@ -40,7 +40,7 @@ impl GameInstance {
         }
     }
 
-    pub fn from_editor(editor_instance: EditorInstance) -> Self {
+    pub async fn from_editor(editor_instance: EditorInstance) -> Self {
         let EditorInstance {
             world,
             mut editor_client,
@@ -68,12 +68,15 @@ impl GameInstance {
         game_instance.next_client_id = game_instance.next_client_id + 1;
 
         // Send reset packet
-        let _ = editor_client.outgoing_tx.blocking_send(
-            net_types::Reset {
-                new_client_player: player_id,
-            }
-            .into(),
-        );
+        let _ = editor_client
+            .outgoing_tx
+            .send(
+                net_types::Reset {
+                    new_client_player: player_id,
+                }
+                .into(),
+            )
+            .await;
 
         game_instance.clients.insert(client_id, editor_client);
         game_instance
@@ -81,12 +84,12 @@ impl GameInstance {
 
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
         // Handle client messages
-        let maybe_next_state = self.client_net_updates();
+        let maybe_next_state = self.client_net_updates().await;
 
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
             player.position = js_context
-                .get_player_next_position(&client.last_controls)
+                .get_player_next_position(&player.position, &client.last_controls)
                 .await
                 .unwrap();
         }
@@ -97,7 +100,7 @@ impl GameInstance {
         maybe_next_state
     }
 
-    pub fn handle_new_client(
+    pub async fn handle_new_client(
         &mut self,
         (incoming_rx, outgoing_tx): (ClientMessageReceiver, ServerMessageSender),
     ) {
@@ -112,14 +115,16 @@ impl GameInstance {
         self.next_client_id = self.next_client_id + 1;
 
         // Send world init packet
-        let _ = outgoing_tx.blocking_send(
-            net_types::Init {
-                blocks: self.world.blocks.clone(),
-                block_registry: self.world.block_registry.clone(),
-                client_player: player_id,
-            }
-            .into(),
-        );
+        let _ = outgoing_tx
+            .send(
+                net_types::Init {
+                    blocks: self.world.blocks.clone(),
+                    block_registry: self.world.block_registry.clone(),
+                    client_player: player_id,
+                }
+                .into(),
+            )
+            .await;
 
         self.clients.insert(
             client_id,
@@ -135,7 +140,7 @@ impl GameInstance {
         tracing::info!("New client connected: {:?}", client_id);
     }
 
-    fn client_net_updates(&mut self) -> Option<NextServerState> {
+    async fn client_net_updates(&mut self) -> Option<NextServerState> {
         let mut disconnected = Vec::new();
         let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
@@ -176,13 +181,16 @@ impl GameInstance {
             // Add new players to this client
             for player_id in new_players {
                 let player = self.players.get(player_id).unwrap();
-                let _ = client.outgoing_tx.blocking_send(
-                    net_types::AddPlayer {
-                        id: *player_id,
-                        position: player.position,
-                    }
-                    .into(),
-                );
+                let _ = client
+                    .outgoing_tx
+                    .send(
+                        net_types::AddPlayer {
+                            id: *player_id,
+                            position: player.position,
+                        }
+                        .into(),
+                    )
+                    .await;
                 client.known_players.insert(*player_id, player.position);
             }
 
@@ -190,7 +198,8 @@ impl GameInstance {
             for player_id in removed_players {
                 let _ = client
                     .outgoing_tx
-                    .blocking_send(net_types::RemovePlayer { id: *player_id }.into());
+                    .send(net_types::RemovePlayer { id: *player_id }.into())
+                    .await;
                 client.known_players.remove(player_id);
             }
 
@@ -198,13 +207,16 @@ impl GameInstance {
             for (player_id, known_position) in client.known_players.iter_mut() {
                 let player = self.players.get(player_id).unwrap();
                 if player.position != *known_position {
-                    let _ = client.outgoing_tx.blocking_send(
-                        net_types::UpdatePosition {
-                            id: *player_id,
-                            position: player.position,
-                        }
-                        .into(),
-                    );
+                    let _ = client
+                        .outgoing_tx
+                        .send(
+                            net_types::UpdatePosition {
+                                id: *player_id,
+                                position: player.position,
+                            }
+                            .into(),
+                        )
+                        .await;
                     *known_position = player.position;
                 }
             }

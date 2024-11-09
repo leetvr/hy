@@ -1,23 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
-export interface PlayerState {
-    x: number;
-    y: number;
-    z: number;
-}
+
+export type Vec2 = [number, number];
+export type Vec3 = [number, number, number];
 
 export interface PlayerControls {
-    move_x: number;
-    move_y: number;
-    jump: boolean;
+  move_direction: Vec2;
+  jump: boolean;
 }
 
-export class PlayerControls {
-  free(): void;
-  jump: boolean;
-  move_x: number;
-  move_y: number;
-}
-export class PlayerState {
-  free(): void;
-}
+type PlayerUpdate = (position: Vec3, controls: PlayerControls) => Vec3;

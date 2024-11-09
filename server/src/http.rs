@@ -10,6 +10,7 @@ use tokio::{
 /// If you're going to make your protocol string based, then I'm going to implement it with string
 /// manipulation.
 pub async fn start_http_server() -> Result<()> {
+    tracing::info!("Starting HTTP server on 0:8888");
     let listener = TcpListener::bind("127.0.0.1:8888").await?;
 
     loop {
