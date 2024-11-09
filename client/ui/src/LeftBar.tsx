@@ -1,7 +1,7 @@
 // The "left bar": the block/entity palettes
 import { useState } from "react";
 import { AudioPlayer } from "./AudioPlayer";
-import { EngineMode } from "../../pkg/client.js";
+import { BlockRegistry, Engine, EngineMode } from "../../pkg/client.js";
 import Editor from "./Editor.js";
 
 enum LeftBarTab {
@@ -10,7 +10,7 @@ enum LeftBarTab {
     Debug,
 };
 
-export default function LeftBar({ engine, currentMode }: { Engine, EngineMode }) {
+export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine, EngineMode, BlockRegistry }) {
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
     let theContent;
     if(currentTab === LeftBarTab.Blocks) {
@@ -20,7 +20,7 @@ export default function LeftBar({ engine, currentMode }: { Engine, EngineMode })
     } else {
         theContent = <div>
             <AudioPlayer />
-            {currentMode === EngineMode.Edit && <Editor engine={engine} />}
+            {currentMode === EngineMode.Edit && <Editor engine={engine} blockRegistry={blockRegistry} />}
         </div>;
     }
     // TODO: If we ever need to use it for anything else, this tab-bar business

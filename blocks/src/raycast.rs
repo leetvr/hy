@@ -1,4 +1,4 @@
-use glam::{BVec3, IVec3, Vec3, Vec3Swizzles};
+use glam::Vec3;
 
 use crate::{BlockGrid, BlockPos, EMPTY_BLOCK};
 
@@ -7,11 +7,20 @@ pub struct RayHit {
     pub position: BlockPos,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum RaycastMode {
+    // We want to do something with the block that was selected
+    Selecting,
+    // We want to do something *above* the block that was selected
+    Placing,
+}
+
 pub(crate) fn raycast(
     blocks: &BlockGrid,
     starting_position: Vec3,
     direction: Vec3,
     floor: f32,
+    mode: RaycastMode,
 ) -> Option<RayHit> {
     // Implementation of Amanatides and Woo's raycasting algorithm
 
@@ -40,15 +49,26 @@ pub(crate) fn raycast(
     // Sanitize the NaNs
     let t_delta = Vec3::select(ray_dir_zero, Vec3::INFINITY, t_delta);
 
-    for i in 0..1000 {
+    let (_, max_y, _) = blocks.size();
+
+    for _ in 0..1000 {
         let blockpos = BlockPos::from_signed(current_voxel);
         let block = blockpos.and_then(|pos| blocks.get(pos)).copied();
         let block_is_empty = block.map_or(true, |block| block == EMPTY_BLOCK);
 
         if !block_is_empty {
-            return Some(RayHit {
-                position: blockpos.unwrap(),
-            });
+            let mut blockpos = blockpos.unwrap();
+
+            // If we're in placing mode, we actually want the blockpos *above* this one.
+            match mode {
+                RaycastMode::Placing => {
+                    if blockpos.y < max_y {
+                        blockpos.y += 1;
+                    }
+                }
+                _ => {}
+            };
+            return Some(RayHit { position: blockpos });
         }
 
         // If we hit below the floor, we return the block above the floor.

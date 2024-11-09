@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use net_types::SetBlock;
 use tokio::sync::mpsc;
 
@@ -16,7 +18,7 @@ impl EditorInstance {
         }
     }
 
-    pub(crate) fn tick(&mut self) -> Option<super::NextServerState> {
+    pub(crate) fn tick(&mut self, storage_dir: &PathBuf) -> Option<super::NextServerState> {
         let mut maybe_next_state = None;
 
         while let Some(packet) = match self.editor_client.incoming_rx.try_recv() {
@@ -34,7 +36,7 @@ impl EditorInstance {
                 net_types::ClientPacket::Start => maybe_next_state = Some(NextServerState::Playing),
                 net_types::ClientPacket::Pause => maybe_next_state = Some(NextServerState::Paused),
                 net_types::ClientPacket::SetBlock(set_block) => {
-                    self.set_block(set_block);
+                    self.set_block(set_block, storage_dir);
                 }
                 _ => {}
             }
@@ -43,10 +45,10 @@ impl EditorInstance {
         maybe_next_state
     }
 
-    fn set_block(&mut self, set_block: SetBlock) {
+    fn set_block(&mut self, set_block: SetBlock, storage_dir: impl AsRef<Path>) {
         let SetBlock { position, block_id } = set_block;
         tracing::debug!("Setting block at {position:?} to {block_id}");
         self.world.blocks[position] = block_id;
-        self.world.save().expect("save world");
+        self.world.save(storage_dir).expect("save world");
     }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import init, { Engine, EngineMode } from "../../pkg/client.js";
+import init, { Engine, EngineMode, BlockRegistry } from "../../pkg/client.js";
 import TopBar from "./TopBar.tsx";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
@@ -8,10 +8,11 @@ import RightBar from "./RightBar.tsx";
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
   const [currentMode, setModeState] = useState(initialEngineMode);
+  const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
 
   useEffect(() => {
-    console.log("App has been mounted probably");
-  }, []);
+    engine.ctx_on_init(setBlockRegistry);
+  }, [engine]);
 
   const setMode = (newMode: EngineMode) => {
     if(newMode != currentMode) {
@@ -25,7 +26,7 @@ function App({ engine }: { engine: Engine }) {
   return (
     <div className={"mode-"+editClass}>
         <TopBar setMode={setMode} />
-        <LeftBar engine={engine} currentMode={currentMode} />
+        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} />
         <RightBar />
     </div>
   );
@@ -93,6 +94,25 @@ function WasmWrapper() {
             unadjustedMovement: true,
           });
         });
+
+        new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target !== canvas) {
+              console.warn("Unexpected resize observer target", entry.target);
+              continue;
+            }
+
+            const size = entry.devicePixelContentBoxSize[0];
+
+            const height = size.blockSize;
+            const width = size.inlineSize;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            engine.resize(width, height);
+          }
+        }).observe(canvas);
 
         document.addEventListener("pointerlockchange", () => {
           if (document.pointerLockElement === canvas) {

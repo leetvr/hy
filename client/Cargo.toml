@@ -23,6 +23,8 @@ bincode.workspace = true
 wasm-bindgen-futures.workspace = true
 dolly.workspace = true
 tokio = { workspace = true, features = ["sync"] }
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
 
 net-types.workspace = true
 blocks.workspace = true

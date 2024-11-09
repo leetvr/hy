@@ -8,7 +8,9 @@ use {
     std::ops::{Add, Index, IndexMut, Sub},
 };
 
-use glam::{IVec3, UVec3, Vec3};
+use glam::{UVec3, Vec3};
+pub use raycast::RaycastMode;
+use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
 mod raycast;
@@ -18,6 +20,7 @@ pub use raycast::RayHit;
 pub type BlockId = u8;
 
 pub const EMPTY_BLOCK: BlockId = 0;
+pub const MAX_BLOCK_HEIGHT: u32 = 64;
 
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -140,8 +143,13 @@ impl BlockGrid {
         })
     }
 
-    pub fn raycast(&self, start: Vec3, direction: glam::Vec3) -> Option<raycast::RayHit> {
-        raycast::raycast(self, start, direction, 0.0)
+    pub fn raycast(
+        &self,
+        start: Vec3,
+        direction: glam::Vec3,
+        mode: RaycastMode,
+    ) -> Option<raycast::RayHit> {
+        raycast::raycast(self, start, direction, 0.0, mode)
     }
 }
 
@@ -179,7 +187,7 @@ fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
     x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize)
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Tsify, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BlockType {
     pub name: String,
     pub north_texture: String,
@@ -192,9 +200,15 @@ pub struct BlockType {
     pub roughness_factor: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Tsify, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct BlockRegistry {
     block_types: Vec<BlockType>,
+}
+
+impl BlockRegistry {
+    pub fn blocks(&self) -> Vec<BlockType> {
+        self.block_types.clone()
+    }
 }
 
 impl BlockRegistry {
