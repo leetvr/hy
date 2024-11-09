@@ -26,7 +26,7 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     }
     // TODO: If we ever need to use it for anything else, this tab-bar business
     // can sensibly be separated into its own component
-    return <div className="editor-panel" id="toolbox">
+    return <div className="editor-panel editor-only" id="toolbox">
         <div className="tab-bar">
             <button
               className={currentTab == LeftBarTab.Blocks ? "tab-on" : ""}

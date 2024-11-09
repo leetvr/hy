@@ -2,7 +2,7 @@
 // case, the properties panel
 
 export default function RightBar() {
-    return <div className="editor-panel" id="propbox">
+    return <div className="editor-panel editor-only" id="propbox">
         <p>Siege chopper, checking in 🚁</p>
     </div>;
 }
