@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use glam::Vec3;
 use net_types::PlayerId;
 use tokio::sync::mpsc;
+
+use crate::js::JSContext;
 
 use super::{
     editor_instance::EditorInstance,
@@ -78,34 +79,20 @@ impl GameInstance {
         game_instance
     }
 
-    pub fn tick(&mut self) -> Option<NextServerState> {
+    pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
         // Handle client messages
         let maybe_next_state = self.client_net_updates();
 
-        // Add forces/velocities
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            let move_dir = client.last_controls.move_direction;
-            self.world.physics_world.set_velocity_piecewise(
-                &player.body,
-                Some(move_dir.x * PLAYER_SPEED),
-                None,
-                Some(-move_dir.y * PLAYER_SPEED),
-            );
-            if client.last_controls.jump {
-                self.world
-                    .physics_world
-                    .apply_impulse(&player.body, Vec3::new(0., JUMP_IMPULSE, 0.));
-            }
+            player.position = js_context
+                .get_player_next_position(&client.last_controls)
+                .await
+                .unwrap();
         }
 
         // Step physics
         self.world.physics_world.step();
-
-        // Read back positions
-        for player in self.players.values_mut() {
-            player.position = self.world.physics_world.get_position(&player.body);
-        }
 
         maybe_next_state
     }
@@ -240,6 +227,3 @@ impl GameInstance {
         maybe_next_state
     }
 }
-
-const PLAYER_SPEED: f32 = 10.;
-const JUMP_IMPULSE: f32 = 50.;

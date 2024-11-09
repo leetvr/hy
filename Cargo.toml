@@ -1,5 +1,5 @@
 [workspace]
-members = ["blocks", "cli", "client", "js/*", "net-types", "physics", "server"]
+members = ["blocks", "cli", "client", "net-types", "physics", "server"]
 resolver = "2"
 
 [workspace.dependencies]

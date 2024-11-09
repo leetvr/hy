@@ -7,8 +7,6 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::js::run_js;
-
 /// If you're going to make your protocol string based, then I'm going to implement it with string
 /// manipulation.
 pub async fn start_http_server() -> Result<()> {
@@ -20,7 +18,7 @@ pub async fn start_http_server() -> Result<()> {
     }
 }
 
-async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()> {
+async fn handle_connection(mut stream: TcpStream, _: SocketAddr) -> Result<()> {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).await?;
 
@@ -33,7 +31,6 @@ async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()
 
     let response = match method {
         "GET" => handle_get(path).await?,
-        "POST" => handle_post(path, addr).await?,
         _ => "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n\r\n"
             .as_bytes()
             .to_vec(),
@@ -43,15 +40,6 @@ async fn handle_connection(mut stream: TcpStream, addr: SocketAddr) -> Result<()
     stream.flush().await?;
 
     Ok(())
-}
-
-async fn handle_post(path: &str, addr: SocketAddr) -> Result<Vec<u8>> {
-    let response = run_js(path, addr).await?;
-    Ok(format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\n\r\n{response}\r\n",
-        response.len() + 2 // add 2 bytes for the CRLF
-    )
-    .into())
 }
 
 async fn handle_get(request_path: &str) -> Result<Vec<u8>> {

@@ -4,7 +4,10 @@ mod network;
 mod world;
 
 use {
-    crate::game::network::{ClientMessageReceiver, ServerMessageSender},
+    crate::{
+        game::network::{ClientMessageReceiver, ServerMessageSender},
+        js::JSContext,
+    },
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
     game_instance::GameInstance,
@@ -21,6 +24,7 @@ pub struct GameServer {
     state: ServerState,
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
     storage_dir: PathBuf,
+    js_context: JSContext,
 }
 
 impl GameServer {
@@ -30,17 +34,25 @@ impl GameServer {
         spawner.spawn(network::start_client_listener(incoming_connections.clone()));
 
         // Load the world
-        let storage_dir = storage_dir.into();
+        let storage_dir: PathBuf = storage_dir.into();
         let world = World::load(&storage_dir).expect("Failed to load world");
 
         // Set the initial state
         let initial_state = ServerState::Paused(GameInstance::new(world));
+
+        let mut player_script_path = storage_dir.clone();
+        player_script_path.push("player.js");
+
+        let js_context = spawner
+            .block_on(JSContext::new(&player_script_path))
+            .expect("Failed to load JS Context");
 
         Self {
             spawner,
             incoming_connections,
             state: initial_state,
             storage_dir,
+            js_context,
         }
     }
 
@@ -59,7 +71,9 @@ impl GameServer {
 
         // Tick
         let next_state = match &mut self.state {
-            ServerState::Playing(instance) | ServerState::Paused(instance) => instance.tick(),
+            ServerState::Playing(instance) | ServerState::Paused(instance) => {
+                self.spawner.block_on(instance.tick(&mut self.js_context))
+            }
             ServerState::Editing(instance) => instance.tick(&self.storage_dir),
             invalid => panic!("Invalid server state: {invalid}"),
         };

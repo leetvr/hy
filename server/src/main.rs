@@ -38,12 +38,12 @@ fn main() {
     let storage_dir = std::path::PathBuf::from_str(&args[1]).expect("Invalid storage dir path");
 
     let spawner = runtime.handle().clone();
-    std::thread::spawn(move || {
+    std::thread::spawn(move || async {
         let mut server = game::GameServer::new(spawner, storage_dir);
 
         let mut last_tick = Instant::now();
         loop {
-            server.tick();
+            server.tick(); // TODO: Lilith how do I do async with this setup
 
             // sleep until the next tick
             let next_tick = last_tick + std::time::Duration::from_secs_f32(game::TICK_DT);
