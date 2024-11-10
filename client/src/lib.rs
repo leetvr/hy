@@ -564,12 +564,18 @@ impl Engine {
         self.renderer.render(&draw_calls);
     }
 
-    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
-        self.audio_manager.load_sound(url).await
+    pub async fn load_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
+        // self.audio_manager.load_sound(url).await
+        self.audio_manager.load_sound_from_id(sound_id).await
+    }
+
+    pub async fn load_url_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        // self.audio_manager.load_sound(url).await
+        self.audio_manager.load_sound_from_url(url).await
     }
 
     pub fn play_sound(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.play_sound_at_pos()
+        self.audio_manager.play_sound_at_pos(None)
     }
 
     pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
@@ -582,9 +588,9 @@ impl Engine {
 
     fn update_audio_manager(&mut self) {
         // Apply debug tick updates
-        if self.audio_manager.is_debug() {
-            // self.audio_manager.update_debug_sound_on_tick();
-        }
+        // if self.audio_manager.is_debug() {
+        //     self.audio_manager.update_debug_sound_on_tick();
+        // }
 
         // Get the camera's position and rotation based on the current game state
         let (position, rotation) = match &self.state {

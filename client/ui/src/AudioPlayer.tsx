@@ -2,42 +2,10 @@ import { useState } from "react";
 import { Engine } from "../../pkg/client";
 import "./App.css";
 
-
-// Whatever, it was in the tutorial
+// // Whatever, it was in the tutorial
 const sampleSound = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
 
-export function TestAudioManager({ engine }: { engine: Engine }) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [wasError, setWasError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  const loadSound = async () => {
-    try {
-      await engine.load_sound(sampleSound);
-      console.log('Sound loaded');
-      setIsLoaded(true);
-      setWasError(false);
-    } catch (error) {
-      console.error('Error loading sound:', error);
-      setWasError(true);
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  return (
-    <div>
-      {!isLoaded && (
-        <div>
-          <button onClick={loadSound}>Load Sound from Wasm</button>
-          {wasError && <div>Error loading sound: {errorMessage}</div>}
-        </div>
-      )}
-      {isLoaded && <TestAudioPlayback engine={engine} />}
-    </div>
-  );
-}
-
-function TestAudioPlayback({ engine }: { engine: Engine }) {
+export function TestAudioPlayback({ engine }: { engine: Engine }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [wasError, setWasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -45,8 +13,9 @@ function TestAudioPlayback({ engine }: { engine: Engine }) {
 
   const loadAndPlaySound = async () => {
     try {
-      const soundUrl = 'https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3';
-      await engine.load_sound(soundUrl);
+      // await engine.load_url_sound(sampleSound);
+      await engine.load_sound("pain");
+      
       console.log('Sound loaded');
       engine.play_sound();
       console.log('Sound is now playing');
@@ -73,7 +42,7 @@ function TestAudioPlayback({ engine }: { engine: Engine }) {
 
   return (
     <div>
-      <button onClick={loadAndPlaySound}>Play sound from Wasm</button>
+      <button onClick={loadAndPlaySound}>Play Wasm Sound</button>
       {isPlaying ? <div>Sound Playing...</div> : <div>Sound Not Playing</div>}
       {wasError && <div>Error: {errorMessage}</div>}
       {isPlaying && (

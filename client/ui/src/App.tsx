@@ -60,7 +60,7 @@ function WasmWrapper() {
         const engine = Engine.new();
 
         if (engine.is_audio_manager_debug()) {
-          await engine.load_sound("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3");
+          await engine.load_sound("footsteps");
           engine.play_sound();
         }
         

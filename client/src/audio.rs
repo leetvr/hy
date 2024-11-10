@@ -8,11 +8,14 @@ use web_sys::{
 };
 
 // TODO
-// Figure out sound imports
 // Extract and test distortion from `AudioPlayer`
 // Attach a sound to an entity (Player initially)
 // Make sure sound spatialisation updates in relation to listener
 // Refactor AudioManager to keep track of a set of different `SoundInstance`s
+// For ambient sounds we can just set the listener to be the same as the position
+
+const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
+const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
 
 #[wasm_bindgen]
 pub struct AudioManager {
@@ -39,14 +42,46 @@ impl AudioManager {
         })
     }
 
-    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
-        let audio_buffer = self.load_audio_buffer(url).await?;
+    pub async fn load_sound_from_id(&mut self, sound_id: &str) -> Result<(), JsValue> {
+        let audio_buffer = self.load_audio_buffer_from_bytes(sound_id).await?;
+        self.sound_buffer = Some(audio_buffer);
+        web_sys::console::log_1(&"Embedded sound loaded successfully".into());
+        Ok(())
+    }
+
+    /// Loads the audio buffer from embedded bytes.
+    async fn load_audio_buffer_from_bytes(&self, sound_id: &str) -> Result<AudioBuffer, JsValue> {
+        // Map sound IDs to embedded byte slices
+        let sound_bytes = match sound_id {
+            "footsteps" => FOOTSTEPS_OGG,
+            "pain" => PAIN_WAV,
+            _ => {
+                web_sys::console::error_1(&format!("Unknown sound ID:{} -> pain", sound_id).into());
+                // return Err(JsValue::from_str("Unknown sound ID"));
+                PAIN_WAV
+            }
+        };
+
+        // Create a Uint8Array from the embedded bytes
+        let uint8_array = web_sys::js_sys::Uint8Array::from(sound_bytes);
+        // Get the ArrayBuffer from the Uint8Array
+        let array_buffer = uint8_array.buffer();
+        // Decode the audio data
+        let decode_promise = self.context.decode_audio_data(&array_buffer)?;
+        let decoded_buffer = JsFuture::from(decode_promise).await?;
+        // Cast the decoded buffer to AudioBuffer
+        let audio_buffer: AudioBuffer = decoded_buffer.dyn_into()?;
+        Ok(audio_buffer)
+    }
+
+    pub async fn load_sound_from_url(&mut self, url: &str) -> Result<(), JsValue> {
+        let audio_buffer = self.load_audio_buffer_from_url(url).await?;
         self.sound_buffer = Some(audio_buffer);
         web_sys::console::log_1(&"Sound buffer loaded successfully".into());
         Ok(())
     }
 
-    async fn load_audio_buffer(&mut self, url: &str) -> Result<AudioBuffer, JsValue> {
+    async fn load_audio_buffer_from_url(&mut self, url: &str) -> Result<AudioBuffer, JsValue> {
         let window = web_sys::window().unwrap();
         let response = JsFuture::from(window.fetch_with_str(url)).await?;
         let response: web_sys::Response = response.dyn_into().unwrap();
@@ -59,7 +94,10 @@ impl AudioManager {
         Ok(audio_buffer.dyn_into().unwrap())
     }
 
-    pub fn play_sound_at_pos(&mut self) -> Result<(), JsValue> {
+    pub fn play_sound_at_pos(
+        &mut self,
+        maybe_position: Option<SoundPosition>,
+    ) -> Result<(), JsValue> {
         if let Some(ref audio_buffer) = self.sound_buffer {
             let source_node = self.context.create_buffer_source()?;
             source_node.set_buffer(Some(audio_buffer));
@@ -67,6 +105,13 @@ impl AudioManager {
             let panner_node = self.context.create_panner()?;
             source_node.connect_with_audio_node(&panner_node)?;
             panner_node.connect_with_audio_node(&self.gain_node)?;
+
+            // Set panner position if provided
+            if let Some(pos) = &maybe_position {
+                panner_node.position_x().set_value(pos.x);
+                panner_node.position_y().set_value(pos.y);
+                panner_node.position_z().set_value(pos.z);
+            }
 
             source_node.start()?;
 
@@ -123,28 +168,35 @@ impl AudioManager {
         true
     }
 
-    pub fn update_debug_sound_on_tick(&mut self) {
-        if self.is_debug() {
-            if let Some(ref panner_node) = self.panner_node {
-                // Get the current x position
-                let current_x = panner_node.position_x().value();
-                // Update the x position
-                let mut new_x = current_x + 0.5;
-                if new_x > 5.0 {
-                    new_x = -5.0;
-                }
-                // Set the new x position
-                panner_node.position_x().set_value(new_x);
-            }
-        }
-    }
+    // pub fn update_debug_sound_on_tick(&mut self) {
+    //     if self.is_debug() {
+    //         if let Some(ref panner_node) = self.panner_node {
+    //             // Get the current x position
+    //             let current_x = panner_node.position_x().value();
+    //             // Update the x position
+    //             let mut new_x = current_x + 0.5;
+    //             if new_x > 5.0 {
+    //                 new_x = -5.0;
+    //             }
+    //             // Set the new x position
+    //             panner_node.position_x().set_value(new_x);
+    //         }
+    //     }
+    // }
 }
 
-// use serde::{Deserialize, Serialize};
-// #[wasm_bindgen]
-// #[derive(Serialize, Deserialize, Debug, Clone)]
-// pub struct Position {
-//     pub x: f32,
-//     pub y: f32,
-//     pub z: f32,
-// }
+use serde::{Deserialize, Serialize};
+#[wasm_bindgen]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SoundPosition {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[wasm_bindgen]
+impl SoundPosition {
+    pub fn new(x: f32, y: f32, z: f32) -> SoundPosition {
+        SoundPosition { x, y, z }
+    }
+}
