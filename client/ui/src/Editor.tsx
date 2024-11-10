@@ -33,6 +33,9 @@ export default function Editor({
   return (
     <>
       <p>
+        M8 this weird debug thingy will <i>mess up</i> the React side "which block am I" state. Recommend you <b>avoid</b>
+      </p>
+      <p>
         Placing {selectedBlockName} (id: {selectedBlockID})
       </p>
       <div>

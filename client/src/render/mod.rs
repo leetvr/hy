@@ -1,4 +1,5 @@
 mod cube_vao;
+mod grid_renderer;
 mod vertex;
 
 // Re-exports
@@ -12,7 +13,7 @@ use {
 };
 
 use bytemuck::offset_of;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, UVec2, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
@@ -29,10 +30,12 @@ pub struct Renderer {
 
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
-    texture_location: Option<glow::UniformLocation>,
     tint_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
+    resolution: UVec2,
+
+    grid_renderer: grid_renderer::GridRenderer,
 }
 
 impl Renderer {
@@ -54,17 +57,26 @@ impl Renderer {
         let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
         let tint_location = unsafe { gl.get_uniform_location(program, "tint") };
 
+        unsafe { gl.uniform_1_i32(texture_location.as_ref(), 0) };
+
         let camera = Camera::default();
+
+        let grid_renderer = grid_renderer::GridRenderer::new(&gl);
 
         Ok(Self {
             gl,
             canvas,
             program,
             matrix_location,
-            texture_location,
             tint_location,
             camera,
+            resolution: UVec2::new(640, 480),
+            grid_renderer,
         })
+    }
+
+    pub fn resize(&mut self, dimension: UVec2) {
+        self.resolution = dimension;
     }
 
     pub fn render(&self, draw_calls: &[DrawCall]) {
@@ -72,9 +84,14 @@ impl Renderer {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
+            self.gl
+                .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
+
             gl.enable(glow::DEPTH_TEST);
             gl.enable(glow::CULL_FACE);
             gl.cull_face(glow::BACK);
+
+            gl.depth_func(glow::LEQUAL);
 
             // Set the clear color
             gl.clear_color(0.1, 0.1, 0.1, 1.0);
@@ -86,7 +103,6 @@ impl Renderer {
             let view_matrix = self.camera.view_matrix();
 
             gl.use_program(Some(self.program));
-            gl.uniform_1_i32(self.texture_location.as_ref(), 0);
 
             for draw_call in draw_calls {
                 let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
@@ -119,6 +135,12 @@ impl Renderer {
                 );
             }
 
+            self.grid_renderer.render(
+                &self.gl,
+                projection_matrix * view_matrix,
+                UVec2::new(64, 64),
+            );
+
             gl.flush();
         }
     }
@@ -128,7 +150,14 @@ impl Renderer {
     }
 
     pub fn create_texture_from_image(&self, data: &[u8], width: u32, height: u32) -> Texture {
-        Texture::new(&self.gl, data, width, height)
+        Texture::new(
+            &self.gl,
+            data,
+            width,
+            height,
+            Filtering::Nearest,
+            WrapMode::Clamp,
+        )
     }
 }
 
@@ -260,11 +289,13 @@ impl RenderPrimitive {
                         &base_color_texture.data,
                         base_color_texture.dimensions.x,
                         base_color_texture.dimensions.y,
+                        Filtering::Nearest,
+                        WrapMode::Clamp,
                     )
                 } else {
                     let scaled = primitive.material.base_colour_factor * 255.0;
                     let bytes = scaled.to_array().map(|x| x as u8);
-                    Texture::new(gl, &bytes, 1, 1)
+                    Texture::new(gl, &bytes, 1, 1, Filtering::Nearest, WrapMode::Clamp)
                 };
 
             Self {
@@ -396,13 +427,30 @@ impl Camera {
     }
 }
 
+pub enum Filtering {
+    Nearest,
+    Anisotropic,
+}
+
+pub enum WrapMode {
+    Clamp,
+    Repeat,
+}
+
 #[derive(Debug, Clone)]
 pub struct Texture {
     id: glow::Texture,
 }
 
 impl Texture {
-    pub fn new(gl: &glow::Context, data: &[u8], width: u32, height: u32) -> Self {
+    pub fn new(
+        gl: &glow::Context,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        filtering: Filtering,
+        wrap: WrapMode,
+    ) -> Self {
         let id = unsafe { gl.create_texture().expect("Failed to create texture") };
         unsafe {
             gl.bind_texture(glow::TEXTURE_2D, Some(id));
@@ -417,26 +465,41 @@ impl Texture {
                 glow::UNSIGNED_BYTE,
                 Some(data),
             );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_S,
-                glow::CLAMP_TO_EDGE as i32,
-            );
-            gl.tex_parameter_i32(
-                glow::TEXTURE_2D,
-                glow::TEXTURE_WRAP_T,
-                glow::CLAMP_TO_EDGE as i32,
-            );
+            let wrap_raw = match wrap {
+                WrapMode::Clamp => glow::CLAMP_TO_EDGE,
+                WrapMode::Repeat => glow::REPEAT,
+            } as i32;
+
+            let min_filter;
+            let max_filter;
+            match filtering {
+                Filtering::Nearest => {
+                    min_filter = glow::NEAREST;
+                    max_filter = glow::NEAREST;
+                }
+                Filtering::Anisotropic => {
+                    min_filter = glow::LINEAR_MIPMAP_LINEAR;
+                    max_filter = glow::LINEAR;
+                }
+            }
+
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, wrap_raw);
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, wrap_raw);
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::NEAREST as i32,
+                min_filter as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
-                glow::NEAREST as i32,
+                max_filter as i32,
             );
+
+            if let Filtering::Anisotropic = filtering {
+                gl.tex_parameter_f32(glow::TEXTURE_2D, glow::TEXTURE_MAX_ANISOTROPY, 16.0);
+                gl.generate_mipmap(glow::TEXTURE_2D);
+            }
         }
 
         Self { id }

@@ -32,12 +32,15 @@ async fn main() {
         return;
     }
     let storage_dir = std::path::PathBuf::from_str(&args[1]).expect("Invalid storage dir path");
+
+    if std::env::var("BROWSER") != Ok("none".to_owned()) {
+        webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
+    }
+
     tokio::join! {
         start_game_server(storage_dir),
         http::start_http_server()
     };
-
-    webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
 }
 
 async fn start_game_server(storage_dir: std::path::PathBuf) {

@@ -1,39 +1,34 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { AudioPlayer } from "./AudioPlayer";
 import init, { Engine, EngineMode, BlockRegistry } from "../../pkg/client.js";
-import Editor from "./Editor.js";
+import TopBar from "./TopBar.tsx";
+import LeftBar from "./LeftBar.tsx";
+import RightBar from "./RightBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
-  const [currentMode, setMode] = useState(initialEngineMode);
+  const [currentMode, setModeState] = useState(initialEngineMode);
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
 
   useEffect(() => {
     engine.ctx_on_init(setBlockRegistry);
   }, [engine]);
 
-  const handleClick = () => {
-    const nextMode = nextEngineMode(currentMode);
-    setMode(nextMode);
-    engine.ctx_set_engine_mode(nextMode);
+  const setMode = (newMode: EngineMode) => {
+    if(newMode != currentMode) {
+        setModeState(newMode);
+        engine.ctx_set_engine_mode(newMode);
+    }
   };
 
+  const editClass = getEngineModeText(currentMode);
+
   return (
-    <>
-      <div className="card">
-        <p>
-          We are currently in <strong>{getEngineModeText(currentMode)}</strong> mode
-        </p>
-        <button onClick={handleClick}>
-          Switch to {getEngineModeText(nextEngineMode(currentMode))}
-        </button>
-        {currentMode === EngineMode.Edit && (
-          <Editor engine={engine} blockRegistry={blockRegistry} />
-        )}
-        <AudioPlayer />
-      </div>
-    </>
+    <div className={"mode-"+editClass}>
+        <TopBar setMode={setMode} />
+        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} />
+        <RightBar selectedEntity={false} />
+    </div>
   );
 }
 
@@ -99,6 +94,25 @@ function WasmWrapper() {
             unadjustedMovement: true,
           });
         });
+
+        new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target !== canvas) {
+              console.warn("Unexpected resize observer target", entry.target);
+              continue;
+            }
+
+            const size = entry.devicePixelContentBoxSize[0];
+
+            const height = size.blockSize;
+            const width = size.inlineSize;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            engine.resize(width, height);
+          }
+        }).observe(canvas);
 
         document.addEventListener("pointerlockchange", () => {
           if (document.pointerLockElement === canvas) {
