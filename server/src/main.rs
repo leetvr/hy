@@ -52,7 +52,9 @@ fn main() {
         }
     });
 
-    webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
+    if std::env::var("BROWSER") != Ok("none".to_owned()) {
+        webbrowser::open("http://localhost:8888").expect("You.. don't have a web browser?");
+    }
 
     // start_http_server is !Send, so we need to await it on the current thread
     let _ = runtime.block_on(http::start_http_server());

@@ -23,6 +23,7 @@ use blocks::BlockId;
 pub use blocks::BlockPos;
 
 use context::EngineMode;
+use glam::UVec2;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -209,6 +210,10 @@ impl Engine {
         }
     }
 
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.renderer.resize(UVec2::new(width, height));
+    }
+
     pub fn tick(&mut self, time: f64) {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         self.delta_time = current_time - self.elapsed_time;
@@ -248,6 +253,14 @@ impl Engine {
                                 self.assets.get(&block_type.west_texture);
                                 self.assets.get(&block_type.north_texture);
                                 self.assets.get(&block_type.south_texture);
+                            }
+
+                            // Tell the React frontend
+                            if let Some(on_init) = self.context.on_init_callback.take() {
+                                let data = serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                on_init
+                                    .call1(&JsValue::NULL, &data)
+                                    .expect("Unable to call on_init!");
                             }
 
                             self.state = GameState::Editing {
@@ -507,8 +520,6 @@ impl Engine {
                         render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
                             .into_iter(),
                     );
-
-                    tracing::trace!("Rendered {} faces", draw_calls.len());
                 }
             }
             _ => {}
@@ -721,7 +732,7 @@ fn collect_block_textures(
             let south = assets.get(&block_type.south_texture).and_then(load_image)?;
 
             // TODO(ll): I just threw these in here, I don't know that they are in the right order
-            Some([top, bottom, east, west, north, south])
+            Some([north, south, east, west, top, bottom])
         })
         .collect::<Option<Vec<_>>>()
 }
