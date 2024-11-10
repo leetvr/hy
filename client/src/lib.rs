@@ -367,6 +367,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),
+                    camera_yaw: self.controls.yaw,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
@@ -428,6 +429,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: Vec2::ZERO,
                     jump: false,
+                    camera_yaw: 0.0,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }

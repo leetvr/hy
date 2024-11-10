@@ -2,7 +2,7 @@
 set -xe
 
 # Build the client
-(cd client && wasm-pack build --target web)
+(cd client && wasm-pack build --dev --target web)
 (cd client/ui && npm install && npx vite build --minify false)
 
 # Copy the resulting files to the assets directory

@@ -1868,6 +1868,8 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+ "tsify",
+ "wasm-bindgen",
  "webbrowser",
 ]
 

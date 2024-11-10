@@ -18,6 +18,7 @@ impl PlayerId {
 pub struct Controls {
     pub move_direction: glam::Vec2,
     pub jump: bool,
+    pub camera_yaw: f32, // radians
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

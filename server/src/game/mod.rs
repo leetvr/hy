@@ -4,12 +4,16 @@ mod network;
 mod world;
 
 use {
-    crate::game::network::{ClientMessageReceiver, ServerMessageSender},
+    crate::{
+        game::network::{ClientMessageReceiver, ServerMessageSender},
+        js::JSContext,
+    },
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
+    serde::{Deserialize, Serialize},
     std::{fmt::Display, path::PathBuf, sync::Arc},
     world::World,
 };
@@ -17,41 +21,47 @@ use {
 const WORLD_SIZE: i32 = 32;
 
 pub struct GameServer {
-    spawner: tokio::runtime::Handle,
     state: ServerState,
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
     storage_dir: PathBuf,
+    js_context: JSContext,
 }
 
 impl GameServer {
-    pub fn new(spawner: tokio::runtime::Handle, storage_dir: impl Into<PathBuf>) -> Self {
+    pub async fn new(storage_dir: impl Into<PathBuf>) -> Self {
         let incoming_connections = Arc::new(SegQueue::new());
 
-        spawner.spawn(network::start_client_listener(incoming_connections.clone()));
+        tokio::spawn(network::start_client_listener(incoming_connections.clone()));
 
         // Load the world
-        let storage_dir = storage_dir.into();
+        let storage_dir: PathBuf = storage_dir.into();
         let world = World::load(&storage_dir).expect("Failed to load world");
 
         // Set the initial state
         let initial_state = ServerState::Paused(GameInstance::new(world));
 
+        let player_script_path = storage_dir.join("dist/").join("player.js");
+
+        tracing::info!("Starting JS context..");
+        let js_context = JSContext::new(&player_script_path)
+            .await
+            .expect("Failed to load JS Context");
+        tracing::info!("Done!");
+
         Self {
-            spawner,
             incoming_connections,
             state: initial_state,
             storage_dir,
+            js_context,
         }
     }
 
-    pub fn tick(&mut self) {
-        let _handle = self.spawner.enter();
-
+    pub async fn tick(&mut self) {
         // Handle new connections
         while let Some(channels) = self.incoming_connections.pop() {
             match &mut self.state {
                 ServerState::Playing(instance) | ServerState::Paused(instance) => {
-                    instance.handle_new_client(channels)
+                    instance.handle_new_client(channels).await
                 }
                 _ => {}
             }
@@ -59,7 +69,9 @@ impl GameServer {
 
         // Tick
         let next_state = match &mut self.state {
-            ServerState::Playing(instance) | ServerState::Paused(instance) => instance.tick(),
+            ServerState::Playing(instance) | ServerState::Paused(instance) => {
+                instance.tick(&mut self.js_context).await
+            }
             ServerState::Editing(instance) => instance.tick(&self.storage_dir),
             invalid => panic!("Invalid server state: {invalid}"),
         };
@@ -67,7 +79,7 @@ impl GameServer {
         // Do we need to transition to a different state?
         let Some(next_state) = next_state else { return };
 
-        self.state.transition(next_state);
+        self.state.transition(next_state).await;
     }
 }
 
@@ -96,7 +108,7 @@ impl Display for ServerState {
 
 impl ServerState {
     // state machines, my beloved
-    fn transition(&mut self, next_state: NextServerState) {
+    async fn transition(&mut self, next_state: NextServerState) {
         // Take the current state so we can move it
         let current_state = std::mem::replace(self, ServerState::Transitioning);
 
@@ -137,12 +149,12 @@ impl ServerState {
             }
             // Editing -> Playing
             (ServerState::Editing(editor_instance), NextServerState::Playing) => {
-                let instance = GameInstance::from_editor(editor_instance);
+                let instance = GameInstance::from_editor(editor_instance).await;
                 *self = ServerState::Playing(instance);
             }
             // Editing -> Paused
             (ServerState::Editing(editor_instance), NextServerState::Paused) => {
-                let instance = GameInstance::from_editor(editor_instance);
+                let instance = GameInstance::from_editor(editor_instance).await;
                 *self = ServerState::Paused(instance);
             }
             // Invalid transition
@@ -180,15 +192,24 @@ struct GameState {
 
 #[derive(Debug)]
 struct Player {
-    position: glam::Vec3,
+    state: PlayerState,
     body: physics::PhysicsBody,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct PlayerState {
+    position: glam::Vec3,
+    velocity: glam::Vec3,
 }
 
 impl Player {
     pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
         let physics_body = physics_world.add_ball_body(position, 1.);
         Self {
-            position,
+            state: PlayerState {
+                position,
+                ..Default::default()
+            },
             body: physics_body,
         }
     }

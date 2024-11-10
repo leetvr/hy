@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use glam::Vec3;
 use net_types::PlayerId;
 use tokio::sync::mpsc;
+
+use crate::js::JSContext;
 
 use super::{
     editor_instance::EditorInstance,
@@ -39,7 +40,7 @@ impl GameInstance {
         }
     }
 
-    pub fn from_editor(editor_instance: EditorInstance) -> Self {
+    pub async fn from_editor(editor_instance: EditorInstance) -> Self {
         let EditorInstance {
             world,
             mut editor_client,
@@ -67,50 +68,39 @@ impl GameInstance {
         game_instance.next_client_id = game_instance.next_client_id + 1;
 
         // Send reset packet
-        let _ = editor_client.outgoing_tx.blocking_send(
-            net_types::Reset {
-                new_client_player: player_id,
-            }
-            .into(),
-        );
+        let _ = editor_client
+            .outgoing_tx
+            .send(
+                net_types::Reset {
+                    new_client_player: player_id,
+                }
+                .into(),
+            )
+            .await;
 
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
 
-    pub fn tick(&mut self) -> Option<NextServerState> {
+    pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
         // Handle client messages
-        let maybe_next_state = self.client_net_updates();
+        let maybe_next_state = self.client_net_updates().await;
 
-        // Add forces/velocities
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            let move_dir = client.last_controls.move_direction;
-            self.world.physics_world.set_velocity_piecewise(
-                &player.body,
-                Some(move_dir.x * PLAYER_SPEED),
-                None,
-                Some(-move_dir.y * PLAYER_SPEED),
-            );
-            if client.last_controls.jump {
-                self.world
-                    .physics_world
-                    .apply_impulse(&player.body, Vec3::new(0., JUMP_IMPULSE, 0.));
-            }
+            player.state = js_context
+                .get_player_next_state(&player.state, &client.last_controls)
+                .await
+                .unwrap();
         }
 
         // Step physics
         self.world.physics_world.step();
 
-        // Read back positions
-        for player in self.players.values_mut() {
-            player.position = self.world.physics_world.get_position(&player.body);
-        }
-
         maybe_next_state
     }
 
-    pub fn handle_new_client(
+    pub async fn handle_new_client(
         &mut self,
         (incoming_rx, outgoing_tx): (ClientMessageReceiver, ServerMessageSender),
     ) {
@@ -125,14 +115,16 @@ impl GameInstance {
         self.next_client_id = self.next_client_id + 1;
 
         // Send world init packet
-        let _ = outgoing_tx.blocking_send(
-            net_types::Init {
-                blocks: self.world.blocks.clone(),
-                block_registry: self.world.block_registry.clone(),
-                client_player: player_id,
-            }
-            .into(),
-        );
+        let _ = outgoing_tx
+            .send(
+                net_types::Init {
+                    blocks: self.world.blocks.clone(),
+                    block_registry: self.world.block_registry.clone(),
+                    client_player: player_id,
+                }
+                .into(),
+            )
+            .await;
 
         self.clients.insert(
             client_id,
@@ -148,7 +140,7 @@ impl GameInstance {
         tracing::info!("New client connected: {:?}", client_id);
     }
 
-    fn client_net_updates(&mut self) -> Option<NextServerState> {
+    async fn client_net_updates(&mut self) -> Option<NextServerState> {
         let mut disconnected = Vec::new();
         let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
@@ -189,36 +181,46 @@ impl GameInstance {
             // Add new players to this client
             for player_id in new_players {
                 let player = self.players.get(player_id).unwrap();
-                let _ = client.outgoing_tx.blocking_send(
-                    net_types::AddPlayer {
-                        id: *player_id,
-                        position: player.position,
-                    }
-                    .into(),
-                );
-                client.known_players.insert(*player_id, player.position);
+                let _ = client
+                    .outgoing_tx
+                    .send(
+                        net_types::AddPlayer {
+                            id: *player_id,
+                            position: player.state.position,
+                        }
+                        .into(),
+                    )
+                    .await;
+                client
+                    .known_players
+                    .insert(*player_id, player.state.position);
             }
 
             // Remove old players from this client
             for player_id in removed_players {
                 let _ = client
                     .outgoing_tx
-                    .blocking_send(net_types::RemovePlayer { id: *player_id }.into());
+                    .send(net_types::RemovePlayer { id: *player_id }.into())
+                    .await;
                 client.known_players.remove(player_id);
             }
 
             // Update player positions for all known players
+            // TODO: Update sates instead?
             for (player_id, known_position) in client.known_players.iter_mut() {
                 let player = self.players.get(player_id).unwrap();
-                if player.position != *known_position {
-                    let _ = client.outgoing_tx.blocking_send(
-                        net_types::UpdatePosition {
-                            id: *player_id,
-                            position: player.position,
-                        }
-                        .into(),
-                    );
-                    *known_position = player.position;
+                if player.state.position != *known_position {
+                    let _ = client
+                        .outgoing_tx
+                        .send(
+                            net_types::UpdatePosition {
+                                id: *player_id,
+                                position: player.state.position,
+                            }
+                            .into(),
+                        )
+                        .await;
+                    *known_position = player.state.position;
                 }
             }
         }
@@ -240,6 +242,3 @@ impl GameInstance {
         maybe_next_state
     }
 }
-
-const PLAYER_SPEED: f32 = 10.;
-const JUMP_IMPULSE: f32 = 50.;
