@@ -88,8 +88,8 @@ impl GameInstance {
 
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            player.position = js_context
-                .get_player_next_position(&player.position, &client.last_controls)
+            player.state = js_context
+                .get_player_next_state(&player.state, &client.last_controls)
                 .await
                 .unwrap();
         }
@@ -186,12 +186,14 @@ impl GameInstance {
                     .send(
                         net_types::AddPlayer {
                             id: *player_id,
-                            position: player.position,
+                            position: player.state.position,
                         }
                         .into(),
                     )
                     .await;
-                client.known_players.insert(*player_id, player.position);
+                client
+                    .known_players
+                    .insert(*player_id, player.state.position);
             }
 
             // Remove old players from this client
@@ -204,20 +206,21 @@ impl GameInstance {
             }
 
             // Update player positions for all known players
+            // TODO: Update sates instead?
             for (player_id, known_position) in client.known_players.iter_mut() {
                 let player = self.players.get(player_id).unwrap();
-                if player.position != *known_position {
+                if player.state.position != *known_position {
                     let _ = client
                         .outgoing_tx
                         .send(
                             net_types::UpdatePosition {
                                 id: *player_id,
-                                position: player.position,
+                                position: player.state.position,
                             }
                             .into(),
                         )
                         .await;
-                    *known_position = player.position;
+                    *known_position = player.state.position;
                 }
             }
         }

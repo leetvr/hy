@@ -13,6 +13,7 @@ use {
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
+    serde::{Deserialize, Serialize},
     std::{fmt::Display, path::PathBuf, sync::Arc},
     world::World,
 };
@@ -191,15 +192,24 @@ struct GameState {
 
 #[derive(Debug)]
 struct Player {
-    position: glam::Vec3,
+    state: PlayerState,
     body: physics::PhysicsBody,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct PlayerState {
+    position: glam::Vec3,
+    velocity: glam::Vec3,
 }
 
 impl Player {
     pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
         let physics_body = physics_world.add_ball_body(position, 1.);
         Self {
-            position,
+            state: PlayerState {
+                position,
+                ..Default::default()
+            },
             body: physics_body,
         }
     }
