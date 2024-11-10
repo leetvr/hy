@@ -1,8 +1,7 @@
 // The "left bar": the block/entity palettes
-import { useState } from "react";
-import { AudioPlayer } from "./AudioPlayer";
+import { useEffect, useState } from "react";
+import { EngineMode } from "../../pkg/client.js";
 import BlockList from "./BlockList.tsx";
-import { BlockRegistry, Engine, EngineMode } from "../../pkg/client.js";
 import Editor from "./Editor.js";
 
 enum LeftBarTab {
@@ -20,8 +19,9 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
         theContent = <p>What even <i>is</i> an entity, man?</p>;
     } else {
         theContent = <div>
-            <AudioPlayer />
             {currentMode === EngineMode.Edit && <Editor engine={engine} blockRegistry={blockRegistry} />}
+            {/* <AudioPlayer /> */}
+            <TestAudioManager engine={engine} />
         </div>;
     }
     // TODO: If we ever need to use it for anything else, this tab-bar business
@@ -44,3 +44,27 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
         {theContent}
     </div>;
 }
+
+
+// Check AudioManager is loading sound from wasm
+function TestAudioManager({ engine }: { engine: Engine }) {
+    const [soundLoaded, setSoundLoaded] = useState(false);
+    useEffect(() => {
+      console.log("Loading useEffect")
+      if (engine) {
+        const soundUrl = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
+        engine.load_and_play_sound(soundUrl)
+        .then(() => {
+          console.log('Sound loaded and is now playing');
+          setSoundLoaded(true); 
+        })
+        .catch(console.error);
+      }
+    }, [engine]); 
+  
+    if (!soundLoaded) {
+      return <div>Sound Loading...</div>;
+    } else {
+      return <div>Sound Loaded...</div>; 
+    }
+  }

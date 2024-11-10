@@ -59,12 +59,6 @@ function WasmWrapper() {
         await init(); // init
         const engine = Engine.new();
 
-        // Load and play sound after engine initialization
-        const url = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
-        await engine.load_and_play_sound(url)
-          .then(() => console.log("\n\nSound loaded and is now playing"))
-          .catch(console.error);
-
         const tick = (timestamp: number) => {
           engine.tick(timestamp);
           window.requestAnimationFrame(tick);
@@ -154,17 +148,3 @@ function WasmWrapper() {
 }
 
 export default WasmWrapper;
-
-
-// function AudioControls({ engine }: { engine: Engine }) {
-//   return (
-//       <div>
-//           <button onClick={() => engine.audio_manager.play_test_sound()}>
-//               Play Sound
-//           </button>
-//           <button onClick={() => engine.audio_manager.stop_test_sound()}>
-//               Stop Sound
-//           </button>
-//       </div>
-//   );
-// }

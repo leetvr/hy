@@ -5,6 +5,8 @@ use web_sys::{
     OscillatorNode, Response,
 };
 
+// Ultimately, need to havea single Audio Manager that keeps track of AudioContext
+
 #[wasm_bindgen]
 pub struct AudioManager {
     context: AudioContext,
@@ -14,9 +16,6 @@ pub struct AudioManager {
     // Then AudioManager can handle a number of simultaneous sound
     panner_node: web_sys::PannerNode,
     distortion_node: Option<web_sys::WaveShaperNode>,
-
-    // Just put a test sound here for now
-    test_sound: Option<AudioBuffer>,
 }
 
 #[wasm_bindgen]
@@ -34,34 +33,33 @@ impl AudioManager {
             gain_node,
             panner_node,
             distortion_node: None,
-            test_sound: None,
         })
     }
 
-    pub async fn load_sound(&self, url: &str) -> Result<AudioBuffer, JsValue> {
-        let window = window().unwrap();
-        let response = JsFuture::from(window.fetch_with_str(url)).await?;
-        let response: Response = response.dyn_into().unwrap();
+    // pub async fn load_sound(&self, url: &str) -> Result<AudioBuffer, JsValue> {
+    //     let window = window().unwrap();
+    //     let response = JsFuture::from(window.fetch_with_str(url)).await?;
+    //     let response: Response = response.dyn_into().unwrap();
 
-        // Fetch the array buffer from the response
-        let array_buffer_promise = response.array_buffer()?;
-        let array_buffer = JsFuture::from(array_buffer_promise).await?;
-        // JsValue to ArrayBuffer
-        let array_buffer: ArrayBuffer = array_buffer.dyn_into().unwrap();
-        // Decode the audio data from the ArrayBuffer
-        let audio_buffer =
-            JsFuture::from(self.context.decode_audio_data(&array_buffer).unwrap()).await?;
-        let audio_buffer: AudioBuffer = audio_buffer.dyn_into().unwrap();
-        Ok(audio_buffer)
-    }
+    //     // Fetch the array buffer from the response
+    //     let array_buffer_promise = response.array_buffer()?;
+    //     let array_buffer = JsFuture::from(array_buffer_promise).await?;
+    //     // JsValue to ArrayBuffer
+    //     let array_buffer: ArrayBuffer = array_buffer.dyn_into().unwrap();
+    //     // Decode the audio data from the ArrayBuffer
+    //     let audio_buffer =
+    //         JsFuture::from(self.context.decode_audio_data(&array_buffer).unwrap()).await?;
+    //     let audio_buffer: AudioBuffer = audio_buffer.dyn_into().unwrap();
+    //     Ok(audio_buffer)
+    // }
 
-    pub fn play_sound(&self, buffer: JsValue) -> Result<(), JsValue> {
-        let source = self.context.create_buffer_source()?;
-        source.set_buffer(Some(&buffer.into()));
-        source.connect_with_audio_node(&self.gain_node)?;
-        source.start()?;
-        Ok(())
-    }
+    // pub fn play_sound(&self, buffer: JsValue) -> Result<(), JsValue> {
+    //     let source = self.context.create_buffer_source()?;
+    //     source.set_buffer(Some(&buffer.into()));
+    //     source.connect_with_audio_node(&self.gain_node)?;
+    //     source.start()?;
+    //     Ok(())
+    // }
 
     pub fn set_volume(&self, volume: f32) {
         self.gain_node.gain().set_value(volume);
@@ -73,40 +71,36 @@ impl AudioManager {
         self.panner_node.position_z().set_value(z);
     }
 
-    // pub fn enable_distortion(&mut self) -> Result<(), JsValue> {
-    //     let distortion = self.context.create_wave_shaper()?;
+    pub fn enable_distortion(&mut self) -> Result<(), JsValue> {
+        let distortion = self.context.create_wave_shaper()?;
 
-    //     self.distortion_node = Some(distortion);
-    //     self.update_distortion_chain()?;
-    //     Ok(())
-    // }
+        self.distortion_node = Some(distortion);
+        self.update_distortion_chain()?;
+        Ok(())
+    }
 
-    // pub fn disable_distortion(&mut self) -> Result<(), JsValue> {
-    //     if let Some(distortion) = &self.distortion_node {
-    //         distortion.disconnect()?;
-    //         self.panner_node.connect_with_audio_node(&self.gain_node)?;
-    //     }
-    //     self.distortion_node = None;
-    //     Ok(())
-    // }
+    pub fn disable_distortion(&mut self) -> Result<(), JsValue> {
+        if let Some(distortion) = &self.distortion_node {
+            distortion.disconnect()?;
+            self.panner_node.connect_with_audio_node(&self.gain_node)?;
+        }
+        self.distortion_node = None;
+        Ok(())
+    }
 
-    // fn update_distortion_chain(&self) -> Result<(), JsValue> {
-    //     if let Some(distortion) = &self.distortion_node {
-    //         self.panner_node.disconnect()?;
-    //         self.panner_node.connect_with_audio_node(distortion)?;
-    //         distortion.connect_with_audio_node(&self.gain_node)?;
-    //     }
-    //     Ok(())
-    // }
+    fn update_distortion_chain(&self) -> Result<(), JsValue> {
+        if let Some(distortion) = &self.distortion_node {
+            self.panner_node.disconnect()?;
+            self.panner_node.connect_with_audio_node(distortion)?;
+            distortion.connect_with_audio_node(&self.gain_node)?;
+        }
+        Ok(())
+    }
 }
 
 // Try just load and play in a single function
 #[wasm_bindgen]
 impl AudioManager {
-    pub fn test_initialised(&self) -> bool {
-        self.test_sound.is_some()
-    }
-
     // Combines loading and playing into one async function for simplicity
     pub async fn debug_load_and_play_sound(&mut self, url: &str) -> Result<(), JsValue> {
         let window = web_sys::window().unwrap();

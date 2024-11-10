@@ -137,12 +137,6 @@ impl Engine {
         self.audio_manager.debug_load_and_play_sound(url).await
     }
 
-    // pub fn start_player_footsteps(&mut self) {
-    //     let footstep_sound = audio_manager.load_sound("url_to_your_footstep_sound.mp3").await?;
-    //     // Play the sound when this function is called, e.g., when the player starts moving
-    //     self.audio_manager.play_sound(&self.footstep_sound).expect("Failed to play sound");
-    // }
-
     pub fn key_down(&mut self, event: KeyboardEvent) {
         if event.code() == "KeyR" {
             let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
