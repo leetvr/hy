@@ -98,11 +98,10 @@ impl AudioManager {
     }
 }
 
-// Try just load and play in a single function
 #[wasm_bindgen]
 impl AudioManager {
-    // Combines loading and playing into one async function for simplicity
-    pub async fn debug_load_and_play_sound(&mut self, url: &str) -> Result<(), JsValue> {
+    // Check if we can loading/playing sound from Wasm is working
+    pub async fn debug_load_and_play_sound(&self, url: &str) -> Result<(), JsValue> {
         let window = web_sys::window().unwrap();
         let response = JsFuture::from(window.fetch_with_str(url)).await?;
         let response: web_sys::Response = response.dyn_into().unwrap();
@@ -113,7 +112,7 @@ impl AudioManager {
         let audio_buffer = JsFuture::from(self.context.decode_audio_data(&array_buffer)?).await?;
         let audio_buffer: web_sys::AudioBuffer = audio_buffer.dyn_into().unwrap();
 
-        // Immediately play the sound after loading
+        // Play the sound
         let source = self.context.create_buffer_source()?;
         source.set_buffer(Some(&audio_buffer));
         source.connect_with_audio_node(&self.gain_node)?;

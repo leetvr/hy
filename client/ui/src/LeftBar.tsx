@@ -1,6 +1,6 @@
 // The "left bar": the block/entity palettes
-import { useEffect, useState } from "react";
-import { EngineMode } from "../../pkg/client.js";
+import { useState } from "react";
+import { Engine, EngineMode } from "../../pkg/client.js";
 import BlockList from "./BlockList.tsx";
 import Editor from "./Editor.js";
 
@@ -20,7 +20,6 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     } else {
         theContent = <div>
             {currentMode === EngineMode.Edit && <Editor engine={engine} blockRegistry={blockRegistry} />}
-            {/* <AudioPlayer /> */}
             <TestAudioManager engine={engine} />
         </div>;
     }
@@ -45,26 +44,25 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     </div>;
 }
 
-
-// Check AudioManager is loading sound from wasm
-function TestAudioManager({ engine }: { engine: Engine }) {
+// Make sure AudioManager is loading sound from Wasm
+function TestAudioManager({ engine }: {engine: Engine}) {
     const [soundLoaded, setSoundLoaded] = useState(false);
-    useEffect(() => {
-      console.log("Loading useEffect")
-      if (engine) {
-        const soundUrl = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
-        engine.load_and_play_sound(soundUrl)
+  
+    const loadAndPlaySound = () => {
+      const soundUrl = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
+      engine.load_and_play_sound(soundUrl)
         .then(() => {
           console.log('Sound loaded and is now playing');
-          setSoundLoaded(true); 
+          setSoundLoaded(true);
         })
         .catch(console.error);
-      }
-    }, [engine]); 
+    };
   
-    if (!soundLoaded) {
-      return <div>Sound Loading...</div>;
-    } else {
-      return <div>Sound Loaded...</div>; 
-    }
+    return (
+      <div>
+        <button onClick={loadAndPlaySound}>Load and Play Wasm sound</button>
+        {soundLoaded ? <div>Sound Loaded...</div> : <div>Sound Not Loaded</div>}
+      </div>
+    );
   }
+  

@@ -132,8 +132,8 @@ impl Engine {
         })
     }
 
-    // Expose a simplified method to start playing a sound using specified URL
-    pub async fn load_and_play_sound(&mut self, url: &str) -> Result<(), JsValue> {
+    // // Expose a simplified method to start playing a sound using specified URL
+    pub async fn load_and_play_sound(&self, url: &str) -> Result<(), JsValue> {
         self.audio_manager.debug_load_and_play_sound(url).await
     }
 
