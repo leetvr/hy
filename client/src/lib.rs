@@ -144,6 +144,10 @@ impl Engine {
         self.audio_manager.set_position(x, y, z);
     }
 
+    pub fn is_audio_manager_debug(&mut self) -> bool {
+        self.audio_manager.is_debug()
+    }
+
     pub fn key_down(&mut self, event: KeyboardEvent) {
         if event.code() == "KeyR" {
             let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
@@ -219,6 +223,11 @@ impl Engine {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
+
+        // Update the debug sound
+        if self.audio_manager.is_debug() {
+            self.audio_manager.update_debug_sound();
+        }
 
         // Maintain assets, loading pending assets from remote requests
         self.assets.maintain();

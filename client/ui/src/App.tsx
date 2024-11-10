@@ -59,6 +59,12 @@ function WasmWrapper() {
         await init(); // init
         const engine = Engine.new();
 
+        if (engine.is_audio_manager_debug()) {
+          await engine.load_sound("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3");
+          engine.play_sound();
+        }
+        
+
         const tick = (timestamp: number) => {
           engine.tick(timestamp);
           window.requestAnimationFrame(tick);

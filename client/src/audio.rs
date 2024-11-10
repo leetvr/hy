@@ -1,3 +1,5 @@
+use std::default;
+
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
@@ -19,7 +21,10 @@ pub struct AudioManager {
     sound_buffer: Option<AudioBuffer>,
     source_node: Option<AudioBufferSourceNode>,
     panner_node: Option<PannerNode>,
+    debug_sound: Option<DebugSound>,
 }
+#[derive(Debug, Default)]
+pub struct DebugSound;
 
 #[wasm_bindgen]
 impl AudioManager {
@@ -34,6 +39,8 @@ impl AudioManager {
             sound_buffer: None,
             source_node: None,
             panner_node: None,
+            // Just for testing sound update within tick
+            debug_sound: None,
         })
     }
 
@@ -44,7 +51,7 @@ impl AudioManager {
         Ok(())
     }
 
-    async fn load_audio_buffer(&self, url: &str) -> Result<AudioBuffer, JsValue> {
+    async fn load_audio_buffer(&mut self, url: &str) -> Result<AudioBuffer, JsValue> {
         let window = web_sys::window().unwrap();
         let response = JsFuture::from(window.fetch_with_str(url)).await?;
         let response: web_sys::Response = response.dyn_into().unwrap();
@@ -87,6 +94,27 @@ impl AudioManager {
             panner_node.position_x().set_value(x);
             panner_node.position_y().set_value(y);
             panner_node.position_z().set_value(z);
+        }
+    }
+
+    // DEBUG: Test sound
+    pub fn is_debug(&self) -> bool {
+        self.debug_sound.is_some()
+    }
+
+    pub fn update_debug_sound(&mut self) {
+        if self.is_debug() {
+            if let Some(ref panner_node) = self.panner_node {
+                // Get the current x position
+                let current_x = panner_node.position_x().value();
+                // Update the x position
+                let mut new_x = current_x + 0.5;
+                if new_x > 5.0 {
+                    new_x = -5.0;
+                }
+                // Set the new x position
+                panner_node.position_x().set_value(new_x);
+            }
         }
     }
 }
