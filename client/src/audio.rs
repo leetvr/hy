@@ -3,8 +3,8 @@ use std::default;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, GainNode,
-    OscillatorNode, PannerNode, Response,
+    js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
+    AudioParam, GainNode, OscillatorNode, PannerNode, Response,
 };
 
 // TODO
@@ -21,10 +21,7 @@ pub struct AudioManager {
     sound_buffer: Option<AudioBuffer>,
     source_node: Option<AudioBufferSourceNode>,
     panner_node: Option<PannerNode>,
-    debug_sound: Option<DebugSound>,
 }
-#[derive(Debug, Default)]
-pub struct DebugSound;
 
 #[wasm_bindgen]
 impl AudioManager {
@@ -39,8 +36,6 @@ impl AudioManager {
             sound_buffer: None,
             source_node: None,
             panner_node: None,
-            // Just for testing sound update within tick
-            debug_sound: None,
         })
     }
 
@@ -64,7 +59,7 @@ impl AudioManager {
         Ok(audio_buffer.dyn_into().unwrap())
     }
 
-    pub fn play_sound(&mut self) -> Result<(), JsValue> {
+    pub fn play_sound_at_pos(&mut self) -> Result<(), JsValue> {
         if let Some(ref audio_buffer) = self.sound_buffer {
             let source_node = self.context.create_buffer_source()?;
             source_node.set_buffer(Some(audio_buffer));
@@ -89,7 +84,7 @@ impl AudioManager {
         self.gain_node.gain().set_value(volume);
     }
 
-    pub fn set_position(&self, x: f32, y: f32, z: f32) {
+    pub fn set_panner_position(&self, x: f32, y: f32, z: f32) {
         if let Some(ref panner_node) = self.panner_node {
             panner_node.position_x().set_value(x);
             panner_node.position_y().set_value(y);
@@ -97,12 +92,38 @@ impl AudioManager {
         }
     }
 
-    // DEBUG: Test sound
-    pub fn is_debug(&self) -> bool {
-        self.debug_sound.is_some()
+    pub fn set_listener_position(&self, x: f32, y: f32, z: f32) {
+        let listener = self.context.listener();
+        listener.set_position(x as f64, y as f64, z as f64);
     }
 
-    pub fn update_debug_sound(&mut self) {
+    pub fn set_listener_orientation(
+        &self,
+        forward_x: f32,
+        forward_y: f32,
+        forward_z: f32,
+        up_x: f32,
+        up_y: f32,
+        up_z: f32,
+    ) {
+        let listener = self.context.listener();
+        listener.set_orientation(
+            forward_x as f64,
+            forward_y as f64,
+            forward_z as f64,
+            up_x as f64,
+            up_y as f64,
+            up_z as f64,
+        );
+    }
+
+    // DEBUG: Spawn a sound on Engine initialisation and
+    // apply panning effect in tick via `update_debug_sound`
+    pub fn is_debug(&self) -> bool {
+        true
+    }
+
+    pub fn update_debug_sound_on_tick(&mut self) {
         if self.is_debug() {
             if let Some(ref panner_node) = self.panner_node {
                 // Get the current x position
@@ -118,3 +139,12 @@ impl AudioManager {
         }
     }
 }
+
+// use serde::{Deserialize, Serialize};
+// #[wasm_bindgen]
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+// pub struct Position {
+//     pub x: f32,
+//     pub y: f32,
+//     pub z: f32,
+// }

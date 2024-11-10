@@ -28,7 +28,7 @@ export function TestAudioManager({ engine }: { engine: Engine }) {
     <div>
       {!isLoaded && (
         <div>
-          <button onClick={loadSound}>Load Sound from React</button>
+          <button onClick={loadSound}>Load Sound from Wasm</button>
           {wasError && <div>Error loading sound: {errorMessage}</div>}
         </div>
       )}
@@ -73,7 +73,7 @@ function TestAudioPlayback({ engine }: { engine: Engine }) {
 
   return (
     <div>
-      <button onClick={loadAndPlaySound}>Play sound from React</button>
+      <button onClick={loadAndPlaySound}>Play sound from Wasm</button>
       {isPlaying ? <div>Sound Playing...</div> : <div>Sound Not Playing</div>}
       {wasError && <div>Error: {errorMessage}</div>}
       {isPlaying && (

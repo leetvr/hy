@@ -132,22 +132,6 @@ impl Engine {
         })
     }
 
-    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
-        self.audio_manager.load_sound(url).await
-    }
-
-    pub fn play_sound(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.play_sound()
-    }
-
-    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
-        self.audio_manager.set_position(x, y, z);
-    }
-
-    pub fn is_audio_manager_debug(&mut self) -> bool {
-        self.audio_manager.is_debug()
-    }
-
     pub fn key_down(&mut self, event: KeyboardEvent) {
         if event.code() == "KeyR" {
             let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
@@ -223,11 +207,6 @@ impl Engine {
         let current_time = Duration::from_secs_f64(time / 1000.0);
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
-
-        // Update the debug sound
-        if self.audio_manager.is_debug() {
-            self.audio_manager.update_debug_sound();
-        }
 
         // Maintain assets, loading pending assets from remote requests
         self.assets.maintain();
@@ -466,6 +445,8 @@ impl Engine {
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
 
+        self.update_audio_manager();
+
         self.render();
     }
 
@@ -581,6 +562,47 @@ impl Engine {
         }
 
         self.renderer.render(&draw_calls);
+    }
+
+    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        self.audio_manager.load_sound(url).await
+    }
+
+    pub fn play_sound(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.play_sound_at_pos()
+    }
+
+    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
+        self.audio_manager.set_panner_position(x, y, z);
+    }
+
+    pub fn is_audio_manager_debug(&mut self) -> bool {
+        self.audio_manager.is_debug()
+    }
+
+    fn update_audio_manager(&mut self) {
+        // Apply debug tick updates
+        if self.audio_manager.is_debug() {
+            // self.audio_manager.update_debug_sound_on_tick();
+        }
+
+        // Get the camera's position and rotation based on the current game state
+        let (position, rotation) = match &self.state {
+            GameState::Playing { camera, .. } | GameState::Editing { camera, .. } => {
+                camera.position_and_rotation()
+            }
+            GameState::Loading => return,
+        };
+
+        // Update the listener's position and orientation
+        self.audio_manager
+            .set_listener_position(position.x, position.y, position.z);
+
+        let forward = (rotation * Vec3::new(0.0, 0.0, -1.0)).normalize();
+        let up = (rotation * Vec3::new(0.0, 1.0, 0.0)).normalize();
+
+        self.audio_manager
+            .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
     }
 }
 
