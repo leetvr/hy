@@ -11,7 +11,7 @@ enum LeftBarTab {
     Debug,
 };
 
-export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine, EngineMode, BlockRegistry }) {
+export default function LeftBar({ engine, currentMode, blockRegistry, setSelectedEntity }: { Engine, EngineMode, BlockRegistry, setSelectedEntity: (bool) => void }) {
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
     let theContent;
     if(currentTab === LeftBarTab.Blocks) {
@@ -20,6 +20,10 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
         theContent = <p>What even <i>is</i> an entity, man?</p>;
     } else {
         theContent = <div>
+        <ul>
+            <li onClick={ () => { setSelectedEntity(true); } }>select entity</li>
+            <li onClick={ () => { setSelectedEntity(false); } }>deselect entity</li>
+        </ul>
             <AudioPlayer />
             {currentMode === EngineMode.Edit && <Editor engine={engine} blockRegistry={blockRegistry} />}
         </div>;

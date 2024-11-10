@@ -9,6 +9,7 @@ function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
   const [currentMode, setModeState] = useState(initialEngineMode);
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
+  const [selectedEntity, setSelectedEntity] = useState(false);
 
   useEffect(() => {
     engine.ctx_on_init(setBlockRegistry);
@@ -26,8 +27,13 @@ function App({ engine }: { engine: Engine }) {
   return (
     <div className={"mode-"+editClass}>
         <TopBar setMode={setMode} />
-        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} />
-        <RightBar selectedEntity={false} />
+        <LeftBar
+            engine={engine}
+            currentMode={currentMode}
+            blockRegistry={blockRegistry}
+            setSelectedEntity={setSelectedEntity}
+            />
+        <RightBar selectedEntity={selectedEntity} />
     </div>
   );
 }
