@@ -132,9 +132,16 @@ impl Engine {
         })
     }
 
-    // // Expose a simplified method to start playing a sound using specified URL
-    pub async fn load_and_play_sound(&self, url: &str) -> Result<(), JsValue> {
-        self.audio_manager.debug_load_and_play_sound(url).await
+    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        self.audio_manager.load_sound(url).await
+    }
+
+    pub fn play_sound(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.play_sound()
+    }
+
+    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
+        self.audio_manager.set_position(x, y, z);
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {

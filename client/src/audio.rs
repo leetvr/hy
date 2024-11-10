@@ -2,20 +2,23 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, GainNode,
-    OscillatorNode, Response,
+    OscillatorNode, PannerNode, Response,
 };
 
-// Ultimately, need to havea single Audio Manager that keeps track of AudioContext
+// TODO
+// Figure out sound imports
+// Extract and test distortion from `AudioPlayer`
+// Attach a sound to an entity (Player initially)
+// Make sure sound spatialisation updates in relation to listener
+// Refactor AudioManager to keep track of a set of different `SoundInstance`s
 
 #[wasm_bindgen]
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
-
-    // We should maybe put the following sound specific properties into an AudioEmitter component or something
-    // Then AudioManager can handle a number of simultaneous sound
-    panner_node: web_sys::PannerNode,
-    distortion_node: Option<web_sys::WaveShaperNode>,
+    sound_buffer: Option<AudioBuffer>,
+    source_node: Option<AudioBufferSourceNode>,
+    panner_node: Option<PannerNode>,
 }
 
 #[wasm_bindgen]
@@ -23,100 +26,67 @@ impl AudioManager {
     pub fn new() -> Result<AudioManager, JsValue> {
         let context = AudioContext::new()?;
         let gain_node = context.create_gain()?;
-        let panner_node = context.create_panner()?;
-
         gain_node.connect_with_audio_node(&context.destination())?;
-        panner_node.connect_with_audio_node(&gain_node)?;
 
         Ok(AudioManager {
             context,
             gain_node,
-            panner_node,
-            distortion_node: None,
+            sound_buffer: None,
+            source_node: None,
+            panner_node: None,
         })
     }
 
-    // pub async fn load_sound(&self, url: &str) -> Result<AudioBuffer, JsValue> {
-    //     let window = window().unwrap();
-    //     let response = JsFuture::from(window.fetch_with_str(url)).await?;
-    //     let response: Response = response.dyn_into().unwrap();
+    pub async fn load_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        let audio_buffer = self.load_audio_buffer(url).await?;
+        self.sound_buffer = Some(audio_buffer);
+        web_sys::console::log_1(&"Sound buffer loaded successfully".into());
+        Ok(())
+    }
 
-    //     // Fetch the array buffer from the response
-    //     let array_buffer_promise = response.array_buffer()?;
-    //     let array_buffer = JsFuture::from(array_buffer_promise).await?;
-    //     // JsValue to ArrayBuffer
-    //     let array_buffer: ArrayBuffer = array_buffer.dyn_into().unwrap();
-    //     // Decode the audio data from the ArrayBuffer
-    //     let audio_buffer =
-    //         JsFuture::from(self.context.decode_audio_data(&array_buffer).unwrap()).await?;
-    //     let audio_buffer: AudioBuffer = audio_buffer.dyn_into().unwrap();
-    //     Ok(audio_buffer)
-    // }
+    async fn load_audio_buffer(&self, url: &str) -> Result<AudioBuffer, JsValue> {
+        let window = web_sys::window().unwrap();
+        let response = JsFuture::from(window.fetch_with_str(url)).await?;
+        let response: web_sys::Response = response.dyn_into().unwrap();
 
-    // pub fn play_sound(&self, buffer: JsValue) -> Result<(), JsValue> {
-    //     let source = self.context.create_buffer_source()?;
-    //     source.set_buffer(Some(&buffer.into()));
-    //     source.connect_with_audio_node(&self.gain_node)?;
-    //     source.start()?;
-    //     Ok(())
-    // }
+        let array_buffer = JsFuture::from(response.array_buffer()?).await?;
+        let array_buffer: ArrayBuffer = array_buffer.dyn_into().unwrap();
+
+        let audio_buffer_promise = self.context.decode_audio_data(&array_buffer)?;
+        let audio_buffer = JsFuture::from(audio_buffer_promise).await?;
+        Ok(audio_buffer.dyn_into().unwrap())
+    }
+
+    pub fn play_sound(&mut self) -> Result<(), JsValue> {
+        if let Some(ref audio_buffer) = self.sound_buffer {
+            let source_node = self.context.create_buffer_source()?;
+            source_node.set_buffer(Some(audio_buffer));
+
+            let panner_node = self.context.create_panner()?;
+            source_node.connect_with_audio_node(&panner_node)?;
+            panner_node.connect_with_audio_node(&self.gain_node)?;
+
+            source_node.start()?;
+
+            self.source_node = Some(source_node);
+            self.panner_node = Some(panner_node);
+
+            Ok(())
+        } else {
+            web_sys::console::error_1(&"Sound buffer not loaded".into());
+            Err(JsValue::from_str("Sound buffer not loaded"))
+        }
+    }
 
     pub fn set_volume(&self, volume: f32) {
         self.gain_node.gain().set_value(volume);
     }
 
     pub fn set_position(&self, x: f32, y: f32, z: f32) {
-        self.panner_node.position_x().set_value(x);
-        self.panner_node.position_y().set_value(y);
-        self.panner_node.position_z().set_value(z);
-    }
-
-    pub fn enable_distortion(&mut self) -> Result<(), JsValue> {
-        let distortion = self.context.create_wave_shaper()?;
-
-        self.distortion_node = Some(distortion);
-        self.update_distortion_chain()?;
-        Ok(())
-    }
-
-    pub fn disable_distortion(&mut self) -> Result<(), JsValue> {
-        if let Some(distortion) = &self.distortion_node {
-            distortion.disconnect()?;
-            self.panner_node.connect_with_audio_node(&self.gain_node)?;
+        if let Some(ref panner_node) = self.panner_node {
+            panner_node.position_x().set_value(x);
+            panner_node.position_y().set_value(y);
+            panner_node.position_z().set_value(z);
         }
-        self.distortion_node = None;
-        Ok(())
-    }
-
-    fn update_distortion_chain(&self) -> Result<(), JsValue> {
-        if let Some(distortion) = &self.distortion_node {
-            self.panner_node.disconnect()?;
-            self.panner_node.connect_with_audio_node(distortion)?;
-            distortion.connect_with_audio_node(&self.gain_node)?;
-        }
-        Ok(())
-    }
-}
-
-#[wasm_bindgen]
-impl AudioManager {
-    // Check if we can loading/playing sound from Wasm is working
-    pub async fn debug_load_and_play_sound(&self, url: &str) -> Result<(), JsValue> {
-        let window = web_sys::window().unwrap();
-        let response = JsFuture::from(window.fetch_with_str(url)).await?;
-        let response: web_sys::Response = response.dyn_into().unwrap();
-
-        let array_buffer = JsFuture::from(response.array_buffer()?).await?;
-        let array_buffer = array_buffer.dyn_into().unwrap();
-
-        let audio_buffer = JsFuture::from(self.context.decode_audio_data(&array_buffer)?).await?;
-        let audio_buffer: web_sys::AudioBuffer = audio_buffer.dyn_into().unwrap();
-
-        // Play the sound
-        let source = self.context.create_buffer_source()?;
-        source.set_buffer(Some(&audio_buffer));
-        source.connect_with_audio_node(&self.gain_node)?;
-        source.start()?;
-        Ok(())
     }
 }
