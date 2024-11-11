@@ -4,6 +4,12 @@
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
 
+export interface BlockPos {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface PlayerState {
   position: Vec3;
   velocity: Vec3;
@@ -20,7 +26,18 @@ export interface EntityState {
   velocity: Vec3;
 }
 
-type PlayerUpdate = (current_state: PlayerState, controls: PlayerControls) => PlayerState;
+export interface PlayerCollision {
+  block: BlockPos;
+  normal: Vec3;
+  resolution: Vec3;
+}
+
+
+type PlayerUpdate = (
+  current_state: PlayerState,
+  controls: PlayerControls,
+  collisions: PlayerCollision[],
+) => PlayerState;
 type EntityUpdate = (current_state: EntityState) => EntityState;
 
 export const DT = 0.01666667; // 60HZ

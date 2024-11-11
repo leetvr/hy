@@ -8,6 +8,7 @@ use {
         game::network::{ClientMessageReceiver, ServerMessageSender},
         js::JSContext,
     },
+    blocks::BlockPos,
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
     game_instance::GameInstance,
@@ -202,9 +203,19 @@ pub struct PlayerState {
     velocity: glam::Vec3,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlayerCollision {
+    // The block that the player collided with
+    pub block: BlockPos,
+    // The normal of the face that the player collided with
+    pub normal: glam::Vec3,
+    // The movement required to resolve the collision
+    pub resolution: glam::Vec3,
+}
+
 impl Player {
     pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
-        let physics_body = physics_world.add_ball_body(position, 1.);
+        let physics_body = physics_world.add_player_body(position, glam::Vec3::new(0.5, 1.5, 0.5));
         Self {
             state: PlayerState {
                 position,

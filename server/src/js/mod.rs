@@ -1,11 +1,14 @@
-use deno_core::{
-    error::AnyError,
-    extension, op2, serde_v8,
-    v8::{self},
-};
 use entities::{EntityData, EntityState, EntityTypeRegistry};
 use net_types::Controls;
 use std::{path::PathBuf, rc::Rc};
+use {
+    crate::game::PlayerCollision,
+    deno_core::{
+        error::AnyError,
+        extension, op2, serde_v8,
+        v8::{self},
+    },
+};
 
 use crate::game::PlayerState;
 
@@ -73,6 +76,7 @@ impl JSContext {
         &mut self,
         current_state: &PlayerState,
         controls: &Controls,
+        collisions: Vec<PlayerCollision>,
     ) -> anyhow::Result<PlayerState> {
         let scope = &mut self.runtime.handle_scope();
         let module_namespace = self.player_module_namespace.open(scope);
@@ -91,7 +95,8 @@ impl JSContext {
         let undefined = deno_core::v8::undefined(scope).into();
         let current_state = serde_v8::to_v8(scope, current_state).unwrap();
         let controls = serde_v8::to_v8(scope, controls).unwrap();
-        let args = [current_state.into(), controls.into()];
+        let colliding = serde_v8::to_v8(scope, collisions).unwrap();
+        let args = [current_state.into(), controls.into(), colliding.into()];
 
         let result = player_update.call(scope, undefined, &args).unwrap();
         let next_state: PlayerState = serde_v8::from_v8(scope, result)?;

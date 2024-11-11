@@ -373,8 +373,7 @@ impl Engine {
                 if self.controls.keyboard_inputs.contains("KeyD") {
                     move_dir.x += 1.0;
                 }
-                move_dir =
-                    Vec2::from_angle(move_dir.to_angle() + self.controls.yaw) * move_dir.length();
+                move_dir = move_dir.normalize_or_zero();
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),

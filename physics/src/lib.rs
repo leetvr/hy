@@ -109,6 +109,25 @@ impl PhysicsWorld {
         }
     }
 
+    /// Add player body
+    /// Creates a kinematic body with a cuboid collider
+    pub fn add_player_body(&mut self, position: glam::Vec3, size: glam::Vec3) -> PhysicsBody {
+        let rigid_body = RigidBodyBuilder::kinematic_position_based()
+            .translation(vector![position.x, position.y, position.z])
+            .enabled_rotations(false, false, false)
+            .enabled_translations(false, false, false)
+            .build();
+        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).build();
+        let handle = self.bodies.insert(rigid_body);
+        self.colliders
+            .insert_with_parent(collider, handle, &mut self.bodies);
+
+        PhysicsBody {
+            handle,
+            removed: false,
+        }
+    }
+
     /// Removes a rigidbody
     pub fn remove_body(&mut self, mut body: PhysicsBody) {
         // Remove the body from the physics world, also removing attached colliders.
