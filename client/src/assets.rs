@@ -35,21 +35,21 @@ impl Assets {
     }
 
     pub fn maintain(&mut self) {
-        self.pending.retain(|name, rx| {
-            if let Some(data) = rx.try_recv().ok() {
-                let data = match data {
-                    Ok(data) => Some(data),
-                    Err(err) => {
-                        tracing::error!("Failed to load asset {name}: {err}");
-                        None
-                    }
-                };
-                self.loaded.insert(name.clone(), data);
-                false
-            } else {
-                true
-            }
-        });
+        // self.pending.retain(|name, rx| {
+        //     if let Some(data) = rx.try_recv().ok() {
+        //         let data = match data {
+        //             Ok(data) => Some(data),
+        //             Err(err) => {
+        //                 tracing::error!("Failed to load asset {name}: {err}");
+        //                 None
+        //             }
+        //         };
+        //         self.loaded.insert(name.clone(), data);
+        //         false
+        //     } else {
+        //         true
+        //     }
+        // });
     }
 }
 
