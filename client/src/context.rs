@@ -3,7 +3,7 @@ use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys;
 
-use crate::{Engine, GameState};
+use crate::{game_state::GameState, Engine};
 
 #[wasm_bindgen]
 #[derive(Default, Copy, Clone)]

@@ -11,18 +11,15 @@ use {
 use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::Result,
-    blocks::BlockGrid,
     glam::{Quat, Vec2, Vec3},
-    net_types::PlayerId,
-    std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
+    std::{cell::RefCell, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
 
-use blocks::BlockId;
 // Re-exports
 pub use blocks::BlockPos;
 
-use context::EngineMode;
+use game_state::GameState;
 use glam::UVec2;
 use net_types::ClientPacket;
 use socket::IncomingMessages;
@@ -35,7 +32,9 @@ use web_sys::{HtmlCanvasElement, KeyboardEvent};
 mod assets;
 mod camera;
 mod context;
+mod game_state;
 mod gltf;
+mod packet_handlers;
 mod render;
 mod socket;
 mod transform;
@@ -276,16 +275,18 @@ impl Engine {
                         ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
-                            handle_set_block(blocks, set_block).expect("Failed to set block");
+                            packet_handlers::handle_set_block(blocks, set_block)
+                                .expect("Failed to set block");
                         }
                         net_types::ServerPacket::AddPlayer(add_player) => {
-                            handle_add_player(players, add_player).expect("Failed to add player");
+                            packet_handlers::handle_add_player(players, add_player)
+                                .expect("Failed to add player");
                         }
                         net_types::ServerPacket::UpdatePosition(update_position) => {
-                            handle_update_position(players, update_position);
+                            packet_handlers::handle_update_position(players, update_position);
                         }
                         net_types::ServerPacket::RemovePlayer(remove_player) => {
-                            handle_remove_player(players, remove_player)
+                            packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
                         // Sent by the server when we leave edit mode
@@ -475,7 +476,8 @@ impl Engine {
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
-        handle_set_block(blocks, set_block).expect("place block");
+        // cheeky: We pretend we received a `set_block` packet
+        packet_handlers::handle_set_block(blocks, set_block).expect("place block");
 
         self.send_packet(ClientPacket::SetBlock(set_block));
     }
@@ -581,112 +583,6 @@ struct Controls {
 #[derive(Clone, Debug, Default)]
 struct Player {
     position: Vec3,
-}
-
-#[derive(Debug, Default)]
-enum GameState {
-    #[default]
-    Loading,
-    Playing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        client_player: PlayerId,
-        camera: FlyCamera,
-        players: HashMap<PlayerId, Player>,
-    },
-    Editing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        camera: FlyCamera,
-        target_block: Option<BlockPos>,
-        selected_block_id: Option<BlockId>,
-    },
-}
-
-impl GameState {
-    pub fn transition(&mut self, next_state: EngineMode) {
-        let current_state = std::mem::replace(self, GameState::Loading);
-        match (current_state, next_state) {
-            // Playing -> Editing
-            (
-                GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Edit,
-            ) => {
-                *self = GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    target_block: None,
-                    selected_block_id: None,
-                }
-            }
-            // Editing -> Playing
-            (
-                GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Play,
-            ) => {
-                *self = GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
-                    players: Default::default(),
-                }
-            }
-            _ => {}
-        };
-    }
-}
-
-// Handlers for incoming packets
-
-/// Handle a `SetBlock` packet
-fn handle_set_block(
-    blocks: &mut BlockGrid,
-    net_types::SetBlock { position, block_id }: net_types::SetBlock,
-) -> Result<()> {
-    blocks[position] = block_id;
-    Ok(())
-}
-
-/// Handle an `AddPlayer` packet
-fn handle_add_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::AddPlayer { id, position }: net_types::AddPlayer,
-) -> Result<()> {
-    players.insert(id, Player { position });
-    Ok(())
-}
-
-/// Handle a `RemovePlayer` packet
-fn handle_remove_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::RemovePlayer { id }: net_types::RemovePlayer,
-) -> Result<()> {
-    players.remove(&id);
-    Ok(())
-}
-
-/// Handle an `UpdatePosition` packet
-fn handle_update_position(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
-) {
-    let Some(player) = players.get_mut(&id) else {
-        tracing::warn!("Received update position for unknown player {id:?}");
-        return;
-    };
-    player.position = position;
 }
 
 fn collect_block_textures(

@@ -1,7 +1,9 @@
 #!/bin/bash
 # Clear out old assets
 rm assets/client_bg*.wasm
+rm assets/index-*.css
 rm assets/index-*.js
+rm assets/index.html
 
 # We want to know if any of these steps fail
 set -xe
