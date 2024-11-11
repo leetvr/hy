@@ -59,10 +59,11 @@ function WasmWrapper() {
         await init(); // init
         const engine = Engine.new();
 
-        if (engine.is_audio_manager_debug()) {
-          await engine.load_sound("footsteps");
-          engine.play_sound();
-        }
+        // if (engine.is_audio_manager_debug()) {
+        //   // Play footsteps as game loads
+        //   await engine.load_sound("footsteps");
+        //   engine.play_sound();
+        // }
         
 
         const tick = (timestamp: number) => {

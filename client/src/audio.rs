@@ -16,6 +16,7 @@ use web_sys::{
 
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
+const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
 
 #[wasm_bindgen]
 pub struct AudioManager {
@@ -24,6 +25,7 @@ pub struct AudioManager {
     sound_buffer: Option<AudioBuffer>,
     source_node: Option<AudioBufferSourceNode>,
     panner_node: Option<PannerNode>,
+    // distortion_node: Option<web_sys::WaveShaperNode>,
 }
 
 #[wasm_bindgen]
@@ -39,6 +41,7 @@ impl AudioManager {
             sound_buffer: None,
             source_node: None,
             panner_node: None,
+            // distortion_node: None,
         })
     }
 
@@ -55,6 +58,7 @@ impl AudioManager {
         let sound_bytes = match sound_id {
             "footsteps" => FOOTSTEPS_OGG,
             "pain" => PAIN_WAV,
+            "step_gravel" => STEP_GRAVEL_WAV,
             _ => {
                 web_sys::console::error_1(&format!("Unknown sound ID:{} -> pain", sound_id).into());
                 // return Err(JsValue::from_str("Unknown sound ID"));
@@ -162,27 +166,10 @@ impl AudioManager {
         );
     }
 
-    // DEBUG: Spawn a sound on Engine initialisation and
-    // apply panning effect in tick via `update_debug_sound`
+    // DEBUG: Spawn footsteps sound on Engine initialisation and play a sound when placing blocks
     pub fn is_debug(&self) -> bool {
         true
     }
-
-    // pub fn update_debug_sound_on_tick(&mut self) {
-    //     if self.is_debug() {
-    //         if let Some(ref panner_node) = self.panner_node {
-    //             // Get the current x position
-    //             let current_x = panner_node.position_x().value();
-    //             // Update the x position
-    //             let mut new_x = current_x + 0.5;
-    //             if new_x > 5.0 {
-    //                 new_x = -5.0;
-    //             }
-    //             // Set the new x position
-    //             panner_node.position_x().set_value(new_x);
-    //         }
-    //     }
-    // }
 }
 
 use serde::{Deserialize, Serialize};
