@@ -478,9 +478,12 @@ impl Engine {
         handle_set_block(blocks, set_block).expect("place block");
 
         if self.is_audio_manager_debug() {
-            let Ok(_) =
-                self.play_sound_at_pos(position.x as f32, position.y as f32, position.z as f32)
-            else {
+            let Ok(_) = self.play_sound_at_pos(
+                "footsteps",
+                position.x as f32,
+                position.y as f32,
+                position.z as f32,
+            ) else {
                 tracing::debug!(
                     "Failed to play_sound_at_pos: position {position:?} for {block_id}"
                 );
@@ -585,13 +588,20 @@ impl Engine {
         self.audio_manager.load_sound_from_url(url).await
     }
 
-    pub fn play_sound(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.play_sound_at_pos(None)
+    pub fn play_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
+        self.audio_manager.play_sound_at_pos(sound_id, None)
     }
 
-    pub fn play_sound_at_pos(&mut self, x: f32, y: f32, z: f32) -> Result<(), JsValue> {
+    pub fn play_sound_at_pos(
+        &mut self,
+        sound_id: &str,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> Result<(), JsValue> {
         let sound_position = audio::SoundPosition::new(x, y, z);
-        self.audio_manager.play_sound_at_pos(Some(sound_position))
+        self.audio_manager
+            .play_sound_at_pos(sound_id, Some(sound_position))
     }
 
     pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {

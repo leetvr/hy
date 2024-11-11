@@ -1,18 +1,12 @@
-use std::default;
+use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
+#[allow(unused)]
 use web_sys::{
     js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
     AudioParam, GainNode, OscillatorNode, PannerNode, Response,
 };
-
-// TODO:
-// Preload sound assets
-// Refactor AudioManager to keep track of a set of different `SoundInstance`s
-// For sounds played via `play_sound_at_entity`, update panner_node in `tick`
-// Handle ambient sounds by disabling spatialisation or matching with listener
-// Extract distortion functionality from `AudioPlayer`
 
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
@@ -22,10 +16,17 @@ const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
-    sound_buffer: Option<AudioBuffer>,
+    // Initial prototyping: Just track the latest sound
+    // sound_buffer: Option<AudioBuffer>,
     source_node: Option<AudioBufferSourceNode>,
     panner_node: Option<PannerNode>,
     // distortion_node: Option<web_sys::WaveShaperNode>,
+
+    // // TODO: Track all current instances of a sound
+    // sound_instances: RefCell<Vec<SoundInstance>>, // All current instances of a sound
+
+    // Mapping of sound IDs to loaded AudioBuffers
+    sounds_bank: HashMap<String, AudioBuffer>,
 }
 
 #[wasm_bindgen]
@@ -38,16 +39,20 @@ impl AudioManager {
         Ok(AudioManager {
             context,
             gain_node,
-            sound_buffer: None,
+            // sound_buffer: None,
             source_node: None,
             panner_node: None,
             // distortion_node: None,
+
+            // sound_instances: RefCell::new(Vec::new()),
+            sounds_bank: HashMap::new(),
         })
     }
 
     pub async fn load_sound_from_id(&mut self, sound_id: &str) -> Result<(), JsValue> {
         let audio_buffer = self.load_audio_buffer_from_bytes(sound_id).await?;
-        self.sound_buffer = Some(audio_buffer);
+        self.sounds_bank.insert(sound_id.to_string(), audio_buffer);
+        // self.sound_buffer = Some(audio_buffer);
         web_sys::console::log_1(&"Embedded sound loaded successfully".into());
         Ok(())
     }
@@ -80,7 +85,8 @@ impl AudioManager {
 
     pub async fn load_sound_from_url(&mut self, url: &str) -> Result<(), JsValue> {
         let audio_buffer = self.load_audio_buffer_from_url(url).await?;
-        self.sound_buffer = Some(audio_buffer);
+        // self.sound_buffer = Some(audio_buffer);
+        self.sounds_bank.insert(url.to_string(), audio_buffer);
         web_sys::console::log_1(&"Sound buffer loaded successfully".into());
         Ok(())
     }
@@ -100,9 +106,10 @@ impl AudioManager {
 
     pub fn play_sound_at_pos(
         &mut self,
+        sound_id: &str,
         maybe_position: Option<SoundPosition>,
     ) -> Result<(), JsValue> {
-        if let Some(ref audio_buffer) = self.sound_buffer {
+        if let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) {
             let source_node = self.context.create_buffer_source()?;
             source_node.set_buffer(Some(audio_buffer));
 
@@ -187,3 +194,67 @@ impl SoundPosition {
         SoundPosition { x, y, z }
     }
 }
+
+// TODO:
+// Preload sound assets
+// Refactor AudioManager to keep track of a set of different `SoundInstance`s
+// For sounds played via `play_sound_at_entity`, update panner_node in `tick`
+// Handle ambient sounds by disabling spatialisation or matching with listener
+// Extract distortion functionality from `AudioPlayer`
+
+// TODO: (Later)
+// Make the sounds library good (and ideally export to typescript)
+// expose a `play_ambient_sound`
+// Scripting parameters: From `play_sound` store on `SoundInstance` or trigger mutation in `tick`
+// 1. looping parameter SoundInstance and an optional field on `play_sound` functions
+// 2. `is_looping`
+// 3. `reference distance` - clarify if just max or min as well
+// 4. `playback_speed`
+// 5. `volume`
+// 6. `distortion`
+// Implement a mechanism to interrupt playback from scripts (on entity or position)
+// Make sure coordinate systems line up between Hytopia and WebAudio (Right handed)
+
+// #[wasm_bindgen]
+// impl AudioManager {
+//     pub fn play_sound_at_entity(&self, entity_id: u32, sound_id: &str) -> Result<(), JsValue> {
+//         todo!()
+//     }
+// }
+
+// struct SoundInstance {
+//     source_node: AudioBufferSourceNode,
+//     panner_node: PannerNode,
+//     entity_id: Option<u32>, // Associated entity ID, if any
+// }
+
+// impl SoundInstance {
+//     fn new(
+//         context: &AudioContext,
+//         audio_buffer: &AudioBuffer,
+//         gain_node: &GainNode,
+//     ) -> Result<Self, JsValue> {
+//         let source_node = context.create_buffer_source()?;
+//         source_node.set_buffer(Some(audio_buffer));
+
+//         let panner_node = context.create_panner()?;
+//         source_node.connect_with_audio_node(&panner_node)?;
+//         panner_node.connect_with_audio_node(gain_node)?;
+
+//         Ok(SoundInstance {
+//             source_node,
+//             panner_node,
+//             entity_id: None,
+//         })
+//     }
+
+//     fn start(&self) -> Result<(), JsValue> {
+//         self.source_node.start()
+//     }
+
+//     fn set_position(&self, x: f32, y: f32, z: f32) {
+//         self.panner_node.position_x().set_value(x);
+//         self.panner_node.position_y().set_value(y);
+//         self.panner_node.position_z().set_value(z);
+//     }
+// }

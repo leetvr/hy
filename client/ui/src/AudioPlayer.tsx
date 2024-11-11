@@ -3,7 +3,7 @@ import { Engine } from "../../pkg/client";
 import "./App.css";
 
 // // Whatever, it was in the tutorial
-const sampleSound = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
+// const sampleSound = "https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3";
 
 export function TestAudioPlayback({ engine }: { engine: Engine }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -17,7 +17,7 @@ export function TestAudioPlayback({ engine }: { engine: Engine }) {
       await engine.load_sound("pain");
       
       console.log('Sound loaded');
-      engine.play_sound();
+      engine.play_sound("pain");
       console.log('Sound is now playing');
       setIsPlaying(true);
       setWasError(false);

@@ -62,7 +62,7 @@ function WasmWrapper() {
         // if (engine.is_audio_manager_debug()) {
         //   // Play footsteps as game loads
         //   await engine.load_sound("footsteps");
-        //   engine.play_sound();
+        //   engine.play_sound("footsteps");
         // }
         
 
