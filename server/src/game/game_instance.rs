@@ -86,12 +86,18 @@ impl GameInstance {
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
 
+        // Update players
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
             player.state = js_context
                 .get_player_next_state(&player.state, &client.last_controls)
                 .await
                 .unwrap();
+        }
+
+        // Update entities
+        for entity in self.world.entities.iter_mut() {
+            entity.state = js_context.get_entity_next_state(entity).await.unwrap();
         }
 
         // Step physics

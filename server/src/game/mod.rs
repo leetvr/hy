@@ -37,15 +37,15 @@ impl GameServer {
         let storage_dir: PathBuf = storage_dir.into();
         let world = World::load(&storage_dir).expect("Failed to load world");
 
+        tracing::info!("Starting JS context..");
+        let script_root = storage_dir.join("dist/");
+        let js_context = JSContext::new(&script_root, &world.entity_type_registry)
+            .await
+            .expect("Failed to load JS Context");
+
         // Set the initial state
         let initial_state = ServerState::Paused(GameInstance::new(world));
 
-        let player_script_path = storage_dir.join("dist/").join("player.js");
-
-        tracing::info!("Starting JS context..");
-        let js_context = JSContext::new(&player_script_path)
-            .await
-            .expect("Failed to load JS Context");
         tracing::info!("Done!");
 
         Self {
