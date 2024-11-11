@@ -1,6 +1,12 @@
 use {
     anyhow::Result,
-    std::{cell::RefCell, mem, rc::Rc},
+    net_types::ServerPacket,
+    std::{
+        cell::{Cell, RefCell},
+        collections::BTreeMap,
+        mem,
+        rc::Rc,
+    },
     wasm_bindgen::{prelude::Closure, JsCast},
     wasm_bindgen_futures::JsFuture,
     web_sys::{
@@ -9,42 +15,54 @@ use {
     },
 };
 
+thread_local! {
+    static SEQUENCE_COUNTER: Cell<u64> = Cell::new(0);
+}
+
+pub type IncomingMessages = Rc<RefCell<BTreeMap<u64, ServerPacket>>>;
+
 pub fn connect_to_server(
     addr: &str,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
+    incoming_messages: IncomingMessages,
 ) -> Result<WebSocket> {
     // Connect to server
     let ws = WebSocket::new(addr).expect("Failed to connect to server");
 
-    let (blob_tx, mut blob_rx) = tokio::sync::mpsc::channel::<Blob>(16);
     // Read incoming messages to a queue
     let onmessage = Closure::wrap(Box::new({
         move |event: MessageEvent| {
-            let message = event
+            let blob = event
                 .data()
                 .dyn_into::<Blob>()
                 .expect("Failed to read message");
 
-            let _ = blob_tx.blocking_send(message);
+            // We need to to this because reasons. Ask Kane or Lilith, but they've probably
+            // forgotten already.
+            let incoming_messages = incoming_messages.clone();
+            let sequence_number = SEQUENCE_COUNTER.with(|counter| {
+                let current = counter.get();
+                counter.set(current + 1);
+                current
+            });
+
+            wasm_bindgen_futures::spawn_local(async move {
+                let array_buffer = JsFuture::from(blob.array_buffer())
+                    .await
+                    .expect("Failed to read array buffer")
+                    .dyn_into::<ArrayBuffer>()
+                    .unwrap();
+                let array = Uint8Array::new(&array_buffer);
+                let data = array.to_vec();
+                let packet: net_types::ServerPacket =
+                    bincode::deserialize(&data).expect("Failed to deserialize server packet");
+                incoming_messages
+                    .borrow_mut()
+                    .insert(sequence_number, packet);
+            });
         }
     }) as Box<dyn FnMut(MessageEvent)>);
     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-
-    // Spawn a task for reading incoming blobs in the order they are received
-    // This is necessary because `blob.array_buffer()` is asynchronous
-    wasm_bindgen_futures::spawn_local(async move {
-        while let Some(blob) = blob_rx.recv().await {
-            let array_buffer = JsFuture::from(blob.array_buffer())
-                .await
-                .expect("Failed to read array buffer")
-                .dyn_into::<ArrayBuffer>()
-                .unwrap();
-            let array = Uint8Array::new(&array_buffer);
-            let data = array.to_vec();
-            incoming_messages.borrow_mut().push(data);
-        }
-    });
 
     // Handle changes in connection states
     let onopen = Closure::wrap(Box::new({
