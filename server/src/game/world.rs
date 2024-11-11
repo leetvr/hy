@@ -188,10 +188,6 @@ pub fn bake_terrain_colliders(
     );
 
     for layer_mesh in layer_meshes {
-        tracing::info!(
-            "Adding trimesh collider with {} triangles",
-            layer_mesh.len()
-        );
         let collider =
             physics_world.add_trimesh_collider(vertices.iter().copied(), layer_mesh.into_iter());
         colliders.push(collider);
