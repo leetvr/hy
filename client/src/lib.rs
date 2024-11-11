@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use {
     crate::{assets::Assets, camera::FlyCamera},
     blocks::BlockRegistry,
@@ -39,7 +41,7 @@ mod render;
 mod socket;
 mod transform;
 
-struct TestGltf {
+struct LoadedGLTF {
     gltf: gltf::GLTFModel,
     render_model: render::RenderModel,
 }
@@ -51,7 +53,7 @@ pub struct Engine {
 
     elapsed_time: Duration,
     delta_time: Duration,
-    test: Option<TestGltf>,
+    test: Option<LoadedGLTF>,
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
@@ -59,13 +61,16 @@ pub struct Engine {
     last_seen_sequence_number: u64,
 
     controls: Controls,
-    player_model: TestGltf,
+    player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
     // Textures by path
     // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
     // and vacant for a texture that is still loading
     block_textures: Option<Vec<[render::Texture; 6]>>,
+
+    // Entity models by path
+    entity_models: HashMap<String, LoadedGLTF>,
 
     assets: assets::Assets,
     state: GameState,
@@ -102,13 +107,14 @@ impl Engine {
             let gltf = gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
                 .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
             let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
-            TestGltf { gltf, render_model }
+            LoadedGLTF { gltf, render_model }
         };
 
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
             block_textures: None,
+            entity_models: Default::default(),
 
             renderer,
             delta_time: Duration::ZERO,
@@ -141,7 +147,7 @@ impl Engine {
 
             let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
 
-            self.test = Some(TestGltf { gltf, render_model });
+            self.test = Some(LoadedGLTF { gltf, render_model });
         }
 
         if event.code() == "KeyT" {
@@ -228,20 +234,16 @@ impl Engine {
                         net_types::ServerPacket::Init(net_types::Init {
                             blocks,
                             block_registry,
+                            entities,
+                            entity_type_registry,
                             ..
                         }) => {
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             tracing::info!("Block registry: {:#?}", block_registry);
 
-                            // Start fetching textures
-                            for block_type in block_registry.iter() {
-                                self.assets.get(&block_type.top_texture);
-                                self.assets.get(&block_type.bottom_texture);
-                                self.assets.get(&block_type.east_texture);
-                                self.assets.get(&block_type.west_texture);
-                                self.assets.get(&block_type.north_texture);
-                                self.assets.get(&block_type.south_texture);
-                            }
+                            // Start fetching assets
+                            self.assets.load_block_textures(&block_registry);
+                            self.assets.load_entity_models(&entities);
 
                             // Tell the React frontend
                             if let Some(on_init) = self.context.on_init_callback.take() {
@@ -254,6 +256,8 @@ impl Engine {
                             self.state = GameState::Editing {
                                 blocks,
                                 block_registry,
+                                entities,
+                                entity_type_registry,
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_block: None,
                                 selected_block_id: None,
@@ -484,17 +488,20 @@ impl Engine {
 
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
+        self.load_entity_models();
 
-        // Gather blocks
+        // Gather blocks and entities
         match &self.state {
             GameState::Playing {
                 blocks,
                 block_registry,
+                entities,
                 ..
             }
             | GameState::Editing {
                 blocks,
                 block_registry,
+                entities,
                 ..
             } => {
                 if self.block_textures.is_none() {
@@ -513,6 +520,18 @@ impl Engine {
                         render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
                             .into_iter(),
                     );
+                }
+
+                for entity in entities {
+                    let Some(model) = self.entity_models.get(&entity.model_path) else {
+                        continue;
+                    };
+
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(entity.state.position, Quat::IDENTITY),
+                    ));
                 }
             }
             _ => {}
@@ -564,6 +583,36 @@ impl Engine {
         }
 
         self.renderer.render(&draw_calls);
+    }
+
+    fn load_entity_models(&mut self) {
+        let entities = match &self.state {
+            GameState::Editing { entities, .. } | GameState::Playing { entities, .. } => entities,
+            _ => return,
+        };
+
+        for model_name in entities.iter().map(|e| &e.model_path) {
+            // If we've already loaded this model, continue
+            if self.entity_models.contains_key(model_name) {
+                continue;
+            }
+
+            // If we don't have the data yet, continue
+            let Some(data) = self.assets.get(model_name) else {
+                continue;
+            };
+
+            // Load the glTF
+            let loaded = {
+                let gltf =
+                    gltf::load(data).unwrap_or_else(|e| panic!("Error loading GLTF: {e:#?}"));
+                let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
+                LoadedGLTF { gltf, render_model }
+            };
+
+            // Stash it in our map
+            self.entity_models.insert(model_name.into(), loaded);
+        }
     }
 }
 

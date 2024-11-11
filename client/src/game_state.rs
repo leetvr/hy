@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use blocks::{BlockGrid, BlockId, BlockPos, BlockRegistry};
+use entities::{EntityData, EntityTypeRegistry};
 use net_types::PlayerId;
 
 use crate::{camera::FlyCamera, context::EngineMode, Player};
@@ -12,6 +13,8 @@ pub enum GameState {
     Playing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
+        entities: Vec<EntityData>,
+        entity_type_registry: EntityTypeRegistry,
         client_player: PlayerId,
         camera: FlyCamera,
         players: HashMap<PlayerId, Player>,
@@ -19,6 +22,8 @@ pub enum GameState {
     Editing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
+        entities: Vec<EntityData>,
+        entity_type_registry: EntityTypeRegistry,
         camera: FlyCamera,
         target_block: Option<BlockPos>,
         selected_block_id: Option<BlockId>,
@@ -34,6 +39,8 @@ impl GameState {
                 GameState::Playing {
                     blocks,
                     block_registry,
+                    entities,
+                    entity_type_registry,
                     camera,
                     ..
                 },
@@ -42,6 +49,8 @@ impl GameState {
                 *self = GameState::Editing {
                     blocks,
                     block_registry,
+                    entities,
+                    entity_type_registry,
                     camera,
                     target_block: None,
                     selected_block_id: None,
@@ -53,6 +62,8 @@ impl GameState {
                     blocks,
                     block_registry,
                     camera,
+                    entities,
+                    entity_type_registry,
                     ..
                 },
                 EngineMode::Play,
@@ -60,6 +71,8 @@ impl GameState {
                 *self = GameState::Playing {
                     blocks,
                     block_registry,
+                    entities,
+                    entity_type_registry,
                     camera,
                     client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
                     players: Default::default(),

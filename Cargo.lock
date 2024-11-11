@@ -303,6 +303,7 @@ dependencies = [
  "bytemuck",
  "console_error_panic_hook",
  "dolly",
+ "entities",
  "glam 0.29.1",
  "glow",
  "gltf",

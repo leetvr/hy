@@ -123,7 +123,7 @@ impl GameInstance {
                     blocks: world.blocks.clone(),
                     block_registry: world.block_registry.clone(),
                     entities: world.entities.clone(),
-                    entity_registry: world.entity_type_registry.clone(),
+                    entity_type_registry: world.entity_type_registry.clone(),
                     client_player: player_id,
                 }
                 .into(),

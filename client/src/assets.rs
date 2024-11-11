@@ -1,5 +1,8 @@
 use {
     anyhow::{format_err, Result},
+    blocks::BlockRegistry,
+    entities::EntityData,
+    itertools::Itertools,
     std::{cell::RefCell, collections::HashMap, rc::Rc},
     tokio::sync::oneshot,
     wasm_bindgen::{prelude::Closure, JsCast},
@@ -16,6 +19,23 @@ impl Assets {
         Self {
             pending: Default::default(),
             loaded: Default::default(),
+        }
+    }
+
+    pub fn load_block_textures(&mut self, block_registry: &BlockRegistry) {
+        for block_type in block_registry.iter() {
+            self.get(&block_type.top_texture);
+            self.get(&block_type.bottom_texture);
+            self.get(&block_type.east_texture);
+            self.get(&block_type.west_texture);
+            self.get(&block_type.north_texture);
+            self.get(&block_type.south_texture);
+        }
+    }
+
+    pub fn load_entity_models(&mut self, entities: &[EntityData]) {
+        for model_name in entities.iter().map(|e| &e.model_path).unique() {
+            self.get(model_name);
         }
     }
 

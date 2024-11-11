@@ -58,7 +58,7 @@ pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
     pub entities: Vec<EntityData>,
-    pub entity_registry: EntityTypeRegistry,
+    pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
 
