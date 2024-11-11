@@ -4,21 +4,23 @@ pub type EntityID = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
-    name: String,
-    entity_type: EntityTypeID,
-    model_path: String,
-    state: EntityState,
+    pub name: String,
+    pub id: EntityID,
+    pub entity_type: EntityTypeID,
+    pub model_path: String,
+    pub state: EntityState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityType {
-    name: String,
+    pub id: EntityTypeID,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityState {
-    position: glam::Vec3,
-    velocity: glam::Vec3,
+    pub position: glam::Vec3,
+    pub velocity: glam::Vec3,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -27,7 +29,7 @@ pub struct EntityTypeRegistry {
 }
 
 impl EntityTypeRegistry {
-    pub fn entities(&self) -> Vec<EntityType> {
+    pub fn entity_types(&self) -> Vec<EntityType> {
         self.entity_types.clone()
     }
 }

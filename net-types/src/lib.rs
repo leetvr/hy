@@ -1,6 +1,7 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
+    entities::{EntityData, EntityTypeRegistry},
     serde::{Deserialize, Serialize},
 };
 
@@ -56,6 +57,8 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
+    pub entities: Vec<EntityData>,
+    pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
 
