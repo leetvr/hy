@@ -25,6 +25,7 @@ pub use blocks::BlockPos;
 use context::EngineMode;
 use glam::UVec2;
 use net_types::ClientPacket;
+use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -55,7 +56,8 @@ pub struct Engine {
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
+    incoming_messages: IncomingMessages,
+    last_seen_sequence_number: u64,
 
     controls: Controls,
     player_model: TestGltf,
@@ -89,7 +91,7 @@ impl Engine {
         let renderer = render::Renderer::new(canvas.clone())?;
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
-        let incoming_messages = Rc::new(RefCell::new(Vec::new()));
+        let incoming_messages = IncomingMessages::default();
         let ws = socket::connect_to_server(
             "ws://127.0.0.1:8889",
             connection_state.clone(),
@@ -117,6 +119,7 @@ impl Engine {
             ws,
             connection_state,
             incoming_messages,
+            last_seen_sequence_number: 0,
 
             controls: Default::default(),
             player_model,
@@ -211,12 +214,15 @@ impl Engine {
                 if self.incoming_messages.borrow().is_empty() {
                     break;
                 }
-                // Incoming messages are pushed to the back of the queue, so we process them from
-                // the front
-                let message = self.incoming_messages.borrow_mut().remove(0);
+                // Incoming messages are stored by their sequence number
+                let packet = self
+                    .incoming_messages
+                    .borrow_mut()
+                    .remove(&self.last_seen_sequence_number)
+                    .expect("Messages are out of order!");
 
-                let packet: net_types::ServerPacket =
-                    bincode::deserialize(&message).expect("Failed to deserialize position update");
+                // Increment our sequence number
+                self.last_seen_sequence_number += 1;
 
                 match &mut self.state {
                     GameState::Loading => match packet {
