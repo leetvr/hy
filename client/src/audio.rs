@@ -7,12 +7,12 @@ use web_sys::{
     AudioParam, GainNode, OscillatorNode, PannerNode, Response,
 };
 
-// TODO
-// Extract and test distortion from `AudioPlayer`
-// Attach a sound to an entity (Player initially)
-// Make sure sound spatialisation updates in relation to listener
+// TODO:
+// Preload sound assets
 // Refactor AudioManager to keep track of a set of different `SoundInstance`s
-// For ambient sounds we can just set the listener to be the same as the position
+// For sounds played via `play_sound_at_entity`, update panner_node in `tick`
+// Handle ambient sounds by disabling spatialisation or matching with listener
+// Extract distortion functionality from `AudioPlayer`
 
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
