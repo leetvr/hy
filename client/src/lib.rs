@@ -72,6 +72,8 @@ pub struct Engine {
     // Entity models by path
     entity_models: HashMap<String, LoadedGLTF>,
 
+    debug_lines: Vec<render::DebugLine>,
+
     assets: assets::Assets,
     state: GameState,
 }
@@ -128,6 +130,8 @@ impl Engine {
 
             controls: Default::default(),
             player_model,
+
+            debug_lines: Vec::new(),
 
             assets: Assets::new(),
             state: Default::default(),
@@ -451,6 +455,11 @@ impl Engine {
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
 
+        self.debug_lines.push(render::DebugLine::new(
+            Vec3::new(0.0, 3.0, 0.0),
+            Vec3::new(0.0, 3.0, 10.0),
+        ));
+
         self.render();
     }
 
@@ -581,7 +590,9 @@ impl Engine {
             ));
         }
 
-        self.renderer.render(&draw_calls);
+        self.renderer.render(&draw_calls, &self.debug_lines);
+
+        self.debug_lines.clear();
     }
 
     fn load_entity_models(&mut self) {
