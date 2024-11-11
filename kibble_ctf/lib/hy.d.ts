@@ -15,4 +15,12 @@ export interface PlayerControls {
   camera_yaw: number; // radians
 }
 
+export interface EntityState {
+  position: Vec3;
+  velocity: Vec3;
+}
+
 type PlayerUpdate = (current_state: PlayerState, controls: PlayerControls) => PlayerState;
+type EntityUpdate = (current_state: EntityState) => EntityState;
+
+export const DT = 0.01666667; // 60HZ

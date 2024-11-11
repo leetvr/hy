@@ -1,4 +1,4 @@
-import { Vec3, PlayerUpdate, PlayerControls, PlayerState, Vec2 } from "../lib/player";
+import { Vec3, PlayerUpdate, PlayerControls, PlayerState, Vec2 } from "../lib/hy";
 
 const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 10.0; // Movement speed (units per second)

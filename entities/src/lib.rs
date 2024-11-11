@@ -15,6 +15,7 @@ pub struct EntityData {
 pub struct EntityType {
     pub id: EntityTypeID,
     pub name: String,
+    pub script_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
