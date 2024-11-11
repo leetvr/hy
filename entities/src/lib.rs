@@ -5,6 +5,7 @@ pub type EntityID = u64;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
     name: String,
+    id: EntityID,
     entity_type: EntityTypeID,
     model_path: String,
     state: EntityState,
@@ -12,6 +13,7 @@ pub struct EntityData {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityType {
+    id: EntityTypeID,
     name: String,
 }
 
@@ -27,7 +29,7 @@ pub struct EntityTypeRegistry {
 }
 
 impl EntityTypeRegistry {
-    pub fn entities(&self) -> Vec<EntityType> {
+    pub fn entity_types(&self) -> Vec<EntityType> {
         self.entity_types.clone()
     }
 }

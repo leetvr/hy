@@ -1212,6 +1212,7 @@ version = "0.1.0"
 dependencies = [
  "blocks",
  "derive_more",
+ "entities",
  "glam 0.29.1",
  "serde",
 ]

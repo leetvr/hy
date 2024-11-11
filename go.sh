@@ -1,4 +1,9 @@
 #!/bin/bash
+# Clear out old assets
+rm assets/client_bg*.wasm
+rm assets/index-*.js
+
+# We want to know if any of these steps fail
 set -xe
 
 # Build the client

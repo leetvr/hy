@@ -114,12 +114,16 @@ impl GameInstance {
         let client_id = self.next_client_id;
         self.next_client_id = self.next_client_id + 1;
 
+        let world = &self.world;
+
         // Send world init packet
         let _ = outgoing_tx
             .send(
                 net_types::Init {
-                    blocks: self.world.blocks.clone(),
-                    block_registry: self.world.block_registry.clone(),
+                    blocks: world.blocks.clone(),
+                    block_registry: world.block_registry.clone(),
+                    entities: world.entities.clone(),
+                    entity_registry: world.entity_type_registry.clone(),
                     client_player: player_id,
                 }
                 .into(),

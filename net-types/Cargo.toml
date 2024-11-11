@@ -8,3 +8,4 @@ glam.workspace = true
 serde.workspace = true
 derive_more.workspace = true
 blocks.workspace = true
+entities.workspace = true
