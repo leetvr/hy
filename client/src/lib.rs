@@ -263,7 +263,7 @@ impl Engine {
                                 entities,
                                 entity_type_registry,
                                 camera: FlyCamera::new(Vec3::ZERO),
-                                target_block: None,
+                                target_raycast: None,
                                 selected_block_id: None,
                             };
 
@@ -388,8 +388,7 @@ impl Engine {
             GameState::Editing {
                 camera,
                 blocks,
-                target_block,
-                selected_block_id,
+                target_raycast,
                 ..
             } => {
                 // Camera input
@@ -424,18 +423,10 @@ impl Engine {
                 let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
                 let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
 
-                // If we're *placing* blocks, ie. not removing them, we actually want to place a
-                // block *above* the raycast target.
-                let mode = match selected_block_id {
-                    None | Some(0) => blocks::RaycastMode::Selecting,
-                    _ => blocks::RaycastMode::Placing,
-                };
-                *target_block = blocks
-                    .raycast(position, ray_dir, mode)
-                    .map(|hit| hit.position);
+                *target_raycast = blocks.raycast(position, ray_dir);
 
                 if self.controls.mouse_left {
-                    tracing::debug!("Placing block at {target_block:?}");
+                    tracing::debug!("Placing block at {target_raycast:?}");
                     self.place_block();
                 }
 
@@ -473,17 +464,33 @@ impl Engine {
     fn place_block(&mut self) {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
-            blocks,
-            target_block: Some(target_block),
+            ref mut blocks,
+            target_raycast: Some(ref target_raycast),
             selected_block_id: Some(block_id),
             ..
-        } = &mut self.state
+        } = self.state
         else {
             return;
         };
 
-        let block_id = *block_id;
-        let position = *target_block;
+        let is_deleting = block_id == 0;
+        let position = match is_deleting {
+            // When deleting a block, we place it at the position of the raycast.
+            true => target_raycast.position,
+            false => {
+                // When we place a block, we place it at the position of the raycast, but offset by
+                // the entrance face normal, as we're placing it "on" the face the ray entered.
+                let Some(position) = target_raycast
+                    .position
+                    .add_signed(target_raycast.entrance_face_normal.as_ivec3())
+                else {
+                    return;
+                };
+
+                position
+            }
+        };
+
         let set_block = net_types::SetBlock { position, block_id };
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
@@ -519,15 +526,44 @@ impl Engine {
                 }
 
                 if let Some(block_textures) = &self.block_textures {
-                    let blocks = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
+                    let block_to_remove = match self.state {
+                        GameState::Editing {
+                            target_raycast: Some(ref raycast),
+                            selected_block_id: Some(0),
+                            ..
+                        } => Some(raycast.position),
+                        _ => None,
+                    };
+
+                    let blocks_to_render = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
+                        if let Some(ref block_to_remove) = block_to_remove {
+                            if *block_to_remove == pos {
+                                return None;
+                            }
+                        }
+
                         Some((pos, &block_textures[block_id as usize - 1]))
                     });
 
-                    // TODO: If we're trying to *remove* a block, we need to not render a block at that position.
                     draw_calls.extend(
-                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
+                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks_to_render, None)
                             .into_iter(),
                     );
+
+                    if let Some(block_to_remove) = block_to_remove {
+                        let block = blocks.get(block_to_remove).copied().unwrap();
+                        if block != 0 {
+                            let blocks = [(block_to_remove, &block_textures[block as usize - 1])];
+                            draw_calls.extend(
+                                render::build_cube_draw_calls(
+                                    &self.cube_mesh_data,
+                                    blocks.into_iter(),
+                                    Some([1.0, 0.0, 0., 1.0].into()),
+                                )
+                                .into_iter(),
+                            );
+                        }
+                    }
                 }
 
                 for entity in entities {
@@ -559,22 +595,27 @@ impl Engine {
             }
             // Ghost block
             GameState::Editing {
-                target_block: Some(block_pos),
+                target_raycast: Some(raycast),
                 selected_block_id: Some(block_id),
                 ..
             } if *block_id != 0 => {
                 if let Some(block_textures) = &self.block_textures {
                     let textures = &block_textures[*block_id as usize - 1];
-                    let blocks = [(*block_pos, textures)];
+                    if let Some(block_position) = raycast
+                        .position
+                        .add_signed(raycast.entrance_face_normal.as_ivec3())
+                    {
+                        let blocks = [(block_position, textures)];
 
-                    draw_calls.extend(
-                        render::build_cube_draw_calls(
-                            &self.cube_mesh_data,
-                            blocks.into_iter(),
-                            Some([0., 1.0, 0., 1.0].into()),
-                        )
-                        .into_iter(),
-                    );
+                        draw_calls.extend(
+                            render::build_cube_draw_calls(
+                                &self.cube_mesh_data,
+                                blocks.into_iter(),
+                                Some([0., 1.0, 0., 1.0].into()),
+                            )
+                            .into_iter(),
+                        );
+                    }
                 }
             }
             _ => (),
