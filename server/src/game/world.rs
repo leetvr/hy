@@ -1,6 +1,7 @@
 use {
     anyhow::Result,
     blocks::{BlockGrid, BlockPos, BlockRegistry, EMPTY_BLOCK},
+    entities::{EntityData, EntityTypeRegistry},
     glam::Vec3,
     physics::{PhysicsCollider, PhysicsWorld},
     std::{collections::HashMap, mem, path::Path},
@@ -8,21 +9,32 @@ use {
 
 const BLOCKS_PATH: &str = "blocks.json";
 const BLOCK_TYPES_PATH: &str = "block_types.json";
+const ENTITIES_PATH: &str = "entities.json";
+const ENTITY_TYPES_PATH: &str = "entity_types.json";
 
 pub struct World {
     pub physics_world: PhysicsWorld,
     colliders: Vec<PhysicsCollider>,
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub _entities: hecs::World,
+    pub entities: Vec<EntityData>,
+    pub entity_type_registry: EntityTypeRegistry,
 }
 
 impl World {
     pub fn load(storage_dir: impl AsRef<Path>) -> Result<Self> {
         let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
         let blocks = serde_json::from_slice(&std::fs::read(blocks_path)?)?;
+
         let block_types_path = storage_dir.as_ref().join(BLOCK_TYPES_PATH);
         let block_registry = serde_json::from_slice(&std::fs::read(&block_types_path)?)?;
+
+        let entities_path = storage_dir.as_ref().join(ENTITIES_PATH);
+        let entities = serde_json::from_slice(&std::fs::read(entities_path)?)?;
+
+        let entity_types_path = storage_dir.as_ref().join(ENTITY_TYPES_PATH);
+        let entity_type_registry = serde_json::from_slice(&std::fs::read(entity_types_path)?)?;
+
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
 
@@ -33,7 +45,8 @@ impl World {
             colliders,
             blocks,
             block_registry,
-            _entities: Default::default(),
+            entities,
+            entity_type_registry,
         })
     }
 
@@ -175,10 +188,6 @@ pub fn bake_terrain_colliders(
     );
 
     for layer_mesh in layer_meshes {
-        tracing::info!(
-            "Adding trimesh collider with {} triangles",
-            layer_mesh.len()
-        );
         let collider =
             physics_world.add_trimesh_collider(vertices.iter().copied(), layer_mesh.into_iter());
         colliders.push(collider);

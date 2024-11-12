@@ -28,3 +28,4 @@ serde-wasm-bindgen.workspace = true
 
 net-types.workspace = true
 blocks.workspace = true
+entities.workspace = true

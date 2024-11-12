@@ -1,6 +1,7 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
+    entities::{EntityData, EntityTypeRegistry},
     serde::{Deserialize, Serialize},
 };
 
@@ -18,6 +19,7 @@ impl PlayerId {
 pub struct Controls {
     pub move_direction: glam::Vec2,
     pub jump: bool,
+    pub camera_yaw: f32, // radians
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -55,6 +57,8 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
+    pub entities: Vec<EntityData>,
+    pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
 

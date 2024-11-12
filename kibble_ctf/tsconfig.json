@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "es6", // Set the JavaScript version to compile to
+    "module": "es6", // Set the module system (use "es2020" or "esnext" for newer module features if needed)
+    "outDir": "./dist", // Specify the output directory for compiled files
+    "rootDir": "./src", // Specify the root directory of input files
+    "moduleResolution": "node", // Effective with Node.js-style module imports
+    "strict": true // Enable all strict type-checking options
+  },
+  "include": [
+    "./src/*.ts" // Path to the TypeScript files
+  ]
+}

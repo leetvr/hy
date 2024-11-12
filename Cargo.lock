@@ -303,6 +303,7 @@ dependencies = [
  "bytemuck",
  "console_error_panic_hook",
  "dolly",
+ "entities",
  "glam 0.29.1",
  "glow",
  "gltf",
@@ -575,6 +576,15 @@ name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
+
+[[package]]
+name = "entities"
+version = "0.1.0"
+dependencies = [
+ "glam 0.29.1",
+ "serde",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "equivalent"
@@ -899,16 +909,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
-name = "hecs"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1cbc675ee8d97b4d206a985137f8ad59666538f56f906474f554467a63c776d"
-dependencies = [
- "hashbrown 0.14.5",
- "spin",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1213,6 +1213,7 @@ version = "0.1.0"
 dependencies = [
  "blocks",
  "derive_more",
+ "entities",
  "glam 0.29.1",
  "serde",
 ]
@@ -1857,9 +1858,9 @@ dependencies = [
  "blocks",
  "crossbeam",
  "deno_core",
+ "entities",
  "futures-util",
  "glam 0.29.1",
- "hecs",
  "net-types",
  "physics",
  "serde",
@@ -1868,6 +1869,8 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+ "tsify",
+ "wasm-bindgen",
  "webbrowser",
 ]
 
@@ -1998,12 +2001,6 @@ dependencies = [
  "robust",
  "smallvec",
 ]
-
-[[package]]
-name = "spin"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "stable_deref_trait"

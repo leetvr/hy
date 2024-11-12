@@ -1,9 +1,11 @@
 mod cube_vao;
+mod debug_renderer;
 mod grid_renderer;
 mod vertex;
 
 // Re-exports
 pub use cube_vao::CubeVao;
+pub use debug_renderer::DebugLine;
 pub use vertex::Vertex;
 
 use {
@@ -36,6 +38,7 @@ pub struct Renderer {
     resolution: UVec2,
 
     grid_renderer: grid_renderer::GridRenderer,
+    debug_renderer: debug_renderer::DebugRenderer,
 }
 
 impl Renderer {
@@ -62,6 +65,7 @@ impl Renderer {
         let camera = Camera::default();
 
         let grid_renderer = grid_renderer::GridRenderer::new(&gl);
+        let debug_renderer = debug_renderer::DebugRenderer::new(&gl);
 
         Ok(Self {
             gl,
@@ -72,6 +76,7 @@ impl Renderer {
             camera,
             resolution: UVec2::new(640, 480),
             grid_renderer,
+            debug_renderer,
         })
     }
 
@@ -79,7 +84,7 @@ impl Renderer {
         self.resolution = dimension;
     }
 
-    pub fn render(&self, draw_calls: &[DrawCall]) {
+    pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine]) {
         let gl = &self.gl;
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
@@ -135,11 +140,11 @@ impl Renderer {
                 );
             }
 
-            self.grid_renderer.render(
-                &self.gl,
-                projection_matrix * view_matrix,
-                UVec2::new(64, 64),
-            );
+            let clip_from_world = projection_matrix * view_matrix;
+            self.grid_renderer
+                .render(&self.gl, clip_from_world, UVec2::new(64, 64));
+
+            self.debug_renderer.render(gl, clip_from_world, debug_lines);
 
             gl.flush();
         }

@@ -43,6 +43,7 @@ pub async fn start_client_listener(
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
 ) -> Result<()> {
     let server = TcpListener::bind("127.0.0.1:8889").await?;
+    tracing::info!("WebSocket server started on ws://127.0.0.1:8889");
 
     while let Ok((stream, _)) = server.accept().await {
         let incoming_connections = incoming_connections.clone();

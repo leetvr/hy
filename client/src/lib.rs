@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use {
     crate::{assets::Assets, camera::FlyCamera},
     blocks::BlockRegistry,
@@ -11,20 +13,18 @@ use {
 use {
     crate::{socket::ConnectionState, transform::Transform},
     anyhow::Result,
-    blocks::BlockGrid,
     glam::{Quat, Vec2, Vec3},
-    net_types::PlayerId,
-    std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
+    std::{cell::RefCell, rc::Rc, slice, time::Duration},
     web_sys::WebSocket,
 };
 
-use blocks::BlockId;
 // Re-exports
 pub use blocks::BlockPos;
 
-use context::EngineMode;
+use game_state::GameState;
 use glam::UVec2;
 use net_types::ClientPacket;
+use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -35,12 +35,14 @@ mod assets;
 mod audio;
 mod camera;
 mod context;
+mod game_state;
 mod gltf;
+mod packet_handlers;
 mod render;
 mod socket;
 mod transform;
 
-struct TestGltf {
+struct LoadedGLTF {
     gltf: gltf::GLTFModel,
     render_model: render::RenderModel,
 }
@@ -52,20 +54,26 @@ pub struct Engine {
 
     elapsed_time: Duration,
     delta_time: Duration,
-    test: Option<TestGltf>,
+    test: Option<LoadedGLTF>,
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
+    incoming_messages: IncomingMessages,
+    last_seen_sequence_number: u64,
 
     controls: Controls,
-    player_model: TestGltf,
+    player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
     // Textures by path
     // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
     // and vacant for a texture that is still loading
     block_textures: Option<Vec<[render::Texture; 6]>>,
+
+    // Entity models by path
+    entity_models: HashMap<String, LoadedGLTF>,
+
+    debug_lines: Vec<render::DebugLine>,
 
     assets: assets::Assets,
     state: GameState,
@@ -92,7 +100,7 @@ impl Engine {
         let renderer = render::Renderer::new(canvas.clone())?;
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
-        let incoming_messages = Rc::new(RefCell::new(Vec::new()));
+        let incoming_messages = IncomingMessages::default();
         let ws = socket::connect_to_server(
             "ws://127.0.0.1:8889",
             connection_state.clone(),
@@ -104,7 +112,7 @@ impl Engine {
             let gltf = gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
                 .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
             let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
-            TestGltf { gltf, render_model }
+            LoadedGLTF { gltf, render_model }
         };
 
         let audio_manager = audio::AudioManager::new()?;
@@ -113,6 +121,7 @@ impl Engine {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
             block_textures: None,
+            entity_models: Default::default(),
 
             renderer,
             delta_time: Duration::ZERO,
@@ -122,9 +131,12 @@ impl Engine {
             ws,
             connection_state,
             incoming_messages,
+            last_seen_sequence_number: 0,
 
             controls: Default::default(),
             player_model,
+
+            debug_lines: Vec::new(),
 
             assets: Assets::new(),
             state: Default::default(),
@@ -145,7 +157,7 @@ impl Engine {
 
             let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
 
-            self.test = Some(TestGltf { gltf, render_model });
+            self.test = Some(LoadedGLTF { gltf, render_model });
         }
 
         if event.code() == "KeyT" {
@@ -217,32 +229,31 @@ impl Engine {
                 if self.incoming_messages.borrow().is_empty() {
                     break;
                 }
-                // Incoming messages are pushed to the back of the queue, so we process them from
-                // the front
-                let message = self.incoming_messages.borrow_mut().remove(0);
+                // Incoming messages are stored by their sequence number
+                let packet = self
+                    .incoming_messages
+                    .borrow_mut()
+                    .remove(&self.last_seen_sequence_number)
+                    .expect("Messages are out of order!");
 
-                let packet: net_types::ServerPacket =
-                    bincode::deserialize(&message).expect("Failed to deserialize position update");
+                // Increment our sequence number
+                self.last_seen_sequence_number += 1;
 
                 match &mut self.state {
                     GameState::Loading => match packet {
                         net_types::ServerPacket::Init(net_types::Init {
                             blocks,
                             block_registry,
+                            entities,
+                            entity_type_registry,
                             ..
                         }) => {
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             tracing::info!("Block registry: {:#?}", block_registry);
 
-                            // Start fetching textures
-                            for block_type in block_registry.iter() {
-                                self.assets.get(&block_type.top_texture);
-                                self.assets.get(&block_type.bottom_texture);
-                                self.assets.get(&block_type.east_texture);
-                                self.assets.get(&block_type.west_texture);
-                                self.assets.get(&block_type.north_texture);
-                                self.assets.get(&block_type.south_texture);
-                            }
+                            // Start fetching assets
+                            self.assets.load_block_textures(&block_registry);
+                            self.assets.load_entity_models(&entities);
 
                             // Tell the React frontend
                             if let Some(on_init) = self.context.on_init_callback.take() {
@@ -255,6 +266,8 @@ impl Engine {
                             self.state = GameState::Editing {
                                 blocks,
                                 block_registry,
+                                entities,
+                                entity_type_registry,
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_block: None,
                                 selected_block_id: None,
@@ -276,16 +289,18 @@ impl Engine {
                         ..
                     } => match packet {
                         net_types::ServerPacket::SetBlock(set_block) => {
-                            handle_set_block(blocks, set_block).expect("Failed to set block");
+                            packet_handlers::handle_set_block(blocks, set_block)
+                                .expect("Failed to set block");
                         }
                         net_types::ServerPacket::AddPlayer(add_player) => {
-                            handle_add_player(players, add_player).expect("Failed to add player");
+                            packet_handlers::handle_add_player(players, add_player)
+                                .expect("Failed to add player");
                         }
                         net_types::ServerPacket::UpdatePosition(update_position) => {
-                            handle_update_position(players, update_position);
+                            packet_handlers::handle_update_position(players, update_position);
                         }
                         net_types::ServerPacket::RemovePlayer(remove_player) => {
-                            handle_remove_player(players, remove_player)
+                            packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
                         // Sent by the server when we leave edit mode
@@ -368,11 +383,11 @@ impl Engine {
                 if self.controls.keyboard_inputs.contains("KeyD") {
                     move_dir.x += 1.0;
                 }
-                move_dir =
-                    Vec2::from_angle(move_dir.to_angle() + self.controls.yaw) * move_dir.length();
+                move_dir = move_dir.normalize_or_zero();
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),
+                    camera_yaw: self.controls.yaw,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
@@ -434,6 +449,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: Vec2::ZERO,
                     jump: false,
+                    camera_yaw: 0.0,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
@@ -444,6 +460,11 @@ impl Engine {
         self.controls.mouse_movement = (0, 0);
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
+
+        self.debug_lines.push(render::DebugLine::new(
+            Vec3::new(0.0, 3.0, 0.0),
+            Vec3::new(0.0, 3.0, 10.0),
+        ));
 
         self.update_audio_manager();
 
@@ -475,7 +496,7 @@ impl Engine {
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
-        handle_set_block(blocks, set_block).expect("place block");
+        packet_handlers::handle_set_block(blocks, set_block).expect("place block");
 
         if self.is_audio_manager_debug() {
             let Ok(_) = self.play_sound_at_pos(
@@ -496,17 +517,20 @@ impl Engine {
 
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
+        self.load_entity_models();
 
-        // Gather blocks
+        // Gather blocks and entities
         match &self.state {
             GameState::Playing {
                 blocks,
                 block_registry,
+                entities,
                 ..
             }
             | GameState::Editing {
                 blocks,
                 block_registry,
+                entities,
                 ..
             } => {
                 if self.block_textures.is_none() {
@@ -525,6 +549,18 @@ impl Engine {
                         render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
                             .into_iter(),
                     );
+                }
+
+                for entity in entities {
+                    let Some(model) = self.entity_models.get(&entity.model_path) else {
+                        continue;
+                    };
+
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(entity.state.position, Quat::IDENTITY),
+                    ));
                 }
             }
             _ => {}
@@ -575,7 +611,97 @@ impl Engine {
             ));
         }
 
-        self.renderer.render(&draw_calls);
+        self.renderer.render(&draw_calls, &self.debug_lines);
+
+        self.debug_lines.clear();
+    }
+
+    fn load_entity_models(&mut self) {
+        let entities = match &self.state {
+            GameState::Editing { entities, .. } | GameState::Playing { entities, .. } => entities,
+            _ => return,
+        };
+
+        for model_name in entities.iter().map(|e| &e.model_path) {
+            // If we've already loaded this model, continue
+            if self.entity_models.contains_key(model_name) {
+                continue;
+            }
+
+            // If we don't have the data yet, continue
+            let Some(data) = self.assets.get(model_name) else {
+                continue;
+            };
+
+            // Load the glTF
+            let loaded = {
+                let gltf =
+                    gltf::load(data).unwrap_or_else(|e| panic!("Error loading GLTF: {e:#?}"));
+                let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
+                LoadedGLTF { gltf, render_model }
+            };
+
+            // Stash it in our map
+            self.entity_models.insert(model_name.into(), loaded);
+        }
+    }
+
+    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.load_sounds_into_bank().await
+    }
+
+    pub async fn load_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
+        // self.audio_manager.load_sound(url).await
+        self.audio_manager.load_sound_from_id(sound_id).await
+    }
+
+    pub async fn load_url_sound(&mut self, url: &str) -> Result<(), JsValue> {
+        // self.audio_manager.load_sound(url).await
+        self.audio_manager.load_sound_from_url(url).await
+    }
+
+    pub fn play_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
+        self.audio_manager.play_sound_at_pos(sound_id, None)
+    }
+
+    pub fn play_sound_at_pos(
+        &mut self,
+        sound_id: &str,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> Result<(), JsValue> {
+        let sound_position = audio::SoundPosition::new(x, y, z);
+        self.audio_manager
+            .play_sound_at_pos(sound_id, Some(sound_position))
+    }
+
+    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
+        self.audio_manager.set_panner_position(x, y, z);
+    }
+
+    pub fn is_audio_manager_debug(&mut self) -> bool {
+        self.audio_manager.is_debug()
+    }
+
+    fn update_audio_manager(&mut self) {
+        // Get the camera's position and rotation based on the current game state
+        let (position, rotation) = match &self.state {
+            GameState::Playing { camera, .. } | GameState::Editing { camera, .. } => {
+                camera.position_and_rotation()
+            }
+            GameState::Loading => return,
+        };
+
+        // Update the listener's position and orientation
+        self.audio_manager
+            .set_listener_position(position.x, position.y, position.z);
+
+        let forward = (rotation * Vec3::new(0.0, 0.0, -1.0)).normalize();
+        let up = (rotation * Vec3::new(0.0, 1.0, 0.0)).normalize();
+
+        self.audio_manager
+            .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
     }
 
     pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
@@ -653,112 +779,6 @@ struct Controls {
 #[derive(Clone, Debug, Default)]
 struct Player {
     position: Vec3,
-}
-
-#[derive(Debug, Default)]
-enum GameState {
-    #[default]
-    Loading,
-    Playing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        client_player: PlayerId,
-        camera: FlyCamera,
-        players: HashMap<PlayerId, Player>,
-    },
-    Editing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        camera: FlyCamera,
-        target_block: Option<BlockPos>,
-        selected_block_id: Option<BlockId>,
-    },
-}
-
-impl GameState {
-    pub fn transition(&mut self, next_state: EngineMode) {
-        let current_state = std::mem::replace(self, GameState::Loading);
-        match (current_state, next_state) {
-            // Playing -> Editing
-            (
-                GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Edit,
-            ) => {
-                *self = GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    target_block: None,
-                    selected_block_id: None,
-                }
-            }
-            // Editing -> Playing
-            (
-                GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Play,
-            ) => {
-                *self = GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
-                    players: Default::default(),
-                }
-            }
-            _ => {}
-        };
-    }
-}
-
-// Handlers for incoming packets
-
-/// Handle a `SetBlock` packet
-fn handle_set_block(
-    blocks: &mut BlockGrid,
-    net_types::SetBlock { position, block_id }: net_types::SetBlock,
-) -> Result<()> {
-    blocks[position] = block_id;
-    Ok(())
-}
-
-/// Handle an `AddPlayer` packet
-fn handle_add_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::AddPlayer { id, position }: net_types::AddPlayer,
-) -> Result<()> {
-    players.insert(id, Player { position });
-    Ok(())
-}
-
-/// Handle a `RemovePlayer` packet
-fn handle_remove_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::RemovePlayer { id }: net_types::RemovePlayer,
-) -> Result<()> {
-    players.remove(&id);
-    Ok(())
-}
-
-/// Handle an `UpdatePosition` packet
-fn handle_update_position(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
-) {
-    let Some(player) = players.get_mut(&id) else {
-        tracing::warn!("Received update position for unknown player {id:?}");
-        return;
-    };
-    player.position = position;
 }
 
 fn collect_block_textures(

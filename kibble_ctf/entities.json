@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Test Entity",
+    "id": 0,
+    "entity_type": 0,
+    "model_path": "kibble_ctf/test_entity.gltf",
+    "state": { "position": [0, 0, 0], "velocity": [0, 0, 0] }
+  }
+]

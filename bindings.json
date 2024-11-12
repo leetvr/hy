@@ -1,0 +1,1 @@
+{"name":"net_types","littleEndian":true,"symbols":{},"typeDefs":{"Controls":{"jump":"bool","move_direction":"glam"}},"tsTypes":{"Controls":"export type Controls = {\n    move_direction: Vec2;\n  jump: boolean;\n};"}}
