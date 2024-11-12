@@ -58,13 +58,10 @@ function WasmWrapper() {
       try {
         await init(); // init
         const engine = Engine.new();
-
-        // if (engine.is_audio_manager_debug()) {
-        //   // Play footsteps as game loads
-        //   await engine.load_sound("footsteps");
-        //   engine.play_sound("footsteps");
-        // }
         
+        // TODO(af): This is intermittently preventing BlockRegistry from loading
+        await engine.load_sounds_into_bank();
+        console.log("Sounds successfully loaded into sounds_bank");
 
         const tick = (timestamp: number) => {
           engine.tick(timestamp);

@@ -17,7 +17,6 @@ pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
     // Initial prototyping: Just track the latest sound
-    // sound_buffer: Option<AudioBuffer>,
     source_node: Option<AudioBufferSourceNode>,
     panner_node: Option<PannerNode>,
     // distortion_node: Option<web_sys::WaveShaperNode>,
@@ -39,7 +38,6 @@ impl AudioManager {
         Ok(AudioManager {
             context,
             gain_node,
-            // sound_buffer: None,
             source_node: None,
             panner_node: None,
             // distortion_node: None,
@@ -47,6 +45,16 @@ impl AudioManager {
             // sound_instances: RefCell::new(Vec::new()),
             sounds_bank: HashMap::new(),
         })
+    }
+
+    // Use this to preload our sounds
+    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
+        self.load_sound_from_id("footsteps").await?;
+        self.load_sound_from_id("pain").await?;
+        self.load_sound_from_id("step_gravel").await?;
+        // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
+        //     .await?;
+        Ok(())
     }
 
     pub async fn load_sound_from_id(&mut self, sound_id: &str) -> Result<(), JsValue> {

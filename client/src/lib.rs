@@ -479,7 +479,7 @@ impl Engine {
 
         if self.is_audio_manager_debug() {
             let Ok(_) = self.play_sound_at_pos(
-                "footsteps",
+                "pain",
                 position.x as f32,
                 position.y as f32,
                 position.z as f32,
@@ -576,6 +576,10 @@ impl Engine {
         }
 
         self.renderer.render(&draw_calls);
+    }
+
+    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.load_sounds_into_bank().await
     }
 
     pub async fn load_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
