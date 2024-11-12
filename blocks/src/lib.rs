@@ -4,6 +4,7 @@
 /// This should be used by both the server and the client, and not contain any game logic
 ///
 use {
+    glam::IVec3,
     serde::{Deserialize, Serialize},
     std::ops::{Add, Index, IndexMut, Sub},
 };
@@ -25,13 +26,13 @@ pub const MAX_BLOCK_HEIGHT: u32 = 64;
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BlockPos {
-    pub x: u32,
-    pub y: u32,
-    pub z: u32,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
 }
 
 impl BlockPos {
-    pub fn new(x: u32, y: u32, z: u32) -> Self {
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
     }
 
@@ -41,9 +42,9 @@ impl BlockPos {
         }
 
         Some(Self {
-            x: vec.x as u32,
-            y: vec.y as u32,
-            z: vec.z as u32,
+            x: vec.x as i32,
+            y: vec.y as i32,
+            z: vec.z as i32,
         })
     }
 }
@@ -78,18 +79,28 @@ impl Add<BlockPos> for BlockPos {
     }
 }
 
-impl From<[u32; 3]> for BlockPos {
-    fn from([x, y, z]: [u32; 3]) -> Self {
+impl From<[i32; 3]> for BlockPos {
+    fn from([x, y, z]: [i32; 3]) -> Self {
         Self { x, y, z }
+    }
+}
+
+impl From<IVec3> for BlockPos {
+    fn from(vec: IVec3) -> Self {
+        Self {
+            x: vec.x,
+            y: vec.y,
+            z: vec.z,
+        }
     }
 }
 
 impl From<UVec3> for BlockPos {
     fn from(vec: UVec3) -> Self {
         Self {
-            x: vec.x,
-            y: vec.y,
-            z: vec.z,
+            x: vec.x as i32,
+            y: vec.y as i32,
+            z: vec.z as i32,
         }
     }
 }
@@ -112,13 +123,12 @@ impl BlockGrid {
 
     /// Get the block at the given position
     pub fn get(&self, pos: BlockPos) -> Option<&BlockId> {
-        self.blocks.get(block_pos_to_array_index(pos, self.size))
+        block_pos_to_array_index(pos, self.size).and_then(|i| self.blocks.get(i))
     }
 
     /// Get a mutable reference to the block at the given position
     pub fn get_mut(&mut self, pos: BlockPos) -> Option<&mut BlockId> {
-        self.blocks
-            .get_mut(block_pos_to_array_index(pos, self.size))
+        block_pos_to_array_index(pos, self.size).and_then(|i| self.blocks.get_mut(i))
     }
 
     /// Get the size of the block grid
@@ -132,7 +142,7 @@ impl BlockGrid {
             (0..self.size.1).flat_map(move |y| (0..self.size.2).map(move |z| [x, y, z]))
         });
         indices.filter_map(|pos| {
-            let block_pos: BlockPos = pos.into();
+            let block_pos = BlockPos::new(pos[0] as i32, pos[1] as i32, pos[2] as i32);
             self.get(block_pos).and_then(|&block| {
                 if block != EMPTY_BLOCK {
                     Some((block_pos, block))
@@ -182,9 +192,18 @@ impl IndexMut<BlockPos> for BlockGrid {
     }
 }
 
-fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
+fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> Option<usize> {
+    if pos.x < 0
+        || pos.y < 0
+        || pos.z < 0
+        || pos.x >= size.0 as i32
+        || pos.y >= size.1 as i32
+        || pos.z >= size.2 as i32
+    {
+        return None;
+    }
     let (x, y, z) = (pos.x as usize, pos.y as usize, pos.z as usize);
-    x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize)
+    Some(x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize))
 }
 
 #[derive(Tsify, Clone, Debug, PartialEq, Serialize, Deserialize)]

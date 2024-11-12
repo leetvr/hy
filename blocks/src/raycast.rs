@@ -62,7 +62,7 @@ pub(crate) fn raycast(
             // If we're in placing mode, we actually want the blockpos *above* this one.
             match mode {
                 RaycastMode::Placing => {
-                    if blockpos.y < max_y {
+                    if blockpos.y < max_y as i32 {
                         blockpos.y += 1;
                     }
                 }

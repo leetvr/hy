@@ -99,9 +99,9 @@ pub fn bake_terrain_colliders(
             for row in 0..rows {
                 for col in 0..cols {
                     let mut pos = BlockPos {
-                        x: layer_pos,
-                        y: row,
-                        z: col,
+                        x: layer_pos as i32,
+                        y: row as i32,
+                        z: col as i32,
                     };
                     match axis {
                         Axis::X => {}

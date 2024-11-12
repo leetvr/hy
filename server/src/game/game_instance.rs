@@ -1,6 +1,7 @@
 use {
     crate::game::PlayerCollision,
     blocks::{BlockGrid, BlockPos, EMPTY_BLOCK},
+    core::f32,
     std::collections::{HashMap, HashSet},
 };
 
@@ -280,18 +281,6 @@ fn player_aabb_block_collisions(position: glam::Vec3, blocks: &BlockGrid) -> Vec
                 block: BlockPos::new(x, y, z),
                 normal,
                 resolution: normal * dist.abs() * 1.1,
-            })
-            .filter(|collision| {
-                // Filter out collisions where the resolution would make the player
-                // collide even more. We want less collisions, not more.
-                if aabb_colliding_blocks(blocks, &aabb_for_player(position + collision.resolution))
-                    .next()
-                    .is_none()
-                {
-                    true
-                } else {
-                    false
-                }
             }),
         );
     }
@@ -348,6 +337,71 @@ fn aabb_for_player(player_pos: glam::Vec3) -> AABB {
     AABB { min, max }
 }
 
+// Short for Axis Aligned Bounding Box Continuous Collision Detection Ray Cast
+fn aabb_ccd_rc(position: glam::Vec3, velocity: glam::Vec3, blocks: &BlockGrid) -> f32 {
+    let aabb = aabb_for_player(position);
+
+    let mut start = glam::Vec3::new(
+        if velocity.x > 0. {
+            aabb.max.x
+        } else {
+            aabb.min.x
+        },
+        if velocity.y > 0. {
+            aabb.max.y
+        } else {
+            aabb.min.y
+        },
+        if velocity.z > 0. {
+            aabb.max.z
+        } else {
+            aabb.min.z
+        },
+    );
+
+    let delta_x = 1. / velocity.x;
+    let delta_y = 1. / velocity.y;
+    let delta_z = 1. / velocity.z;
+
+    // A number that is bigger than any possible time of impact. This could be literally any big
+    // number but I'm using the square root of 3 to show off because it's the smallest possible
+    // big number (the longest diagonal of a cube with side length 1).
+    let big_number = (3.0f32).sqrt();
+    let mut toi = 0.;
+    loop {
+        let x_toi = if delta_x == 0. {
+            big_number
+        } else if velocity.x > 0. {
+            ((start.x + 1.).floor() - start.x) / delta_x
+        } else {
+            (start.x.ceil() - start.x) / delta_x
+        };
+        let y_toi = if delta_y == 0. {
+            big_number
+        } else if velocity.y > 0. {
+            ((start.y + 1.).floor() - start.y) / delta_y
+        } else {
+            (start.y.ceil() - start.y) / delta_y
+        };
+        let z_toi = if delta_z == 0. {
+            big_number
+        } else if velocity.z > 0. {
+            ((start.z + 1.).floor() - start.z) / delta_y
+        } else {
+            (start.z.ceil() - start.z) / delta_y
+        };
+
+        toi += x_toi.min(y_toi).min(z_toi);
+        start += velocity * toi;
+        let aabb = aabb_for_player(start);
+        let mut colliding_blocks = aabb_colliding_blocks(blocks, &aabb);
+        if colliding_blocks.next().is_some() {
+            // We hit a block, return the time until impact
+            return toi;
+        }
+    }
+}
+
 struct AABB {
     min: glam::Vec3,
     max: glam::Vec3,
@@ -356,17 +410,17 @@ struct AABB {
 impl AABB {
     fn min_block_pos(&self) -> BlockPos {
         BlockPos::new(
-            self.min.x.floor() as u32,
-            self.min.y.floor() as u32,
-            self.min.z.floor() as u32,
+            self.min.x.floor() as i32,
+            self.min.y.floor() as i32,
+            self.min.z.floor() as i32,
         )
     }
 
     fn max_block_pos(&self) -> BlockPos {
         BlockPos::new(
-            self.max.x.floor() as u32,
-            self.max.y.floor() as u32,
-            self.max.z.floor() as u32,
+            self.max.x.floor() as i32,
+            self.max.y.floor() as i32,
+            self.max.z.floor() as i32,
         )
     }
 }

@@ -1,6 +1,4 @@
 use entities::{EntityData, EntityState, EntityTypeRegistry};
-use net_types::Controls;
-use std::{path::PathBuf, rc::Rc};
 use {
     crate::game::PlayerCollision,
     deno_core::{
@@ -9,6 +7,11 @@ use {
         v8::{self},
     },
 };
+use {
+    blocks::BlockGrid,
+    std::{path::PathBuf, rc::Rc},
+};
+use {net_types::Controls, std::cell::RefCell};
 
 use crate::game::PlayerState;
 
@@ -17,6 +20,18 @@ use crate::game::PlayerState;
 async fn hello(#[string] ip: String) -> Result<String, AnyError> {
     tracing::info!("Hello from Rust! I was called with {ip}!");
     Ok(format!("Your IP is {ip}, but from Rust"))
+}
+
+thread_local! {
+    static BLOCKS: RefCell<Option<BlockGrid>> = RefCell::new(None);
+}
+
+#[op2]
+fn test_collision(
+    #[serde] position: glam::Vec3,
+    #[serde] velocity: glam::Vec3,
+) -> Result<f32, AnyError> {
+    Ok(1.)
 }
 
 extension!(
