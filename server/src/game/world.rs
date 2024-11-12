@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     blocks::{BlockGrid, BlockPos, BlockRegistry, EMPTY_BLOCK},
-    entities::{EntityData, EntityTypeRegistry},
+    entities::{EntityData, EntityID, EntityTypeRegistry},
     glam::Vec3,
     physics::{PhysicsCollider, PhysicsWorld},
     std::{collections::HashMap, mem, path::Path},
@@ -17,7 +17,7 @@ pub struct World {
     colliders: Vec<PhysicsCollider>,
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub entities: Vec<EntityData>,
+    pub entities: HashMap<EntityID, EntityData>,
     pub entity_type_registry: EntityTypeRegistry,
 }
 

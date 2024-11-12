@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { AudioPlayer } from "./AudioPlayer";
 import BlockList from "./BlockList.tsx";
-import { BlockRegistry, Engine, EngineMode } from "../../pkg/client.js";
+import EntityTypeList from "./EntityTypeList.tsx";
+import { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../../pkg/client.js";
 import Editor from "./Editor.js";
 
 enum LeftBarTab {
@@ -11,13 +12,13 @@ enum LeftBarTab {
     Debug,
 };
 
-export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine, EngineMode, BlockRegistry }) {
+export default function LeftBar({ engine, currentMode, blockRegistry, entityTypeRegistry }: { engine: Engine, currentMode: EngineMode, blockRegistry: BlockRegistry, entityTypeRegistry: EntityTypeRegistry }) {
     const [currentTab, setCurrentTab] = useState(LeftBarTab.Debug);
     let theContent;
-    if(currentTab === LeftBarTab.Blocks) {
+    if (currentTab === LeftBarTab.Blocks) {
         theContent = <BlockList blockRegistry={blockRegistry} setEngineBlockIndex={(idx) => { engine.ctx_set_editor_block_id(idx) }} />;
-    } else if(currentTab === LeftBarTab.Entities) {
-        theContent = <p>What even <i>is</i> an entity, man?</p>;
+    } else if (currentTab === LeftBarTab.Entities) {
+        theContent = <EntityTypeList entityTypeRegistry={entityTypeRegistry} setEngineEntityIndex={(idx) => { engine.ctx_set_editor_entity_type_id(idx) }} />;
     } else {
         theContent = <div>
             <AudioPlayer />
@@ -29,16 +30,16 @@ export default function LeftBar({ engine, currentMode, blockRegistry }: { Engine
     return <div className="editor-panel editor-only" id="toolbox">
         <div className="tab-bar">
             <button
-              className={currentTab == LeftBarTab.Blocks ? "tab-on" : ""}
-              onClick={() => { setCurrentTab(LeftBarTab.Blocks); } }
+                className={currentTab == LeftBarTab.Blocks ? "tab-on" : ""}
+                onClick={() => { setCurrentTab(LeftBarTab.Blocks); }}
             >Blocks</button>
             <button
-              className={currentTab == LeftBarTab.Entities ? "tab-on" : ""}
-              onClick={() => { setCurrentTab(LeftBarTab.Entities); } }
+                className={currentTab == LeftBarTab.Entities ? "tab-on" : ""}
+                onClick={() => { setCurrentTab(LeftBarTab.Entities); }}
             >Entities</button>
             <button
-              className={currentTab == LeftBarTab.Debug ? "tab-on" : ""}
-              onClick={() => { setCurrentTab(LeftBarTab.Debug); } }
+                className={currentTab == LeftBarTab.Debug ? "tab-on" : ""}
+                onClick={() => { setCurrentTab(LeftBarTab.Debug); }}
             >Debug</button>
         </div>
         {theContent}

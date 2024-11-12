@@ -1,8 +1,9 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
-    entities::{EntityData, EntityTypeRegistry},
+    entities::{EntityData, EntityID, EntityTypeRegistry},
     serde::{Deserialize, Serialize},
+    std::collections::HashMap,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -35,7 +36,7 @@ pub enum ClientPacket {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 /// Update a player's position
-pub struct UpdatePosition {
+pub struct UpdatePlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
 }
@@ -57,7 +58,7 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub entities: Vec<EntityData>,
+    pub entities: HashMap<EntityID, EntityData>,
     pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
@@ -73,12 +74,32 @@ pub struct SetBlock {
     pub block_id: blocks::BlockTypeID,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddEntity {
+    pub entity_id: EntityID,
+    pub entity_data: EntityData,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RemoveEntity {
+    pub entity_id: EntityID,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateEntity {
+    pub entity_id: EntityID,
+    pub position: glam::Vec3,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
     Reset(Reset),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
-    UpdatePosition(UpdatePosition),
+    UpdatePlayer(UpdatePlayer),
     RemovePlayer(RemovePlayer),
+    AddEntity(AddEntity),
+    UpdateEntity(UpdateEntity),
+    RemoveEntity(RemoveEntity),
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use {net_types::ServerPacket, std::collections::HashMap};
 
 use {
     crate::{assets::Assets, camera::FlyCamera},
@@ -232,7 +232,7 @@ impl Engine {
 
                 match &mut self.state {
                     GameState::Loading => match packet {
-                        net_types::ServerPacket::Init(net_types::Init {
+                        ServerPacket::Init(net_types::Init {
                             blocks,
                             block_registry,
                             entities,
@@ -244,13 +244,16 @@ impl Engine {
 
                             // Start fetching assets
                             self.assets.load_block_textures(&block_registry);
-                            self.assets.load_entity_models(&entities);
+                            self.assets.load_entity_models(entities.values());
 
                             // Tell the React frontend
                             if let Some(on_init) = self.context.on_init_callback.take() {
-                                let data = serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let block_registry =
+                                    serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let entity_type_registry =
+                                    serde_wasm_bindgen::to_value(&entity_type_registry).unwrap();
                                 on_init
-                                    .call1(&JsValue::NULL, &data)
+                                    .call2(&JsValue::NULL, &block_registry, &entity_type_registry)
                                     .expect("Unable to call on_init!");
                             }
 
@@ -262,6 +265,7 @@ impl Engine {
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_raycast: None,
                                 selected_block_id: None,
+                                selected_entity_type_id: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
@@ -275,32 +279,45 @@ impl Engine {
                     },
                     GameState::Playing {
                         players,
+                        entities,
                         blocks,
                         client_player,
                         ..
                     } => match packet {
-                        net_types::ServerPacket::SetBlock(set_block) => {
+                        ServerPacket::SetBlock(set_block) => {
                             packet_handlers::handle_set_block(blocks, set_block)
                                 .expect("Failed to set block");
                         }
-                        net_types::ServerPacket::AddPlayer(add_player) => {
+                        ServerPacket::AddPlayer(add_player) => {
                             packet_handlers::handle_add_player(players, add_player)
                                 .expect("Failed to add player");
                         }
-                        net_types::ServerPacket::UpdatePosition(update_position) => {
+                        ServerPacket::UpdatePlayer(update_position) => {
                             packet_handlers::handle_update_position(players, update_position);
                         }
-                        net_types::ServerPacket::RemovePlayer(remove_player) => {
+                        ServerPacket::RemovePlayer(remove_player) => {
                             packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
                         // Sent by the server when we leave edit mode
-                        net_types::ServerPacket::Reset(net_types::Reset {
-                            new_client_player,
-                            ..
+                        ServerPacket::Reset(net_types::Reset {
+                            new_client_player, ..
                         }) => {
                             players.clear();
                             *client_player = new_client_player;
+                        }
+                        ServerPacket::AddEntity(add_entity) => {
+                            packet_handlers::handle_add_entity(entities, add_entity);
+                        }
+                        ServerPacket::UpdateEntity(update_entity) => {
+                            if let Err(e) =
+                                packet_handlers::handle_update_entity(entities, update_entity)
+                            {
+                                tracing::error!("Error when handling UpdateEntity: {e:#}");
+                            }
+                        }
+                        ServerPacket::RemoveEntity(remove_entity) => {
+                            packet_handlers::handle_remove_entity(entities, remove_entity);
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -578,7 +595,7 @@ impl Engine {
                     }
                 }
 
-                for entity in entities {
+                for entity in entities.values() {
                     let Some(model) = self.entity_models.get(&entity.model_path) else {
                         continue;
                     };
@@ -653,7 +670,7 @@ impl Engine {
             _ => return,
         };
 
-        for model_name in entities.iter().map(|e| &e.model_path) {
+        for model_name in entities.values().map(|e| &e.model_path) {
             // If we've already loaded this model, continue
             if self.entity_models.contains_key(model_name) {
                 continue;

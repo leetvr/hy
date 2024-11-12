@@ -1,4 +1,9 @@
-use std::collections::HashMap;
+use {
+    anyhow::bail,
+    entities::{EntityData, EntityID},
+    net_types::{AddEntity, RemoveEntity, UpdateEntity},
+    std::collections::HashMap,
+};
 
 use anyhow::Result;
 use blocks::BlockGrid;
@@ -37,11 +42,44 @@ pub fn handle_remove_player(
 /// Handle an `UpdatePosition` packet
 pub fn handle_update_position(
     players: &mut HashMap<PlayerId, Player>,
-    net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
+    net_types::UpdatePlayer { id, position }: net_types::UpdatePlayer,
 ) {
     let Some(player) = players.get_mut(&id) else {
         tracing::warn!("Received update position for unknown player {id:?}");
         return;
     };
     player.position = position;
+}
+
+pub(crate) fn handle_add_entity(
+    entities: &mut HashMap<EntityID, EntityData>,
+    AddEntity {
+        entity_id,
+        entity_data,
+    }: AddEntity,
+) {
+    entities.insert(entity_id, entity_data);
+}
+
+pub(crate) fn handle_update_entity(
+    entities: &mut HashMap<EntityID, EntityData>,
+    UpdateEntity {
+        entity_id,
+        position,
+    }: UpdateEntity,
+) -> Result<()> {
+    let Some(entity) = entities.get_mut(&entity_id) else {
+        bail!("Received update entity for unknown entity {entity_id:?}");
+    };
+
+    entity.state.position = position;
+
+    Ok(())
+}
+
+pub(crate) fn handle_remove_entity(
+    entities: &mut HashMap<EntityID, EntityData>,
+    RemoveEntity { entity_id }: RemoveEntity,
+) {
+    entities.remove(&entity_id);
 }

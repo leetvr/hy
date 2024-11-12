@@ -1,21 +1,41 @@
-use serde::{Deserialize, Serialize};
+use {
+    serde::{Deserialize, Serialize},
+    tsify::Tsify,
+    wasm_bindgen::prelude::wasm_bindgen,
+};
 pub type EntityTypeID = u8;
 pub type EntityID = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
     pub name: String,
-    pub id: EntityID,
     pub entity_type: EntityTypeID,
     pub model_path: String,
     pub state: EntityState,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[wasm_bindgen]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Tsify)]
 pub struct EntityType {
-    pub id: EntityTypeID,
-    pub name: String,
-    pub script_path: String,
+    id: EntityTypeID,
+    name: String,
+    script_path: String,
+}
+
+impl EntityType {
+    pub fn id(&self) -> EntityTypeID {
+        self.id
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl EntityType {
+    pub fn script_path(&self) -> &str {
+        &self.script_path
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -24,7 +44,7 @@ pub struct EntityState {
     pub velocity: glam::Vec3,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]
 pub struct EntityTypeRegistry {
     entity_types: Vec<EntityType>,
 }

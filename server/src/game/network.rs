@@ -1,6 +1,7 @@
 use {
     anyhow::Result,
     crossbeam::queue::SegQueue,
+    entities::EntityID,
     futures_util::{SinkExt, StreamExt},
     net_types::PlayerId,
     std::{collections::HashMap, ops::Add, sync::Arc},
@@ -31,8 +32,7 @@ pub struct Client {
     // This client's player ID
     pub player_id: PlayerId,
 
-    // The clients that the client is aware of, and their last known position
-    pub known_players: HashMap<PlayerId, glam::Vec3>,
+    pub awareness: ClientAwareness,
 
     // The packet channels for this client
     pub incoming_rx: Receiver<net_types::ClientPacket>,
@@ -116,3 +116,14 @@ pub async fn start_client_listener(
 
 pub type ClientMessageReceiver = Receiver<net_types::ClientPacket>;
 pub type ServerMessageSender = Sender<net_types::ServerPacket>;
+
+// All state that tracks the client's knowledge of the world
+// This is used to check what updates the client needs to receive from the server to stay in sync
+#[derive(Clone, Debug, Default)]
+pub struct ClientAwareness {
+    // The players that the client is aware of, and their last known position
+    pub players: HashMap<PlayerId, glam::Vec3>,
+
+    // The scripted entities that the client is aware of, and their last known position
+    pub entities: HashMap<EntityID, glam::Vec3>,
+}

@@ -1,4 +1,5 @@
 use blocks::BlockTypeID;
+use entities::EntityTypeID;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys;
@@ -62,5 +63,20 @@ impl Engine {
 
         // Set the block ID
         selected_block_id.replace(block_id);
+    }
+
+    pub fn ctx_set_editor_entity_type_id(&mut self, entity_type_id: EntityTypeID) {
+        // Ensure we're in edit mode
+        let GameState::Editing {
+            selected_entity_type_id,
+            ..
+        } = &mut self.state
+        else {
+            return;
+        };
+
+        tracing::info!("Set entity type id to {}", entity_type_id);
+        // Set the entity type ID
+        selected_entity_type_id.replace(entity_type_id);
     }
 }
