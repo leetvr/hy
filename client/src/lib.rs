@@ -221,11 +221,13 @@ impl Engine {
                     break;
                 }
                 // Incoming messages are stored by their sequence number
-                let packet = self
+                let Some(packet) = self
                     .incoming_messages
                     .borrow_mut()
                     .remove(&self.last_seen_sequence_number)
-                    .expect("Messages are out of order!");
+                else {
+                    break;
+                };
 
                 // Increment our sequence number
                 self.last_seen_sequence_number += 1;
