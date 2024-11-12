@@ -305,7 +305,7 @@ impl SoundInstance {
         panner_node.connect_with_audio_node(gain_node)?;
 
         // TODO: Implement
-        source_node.set_loop(true);
+        source_node.set_loop(false);
 
         Ok(SoundInstance {
             source_node,

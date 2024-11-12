@@ -1,7 +1,7 @@
 // The "left bar": the block/entity palettes
 import { useState } from "react";
 import { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../../pkg/client.js";
-import { TestStopSounds } from "./AudioPlayer.tsx";
+import { DebugAudioManager } from "./AudioPlayer.tsx";
 import BlockList from "./BlockList.tsx";
 import Editor from "./Editor.js";
 import EntityTypeList from "./EntityTypeList.tsx";
@@ -22,7 +22,7 @@ export default function LeftBar({ engine, currentMode, blockRegistry, entityType
     } else {
         theContent = <div>
             {currentMode === EngineMode.Edit && <Editor engine={engine} blockRegistry={blockRegistry} />}
-            <TestStopSounds engine={engine} />
+            {engine.is_audio_manager_debug() &&  <DebugAudioManager engine={engine} />}
             </div>
     }
     // TODO: If we ever need to use it for anything else, this tab-bar business

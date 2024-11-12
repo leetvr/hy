@@ -347,20 +347,26 @@ impl Engine {
             _ => {}
         }
 
-        // // Debug: Spawn sounds when left click block
-        // if self.is_audio_manager_debug() {
-        //     if let GameState::Editing { target_block, .. } = &mut self.state {
-        //         if self.controls.mouse_left {
-        //             if let Some(pos) = *target_block {
-        //                 if let Err(_) =
-        //                     self.play_sound_at_pos("pain", pos.x as f32, pos.y as f32, pos.z as f32)
-        //                 {
-        //                     tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
+        // Debug: Spawn sounds when left click block
+        if self.is_audio_manager_debug() {
+            if let GameState::Editing {
+                blocks,
+                target_raycast,
+                ..
+            } = &mut self.state
+            {
+                if self.controls.mouse_left {
+                    if let Some(ray_hit) = target_raycast {
+                        let pos = ray_hit.position;
+                        if let Err(_) =
+                            self.play_sound_at_pos("pain", pos.x as f32, pos.y as f32, pos.z as f32)
+                        {
+                            tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
+                        }
+                    }
+                }
+            }
+        }
 
         // Send packets
         match &mut self.state {
@@ -735,9 +741,10 @@ impl Engine {
             .play_sound_at_pos(sound_id, Some(sound_position))
     }
 
-    // Play a sound when placing left clicking on blocks
+    // if `true` then renders TestStopSounds and spawns
+    // sounds when left clicking on blocks in the Editor
     pub fn is_audio_manager_debug(&mut self) -> bool {
-        true
+        false
     }
 
     pub fn kill_sounds(&mut self) -> Result<(), JsValue> {

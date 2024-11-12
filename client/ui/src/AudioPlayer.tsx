@@ -2,11 +2,25 @@ import { useState } from "react";
 import { Engine } from "../../pkg/client";
 import "./App.css";
 
-export function TestStopSounds({engine}: {engine: Engine}) {
+export function DebugAudioManager({engine}: {engine: Engine}) {
   const [stopError, setStopError] = useState<string>('');
   const [killError, setKillError] = useState<string>('');
   const [isStopSuccess, setIsStopSuccess] = useState<boolean>(false);
   const [isKillSuccess, setIsKillSuccess] = useState<boolean>(false);
+
+  const [loadError, setLoadError] = useState(false);
+  const sound_name = "pain";
+
+  const handleLoadSounds = () => {
+    try {
+      engine.load_sound(sound_name);
+      console.log('Sound loaded');
+      setLoadError(false);
+    } catch (error) {
+      console.error("Error on loud_sound: {}", error); 
+      setLoadError(true);
+    }
+  }
 
   const handleStopAllSounds = () => {
     try {
@@ -34,9 +48,12 @@ export function TestStopSounds({engine}: {engine: Engine}) {
       setIsKillSuccess(false);
     }
   };
-  
+
   return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div>
+      <button onClick={handleLoadSounds}>Load {sound_name} sound</button>
+    </div>
     <div>
         <button onClick={() => engine.update_sound_positions(-5.0)}>Pan Left</button>
         <button onClick={() => engine.update_sound_positions(5.0)}>Pan Right</button>
