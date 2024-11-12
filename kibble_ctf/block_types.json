@@ -1,24 +1,24 @@
 {
   "block_types": [
     {
-      "name": "Grey Block",
-      "north_texture": "kibble_ctf/block_side.png",
-      "south_texture": "kibble_ctf/block_side.png",
-      "east_texture": "kibble_ctf/block_side.png",
-      "west_texture": "kibble_ctf/block_side.png",
-      "top_texture": "kibble_ctf/block_top.png",
-      "bottom_texture": "kibble_ctf/block_top.png",
+      "name": "Concrete",
+      "north_texture": "kibble_ctf/concrete_block_side.png",
+      "south_texture": "kibble_ctf/concrete_block_side.png",
+      "east_texture": "kibble_ctf/concrete_block_side.png",
+      "west_texture": "kibble_ctf/concrete_block_side.png",
+      "top_texture": "kibble_ctf/concrete_block_top.png",
+      "bottom_texture": "kibble_ctf/concrete_block_top.png",
       "metallic_factor": 0.2,
       "roughness_factor": 0.5
     },
     {
-      "name": "Grey Block but Weird",
-      "north_texture": "kibble_ctf/block_top.png",
-      "south_texture": "kibble_ctf/block_top.png",
-      "east_texture": "kibble_ctf/block_side.png",
-      "west_texture": "kibble_ctf/block_side.png",
-      "top_texture": "kibble_ctf/block_side.png",
-      "bottom_texture": "kibble_ctf/block_side.png",
+      "name": "Grass",
+      "north_texture": "kibble_ctf/grass_block_top.png",
+      "south_texture": "kibble_ctf/grass_block_top.png",
+      "east_texture": "kibble_ctf/grass_block_side.png",
+      "west_texture": "kibble_ctf/grass_block_side.png",
+      "top_texture": "kibble_ctf/grass_block_top.png",
+      "bottom_texture": "kibble_ctf/dirt.png",
       "metallic_factor": 0.2,
       "roughness_factor": 0.5
     }
