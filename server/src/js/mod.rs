@@ -1,6 +1,11 @@
+use deno_core::OpState;
 use entities::{EntityData, EntityState, EntityTypeRegistry};
 use net_types::Controls;
-use std::{path::PathBuf, rc::Rc};
+use std::{
+    path::PathBuf,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 use {
     crate::game::PlayerCollision,
     deno_core::{
@@ -12,18 +17,29 @@ use {
 
 use crate::game::PlayerState;
 
-#[op2(async)]
-#[string]
-async fn hello(#[string] ip: String) -> Result<String, AnyError> {
-    tracing::info!("Hello from Rust! I was called with {ip}!");
-    Ok(format!("Your IP is {ip}, but from Rust"))
+#[op2(fast)]
+fn hello(state: &mut OpState, new_foo: u32) -> Result<(), AnyError> {
+    let shared_state = state.borrow::<Arc<Mutex<Thing>>>();
+    let mut state = shared_state.lock().unwrap();
+    state.foo = new_foo;
+    Ok(())
+}
+
+struct Thing {
+    foo: u32,
 }
 
 extension!(
     crimes,
     ops = [hello],
     esm_entry_point = "ext:crimes/runtime.js",
-    esm = [dir "src/js", "runtime.js"]
+    esm = [dir "src/js", "runtime.js"],
+    options = {
+        shared_state: Arc<Mutex<Thing>>,
+    },
+    state = |state, options| {
+        state.put(options.shared_state.clone())
+    }
 );
 
 pub struct JSContext {
@@ -39,9 +55,10 @@ impl JSContext {
         entity_type_registry: &EntityTypeRegistry,
     ) -> anyhow::Result<Self> {
         // Load the runtime
+        let thing = Arc::new(Mutex::new(Thing { foo: 0 }));
         let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
-            extensions: vec![crimes::init_ops_and_esm()],
+            extensions: vec![crimes::init_ops_and_esm(thing.clone())],
             ..Default::default()
         });
 
