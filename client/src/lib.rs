@@ -703,64 +703,6 @@ impl Engine {
         self.audio_manager
             .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
     }
-
-    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.load_sounds_into_bank().await
-    }
-
-    pub async fn load_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
-        // self.audio_manager.load_sound(url).await
-        self.audio_manager.load_sound_from_id(sound_id).await
-    }
-
-    pub async fn load_url_sound(&mut self, url: &str) -> Result<(), JsValue> {
-        // self.audio_manager.load_sound(url).await
-        self.audio_manager.load_sound_from_url(url).await
-    }
-
-    pub fn play_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
-        self.audio_manager.play_sound_at_pos(sound_id, None)
-    }
-
-    pub fn play_sound_at_pos(
-        &mut self,
-        sound_id: &str,
-        x: f32,
-        y: f32,
-        z: f32,
-    ) -> Result<(), JsValue> {
-        let sound_position = audio::SoundPosition::new(x, y, z);
-        self.audio_manager
-            .play_sound_at_pos(sound_id, Some(sound_position))
-    }
-
-    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
-        self.audio_manager.set_panner_position(x, y, z);
-    }
-
-    pub fn is_audio_manager_debug(&mut self) -> bool {
-        self.audio_manager.is_debug()
-    }
-
-    fn update_audio_manager(&mut self) {
-        // Get the camera's position and rotation based on the current game state
-        let (position, rotation) = match &self.state {
-            GameState::Playing { camera, .. } | GameState::Editing { camera, .. } => {
-                camera.position_and_rotation()
-            }
-            GameState::Loading => return,
-        };
-
-        // Update the listener's position and orientation
-        self.audio_manager
-            .set_listener_position(position.x, position.y, position.z);
-
-        let forward = (rotation * Vec3::new(0.0, 0.0, -1.0)).normalize();
-        let up = (rotation * Vec3::new(0.0, 1.0, 0.0)).normalize();
-
-        self.audio_manager
-            .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
-    }
 }
 
 #[derive(Clone, Default)]
