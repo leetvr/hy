@@ -1,5 +1,5 @@
 use {
-    crate::game::player,
+    crate::game::{network::ClientPlayerState, player, PlayerState},
     entities::{EntityData, EntityID},
     std::collections::{HashMap, HashSet},
 };
@@ -237,6 +237,7 @@ async fn sync_players_to_client(
                 net_types::AddPlayer {
                     id: *player_id,
                     position: player.state.position,
+                    animation_state: player.state.animation_state.clone(),
                 }
                 .into(),
             )
@@ -244,7 +245,7 @@ async fn sync_players_to_client(
         client
             .awareness
             .players
-            .insert(*player_id, player.state.position);
+            .insert(*player_id, ClientPlayerState::new(&player.state));
     }
 
     // Remove old players from this client
@@ -258,21 +259,33 @@ async fn sync_players_to_client(
 
     // Update player positions for all known players
     // TODO: Update sates instead?
-    for (player_id, known_position) in client.awareness.players.iter_mut() {
+    for (player_id, known_state) in client.awareness.players.iter_mut() {
         let player = players.get(player_id).unwrap();
-        if player.state.position != *known_position {
-            let _ = client
-                .outgoing_tx
-                .send(
-                    net_types::UpdatePlayer {
-                        id: *player_id,
-                        position: player.state.position,
-                    }
-                    .into(),
-                )
-                .await;
-            *known_position = player.state.position;
+        if let Some(update) = player_update(*player_id, known_state, &player.state) {
+            let _ = client.outgoing_tx.send(update.into()).await;
+            *known_state = ClientPlayerState::new(&player.state);
         }
+    }
+}
+
+fn player_update(
+    id: PlayerId,
+    last_state: &ClientPlayerState,
+    current_state: &PlayerState,
+) -> Option<net_types::UpdatePlayer> {
+    let animation_change = if last_state.animation_state != current_state.animation_state {
+        Some(current_state.animation_state.clone())
+    } else {
+        None
+    };
+    if animation_change.is_some() || last_state.position != current_state.position {
+        Some(net_types::UpdatePlayer {
+            id,
+            position: current_state.position,
+            animation_state: animation_change,
+        })
+    } else {
+        None
     }
 }
 

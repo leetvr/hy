@@ -13,6 +13,7 @@ export interface BlockPos {
 export interface PlayerState {
   position: Vec3;
   velocity: Vec3;
+  animationState: string;
 }
 
 export interface PlayerControls {

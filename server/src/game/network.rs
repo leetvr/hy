@@ -1,4 +1,5 @@
 use {
+    crate::game::PlayerState,
     anyhow::Result,
     crossbeam::queue::SegQueue,
     entities::EntityID,
@@ -122,8 +123,24 @@ pub type ServerMessageSender = Sender<net_types::ServerPacket>;
 #[derive(Clone, Debug, Default)]
 pub struct ClientAwareness {
     // The players that the client is aware of, and their last known position
-    pub players: HashMap<PlayerId, glam::Vec3>,
+    pub players: HashMap<PlayerId, ClientPlayerState>,
 
     // The scripted entities that the client is aware of, and their last known position
     pub entities: HashMap<EntityID, glam::Vec3>,
+}
+
+// The state of a player as the client knows it
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClientPlayerState {
+    pub position: glam::Vec3,
+    pub animation_state: String,
+}
+
+impl ClientPlayerState {
+    pub fn new(state: &PlayerState) -> ClientPlayerState {
+        ClientPlayerState {
+            position: state.position,
+            animation_state: state.animation_state.clone(),
+        }
+    }
 }
