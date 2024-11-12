@@ -1,6 +1,8 @@
 use {
+    crate::gltf::GLTFModel,
     anyhow::bail,
     entities::{EntityData, EntityID},
+    glam::Vec3Swizzles,
     net_types::{AddEntity, RemoveEntity, UpdateEntity},
     std::collections::HashMap,
 };
@@ -24,9 +26,23 @@ pub fn handle_set_block(
 /// Handle an `AddPlayer` packet
 pub fn handle_add_player(
     players: &mut HashMap<PlayerId, Player>,
-    net_types::AddPlayer { id, position }: net_types::AddPlayer,
+    model: &GLTFModel,
+    net_types::AddPlayer {
+        id,
+        position,
+        animation_state,
+    }: net_types::AddPlayer,
 ) -> Result<()> {
-    players.insert(id, Player { position });
+    let mut model = model.clone();
+    model.play_animation(&animation_state, 0.5);
+    players.insert(
+        id,
+        Player {
+            position,
+            facing_angle: 0.,
+            model: model.clone(),
+        },
+    );
     Ok(())
 }
 
@@ -42,13 +58,26 @@ pub fn handle_remove_player(
 /// Handle an `UpdatePosition` packet
 pub fn handle_update_position(
     players: &mut HashMap<PlayerId, Player>,
-    net_types::UpdatePlayer { id, position }: net_types::UpdatePlayer,
+    net_types::UpdatePlayer {
+        id,
+        position,
+        animation_state,
+    }: net_types::UpdatePlayer,
 ) {
     let Some(player) = players.get_mut(&id) else {
         tracing::warn!("Received update position for unknown player {id:?}");
         return;
     };
+
+    let movement: glam::Vec2 = position.xz() - player.position.xz();
+    if movement.length() > 0. {
+        player.facing_angle = movement.to_angle();
+    }
+
     player.position = position;
+    if let Some(animation_state) = animation_state {
+        player.model.play_animation(&animation_state, 0.5);
+    }
 }
 
 pub(crate) fn handle_add_entity(

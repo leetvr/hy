@@ -1,21 +1,22 @@
-use {net_types::ServerPacket, std::collections::HashMap};
-
 use {
-    crate::{assets::Assets, camera::FlyCamera},
+    crate::{
+        assets::Assets, camera::FlyCamera, gltf::GLTFModel, socket::ConnectionState,
+        transform::Transform,
+    },
+    anyhow::Result,
     blocks::BlockTypeID,
     dolly::prelude::YawPitch,
-    glam::EulerRot,
+    glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
-    std::collections::HashSet,
-    web_sys::MouseEvent,
-};
-
-use {
-    crate::{socket::ConnectionState, transform::Transform},
-    anyhow::Result,
-    glam::{Quat, Vec2, Vec3},
-    std::{cell::RefCell, rc::Rc, slice, time::Duration},
-    web_sys::WebSocket,
+    net_types::ServerPacket,
+    std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+        rc::Rc,
+        slice,
+        time::Duration,
+    },
+    web_sys::{MouseEvent, WebSocket},
 };
 
 // Re-exports
@@ -217,15 +218,14 @@ impl Engine {
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
-                if self.incoming_messages.borrow().is_empty() {
-                    break;
-                }
                 // Incoming messages are stored by their sequence number
-                let packet = self
+                let Some(packet) = self
                     .incoming_messages
                     .borrow_mut()
                     .remove(&self.last_seen_sequence_number)
-                    .expect("Messages are out of order!");
+                else {
+                    break;
+                };
 
                 // Increment our sequence number
                 self.last_seen_sequence_number += 1;
@@ -289,8 +289,12 @@ impl Engine {
                                 .expect("Failed to set block");
                         }
                         ServerPacket::AddPlayer(add_player) => {
-                            packet_handlers::handle_add_player(players, add_player)
-                                .expect("Failed to add player");
+                            packet_handlers::handle_add_player(
+                                players,
+                                &self.player_model.gltf,
+                                add_player,
+                            )
+                            .expect("Failed to add player");
                         }
                         ServerPacket::UpdatePlayer(update_position) => {
                             packet_handlers::handle_update_position(players, update_position);
@@ -467,6 +471,12 @@ impl Engine {
             Vec3::new(0.0, 3.0, 10.0),
         ));
 
+        if let GameState::Playing { players, .. } = &mut self.state {
+            for player in players.values_mut() {
+                gltf::animate_model(&mut player.model, self.delta_time);
+            }
+        }
+
         self.render();
     }
 
@@ -614,11 +624,18 @@ impl Engine {
         match &self.state {
             // Players
             GameState::Playing { players, .. } => {
+                // HACK: The player model is rotated 90 degrees, also
+                // it rotates the wrong way? I'm just fixing it here but someone
+                // should figure out why it is like this.
+                const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&self.player_model.gltf),
+                        slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new(player.position, Quat::IDENTITY),
+                        Transform::new(
+                            player.position,
+                            Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+                        ),
                     ));
                 }
             }
@@ -764,6 +781,8 @@ struct Controls {
 #[derive(Clone, Debug, Default)]
 struct Player {
     position: Vec3,
+    facing_angle: f32, // radians
+    model: GLTFModel,
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;

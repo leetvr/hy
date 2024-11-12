@@ -212,6 +212,8 @@ struct Player {
 pub struct PlayerState {
     position: glam::Vec3,
     velocity: glam::Vec3,
+    #[serde(rename = "animationState")]
+    animation_state: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
