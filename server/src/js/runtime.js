@@ -15,7 +15,7 @@ globalThis.console = {
 };
 
 globalThis.crimes = {
-  hello: (ip) => {
-    return core.ops.hello(ip);
+  hello: (foo) => {
+    return core.ops.hello(foo);
   },
 };
