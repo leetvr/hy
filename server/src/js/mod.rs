@@ -21,7 +21,7 @@ use crate::game::{PlayerState, World};
 #[serde]
 // NOTE(kmrw: serde is apparently slow but who cares)
 fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
-    tracing::info!("Get entities called");
+    // tracing::info!("Get entities called");
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let state = shared_state.lock().unwrap();
 

@@ -59,7 +59,9 @@ pub(crate) fn raycast(
             });
         }
 
-        // If we hit below the floor, we return the block above the floor.
+        // If we hit below the floor, we return the block above the floor with a zero face normal.
+        // CRIME(cw): This really should return the block below the floor and regular face normal,
+        //            but BlockPos doesn't support negative values.
         let below_floor = current_voxel.y < floor;
         if below_floor {
             let blockpos = BlockPos::from_float(current_voxel + Vec3::Y)?;
@@ -71,7 +73,7 @@ pub(crate) fn raycast(
 
             return Some(RayHit {
                 position: blockpos,
-                entrance_face_normal,
+                entrance_face_normal: Vec3::ZERO,
             });
         }
 

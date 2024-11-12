@@ -125,13 +125,13 @@ impl BlockGrid {
 
     /// Get the block at the given position
     pub fn get(&self, pos: BlockPos) -> Option<&BlockTypeID> {
-        self.blocks.get(block_pos_to_array_index(pos, self.size))
+        self.blocks.get(block_pos_to_array_index(pos, self.size)?)
     }
 
     /// Get a mutable reference to the block at the given position
     pub fn get_mut(&mut self, pos: BlockPos) -> Option<&mut BlockTypeID> {
         self.blocks
-            .get_mut(block_pos_to_array_index(pos, self.size))
+            .get_mut(block_pos_to_array_index(pos, self.size)?)
     }
 
     /// Get the size of the block grid
@@ -190,9 +190,13 @@ impl IndexMut<BlockPos> for BlockGrid {
     }
 }
 
-fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
+fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> Option<usize> {
+    if pos.x >= size.0 || pos.y >= size.1 || pos.z >= size.2 {
+        return None;
+    }
+
     let (x, y, z) = (pos.x as usize, pos.y as usize, pos.z as usize);
-    x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize)
+    Some(x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize))
 }
 
 #[derive(Tsify, Clone, Debug, PartialEq, Serialize, Deserialize)]
