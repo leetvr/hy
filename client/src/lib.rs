@@ -358,9 +358,13 @@ impl Engine {
                 if self.controls.mouse_left {
                     if let Some(ray_hit) = target_raycast {
                         let pos = ray_hit.position;
-                        if let Err(_) =
-                            self.play_sound_at_pos("pain", pos.x as f32, pos.y as f32, pos.z as f32)
-                        {
+                        if let Err(_) = self.play_sound_at_pos(
+                            "pain",
+                            pos.x as f32,
+                            pos.y as f32,
+                            pos.z as f32,
+                            false,
+                        ) {
                             tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
                         }
                     }
@@ -725,8 +729,9 @@ impl Engine {
         self.audio_manager.load_sound_from_url(url).await
     }
 
-    pub fn play_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
-        self.audio_manager.play_sound_at_pos(sound_id, None)
+    pub fn play_sound(&mut self, sound_id: &str, is_ambient: bool) -> Result<(), JsValue> {
+        self.audio_manager
+            .play_sound_at_pos(sound_id, None, is_ambient)
     }
 
     pub fn play_sound_at_pos(
@@ -735,16 +740,17 @@ impl Engine {
         x: f32,
         y: f32,
         z: f32,
+        is_ambient: bool,
     ) -> Result<(), JsValue> {
         let sound_position = audio::SoundPosition::new(x, y, z);
         self.audio_manager
-            .play_sound_at_pos(sound_id, Some(sound_position))
+            .play_sound_at_pos(sound_id, Some(sound_position), is_ambient)
     }
 
     // if `true` then renders TestStopSounds and spawns
     // sounds when left clicking on blocks in the Editor
     pub fn is_audio_manager_debug(&mut self) -> bool {
-        false
+        true
     }
 
     pub fn kill_sounds(&mut self) -> Result<(), JsValue> {

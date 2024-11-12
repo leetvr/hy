@@ -113,6 +113,7 @@ impl AudioManager {
         &mut self,
         sound_id: &str,
         maybe_position: Option<SoundPosition>,
+        is_ambient: bool,
         // TODO: pass in individual gain and other parameters
     ) -> Result<(), JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
@@ -120,9 +121,13 @@ impl AudioManager {
             return Err(JsValue::from_str("Sound buffer not loaded"));
         };
 
-        let Ok(sound_instance) =
-            SoundInstance::new(&self.context, audio_buffer, &self.gain_node, None)
-        else {
+        let Ok(sound_instance) = SoundInstance::new(
+            &self.context,
+            audio_buffer,
+            &self.gain_node,
+            None,
+            is_ambient,
+        ) else {
             web_sys::console::error_1(&"Unable to create sound_instance".into());
             return Err(JsValue::from_str("Unable to create sound_instance"));
         };
@@ -213,7 +218,7 @@ impl AudioManager {
 
     /// Update all active sounds in tick
     /// TODO: entity positions, master volume, etc, combine with `update_audio_manager``
-    pub fn test_update_sound_positions(&mut self) {
+    pub fn update_sound_positions(&mut self) {
         for (&handle, sound_instance) in &mut self.active_sounds {
             // Apply position updates from entities
             if let Some(entity_id) = sound_instance.entity_id {
@@ -223,18 +228,14 @@ impl AudioManager {
         }
     }
 
-    // DEBUG: currently just shifting all panners, TODO: update with Entity position in tick
+    // // DEBUG: currently just shifting all panners, TODO: update with Entity position in tick
     pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
-        for (_, sound_instance) in &mut self.active_sounds {
-            // Test from react to make sure it works
-            let Some(panner_displacement) = move_panner_opt else {
-                continue;
-            };
-            let old_pos_x = sound_instance.panner_node.position_x().value();
-            sound_instance
-                .panner_node
-                .position_x()
-                .set_value(old_pos_x + panner_displacement);
+        if let Some(d) = move_panner_opt {
+            self.active_sounds.values_mut().for_each(|s| {
+                s.panner_node
+                    .position_x()
+                    .set_value(s.panner_node.position_x().value() + d)
+            });
         }
     }
 }
@@ -285,11 +286,24 @@ impl SoundInstance {
         gain_node: &GainNode,
         // TODO: Check if this should be hecs::Entity
         entity_id: Option<u32>,
+        is_ambient: bool,
     ) -> Result<Self, JsValue> {
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
-
         let panner_node = context.create_panner()?;
+
+        if is_ambient {
+            // For ambient sounds, we can connect source directly to gain_node it may
+            // make more sense to make `SoundInstance::panner_node` optional But a disconnected
+            // panner node should be cheap and disable spatialistaion which simplifies the code
+            // and it will make it easier to switch a sound between ambient and spatialised
+            source_node.connect_with_audio_node(&gain_node)?;
+            return Ok(SoundInstance {
+                source_node,
+                panner_node: panner_node,
+                entity_id,
+            });
+        }
 
         // TODO: Connect these parameters to play_sound functions
         // We'll want to expose them scripts (as per spec)

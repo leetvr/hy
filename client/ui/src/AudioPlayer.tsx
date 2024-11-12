@@ -9,11 +9,11 @@ export function DebugAudioManager({engine}: {engine: Engine}) {
   const [isKillSuccess, setIsKillSuccess] = useState<boolean>(false);
 
   const [loadError, setLoadError] = useState(false);
-  const sound_name = "pain";
+  // const sound_name = ;
 
   const handleLoadSounds = () => {
     try {
-      engine.load_sound(sound_name);
+      engine.load_sound("pain");
       console.log('Sound loaded');
       setLoadError(false);
     } catch (error) {
@@ -50,9 +50,9 @@ export function DebugAudioManager({engine}: {engine: Engine}) {
   };
 
   return (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
     <div>
-      <button onClick={handleLoadSounds}>Load {sound_name} sound</button>
+      <button onClick={handleLoadSounds}>Load {"pain"} sound</button>
     </div>
     <div>
         <button onClick={() => engine.update_sound_positions(-5.0)}>Pan Left</button>
