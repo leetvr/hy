@@ -61,7 +61,7 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub entities: HashMap<EntityID, EntityData>,
+    pub entities: HashMap<String, EntityData>,
     pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }

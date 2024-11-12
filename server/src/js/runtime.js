@@ -14,8 +14,8 @@ globalThis.console = {
   },
 };
 
-globalThis.crimes = {
-  hello: (foo) => {
-    return core.ops.hello(foo);
+globalThis.hy = {
+  getEntities: () => {
+    return core.ops.get_entities();
   },
 };

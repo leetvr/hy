@@ -22,6 +22,13 @@ export interface PlayerControls {
   camera_yaw: number; // radians
 }
 
+export interface EntityData {
+  name: string;
+  entity_type: number;
+  model_path: string;
+  state: EntityState;
+}
+
 export interface EntityState {
   position: Vec3;
   velocity: Vec3;
@@ -33,7 +40,6 @@ export interface PlayerCollision {
   resolution: Vec3;
 }
 
-
 type PlayerUpdate = (
   current_state: PlayerState,
   controls: PlayerControls,
@@ -42,3 +48,11 @@ type PlayerUpdate = (
 type EntityUpdate = (current_state: EntityState) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
+
+interface GlobalHy {
+  getEntities: () => Map<String, EntityData[]>;
+}
+
+declare global {
+  const hy: GlobalHy;
+}

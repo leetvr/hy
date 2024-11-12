@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 
 use net_types::SetBlock;
 use tokio::sync::mpsc;
@@ -6,12 +9,12 @@ use tokio::sync::mpsc;
 use super::{network::Client, world::World, NextServerState};
 
 pub struct EditorInstance {
-    pub world: World,
+    pub world: Arc<Mutex<World>>,
     pub editor_client: Client,
 }
 
 impl EditorInstance {
-    pub fn new(world: World, editor_client: Client) -> Self {
+    pub fn new(world: Arc<Mutex<World>>, editor_client: Client) -> Self {
         Self {
             world,
             editor_client,
@@ -48,7 +51,10 @@ impl EditorInstance {
     fn set_block(&mut self, set_block: SetBlock, storage_dir: impl AsRef<Path>) {
         let SetBlock { position, block_id } = set_block;
         tracing::debug!("Setting block at {position:?} to {block_id}");
-        self.world.blocks[position] = block_id;
-        self.world.save(storage_dir).expect("save world");
+
+        let mut world = self.world.lock().expect("Deadlock!!");
+
+        world.blocks[position] = block_id;
+        world.save(storage_dir).expect("save world");
     }
 }
