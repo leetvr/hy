@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use blocks::{BlockGrid, BlockId, BlockRegistry, RayHit};
+use blocks::{BlockGrid, BlockRegistry, BlockTypeID, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
 use net_types::PlayerId;
 
@@ -26,7 +26,7 @@ pub enum GameState {
         entity_type_registry: EntityTypeRegistry,
         camera: FlyCamera,
         target_raycast: Option<RayHit>,
-        selected_block_id: Option<BlockId>,
+        selected_block_id: Option<BlockTypeID>,
     },
 }
 

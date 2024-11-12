@@ -1,4 +1,4 @@
-use blocks::BlockId;
+use blocks::BlockTypeID;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys;
@@ -51,7 +51,7 @@ impl Engine {
         self.context.on_init_callback = Some(cb);
     }
 
-    pub fn ctx_set_editor_block_id(&mut self, block_id: BlockId) {
+    pub fn ctx_set_editor_block_id(&mut self, block_id: BlockTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
             selected_block_id, ..
