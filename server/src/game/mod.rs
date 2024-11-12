@@ -16,7 +16,11 @@ use {
     network::ClientId,
     physics::PhysicsWorld,
     serde::{Deserialize, Serialize},
-    std::{fmt::Display, path::PathBuf, sync::Arc},
+    std::{
+        fmt::Display,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
     world::World,
 };
 
@@ -81,7 +85,7 @@ impl GameServer {
         // Do we need to transition to a different state?
         let Some(next_state) = next_state else { return };
 
-        self.state.transition(next_state).await;
+        self.state.transition(&self.storage_dir, next_state).await;
     }
 }
 
@@ -110,7 +114,7 @@ impl Display for ServerState {
 
 impl ServerState {
     // state machines, my beloved
-    async fn transition(&mut self, next_state: NextServerState) {
+    async fn transition(&mut self, storage_dir: impl AsRef<Path>, next_state: NextServerState) {
         // Take the current state so we can move it
         let current_state = std::mem::replace(self, ServerState::Transitioning);
 
@@ -124,7 +128,10 @@ impl ServerState {
             // Playing -> Editing
             (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    let editor_instance = EditorInstance::new(game_instance.world, editor_client);
+                    let editor_instance = EditorInstance::new(
+                        World::load(storage_dir).expect("Couldn't load world"),
+                        editor_client,
+                    );
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
@@ -140,7 +147,10 @@ impl ServerState {
             // Paused -> Editing
             (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    let editor_instance = EditorInstance::new(game_instance.world, editor_client);
+                    let editor_instance = EditorInstance::new(
+                        World::load(storage_dir).expect("Couldn't load world"),
+                        editor_client,
+                    );
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
