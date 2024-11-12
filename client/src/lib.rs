@@ -677,12 +677,9 @@ impl Engine {
             .play_sound_at_pos(sound_id, Some(sound_position))
     }
 
-    pub fn set_sound_position(&mut self, x: f32, y: f32, z: f32) {
-        self.audio_manager.set_panner_position(x, y, z);
-    }
-
+    // Play a sound when placing left clicking on blocks
     pub fn is_audio_manager_debug(&mut self) -> bool {
-        self.audio_manager.is_debug()
+        true
     }
 
     pub fn kill_sounds(&mut self) -> Result<(), JsValue> {
@@ -691,6 +688,10 @@ impl Engine {
 
     pub fn stop_sounds(&mut self) -> Result<(), JsValue> {
         self.audio_manager.stop_all_sounds()
+    }
+
+    pub fn update_sound_positions(&mut self, move_panner_opt: Option<f32>) {
+        self.audio_manager.move_all_panner_nodes(move_panner_opt);
     }
 
     fn update_audio_manager(&mut self) {

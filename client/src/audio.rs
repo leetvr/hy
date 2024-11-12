@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::js_sys::Uint8Array;
 #[allow(unused)]
 use web_sys::{
     js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
     AudioParam, GainNode, OscillatorNode, PannerNode, Response,
 };
+use web_sys::{js_sys::Uint8Array, DistanceModelType, PanningModelType};
 
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
@@ -17,7 +17,6 @@ const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
-    panner_node: Option<PannerNode>, // TODO: Delete
     // Mapping of sound IDs to loaded AudioBuffers
     sounds_bank: HashMap<String, AudioBuffer>,
     // Active sound instances mapped by a unique handle (e.g., u32)
@@ -37,7 +36,6 @@ impl AudioManager {
         Ok(AudioManager {
             context,
             gain_node,
-            panner_node: None,
             sounds_bank: HashMap::new(),
             active_sounds: HashMap::new(),
             next_sound_handle: 0,
@@ -145,18 +143,6 @@ impl AudioManager {
         return Ok(());
     }
 
-    pub fn set_volume(&self, volume: f32) {
-        self.gain_node.gain().set_value(volume);
-    }
-
-    pub fn set_panner_position(&self, x: f32, y: f32, z: f32) {
-        if let Some(ref panner_node) = self.panner_node {
-            panner_node.position_x().set_value(x);
-            panner_node.position_y().set_value(y);
-            panner_node.position_z().set_value(z);
-        }
-    }
-
     pub fn set_listener_position(&self, x: f32, y: f32, z: f32) {
         let listener = self.context.listener();
         listener.set_position(x as f64, y as f64, z as f64);
@@ -180,11 +166,6 @@ impl AudioManager {
             up_y as f64,
             up_z as f64,
         );
-    }
-
-    // Will play a sound when placing left clicking on blocks
-    pub fn is_debug(&self) -> bool {
-        true
     }
 
     /// Stops a sound given its handle.
@@ -214,7 +195,7 @@ impl AudioManager {
                 }
             }
         }
-        self.active_sounds.clear(); // TODO: check memory
+        self.active_sounds.clear();
         web_sys::console::log_1(&"All sounds stopped.".into());
         Ok(())
     }
@@ -226,15 +207,36 @@ impl AudioManager {
         Ok(())
     }
 
-    // /// Updates the positions of all sounds associated with their entities.
-    // pub fn update_sound_positions(&mut self) {
-    //     for (&handle, sound_instance) in &mut self.active_sounds {
-    //         if let Some(entity_id) = sound_instance.entity_id {
-    //             // TODO:
-    //             // if let Some(position) = world.get_entity_position(entity_id) {}
-    //         }
-    //     }
-    // }
+    pub fn set_master_volume(&self, volume: f32) {
+        self.gain_node.gain().set_value(volume);
+    }
+
+    /// Update all active sounds in tick
+    /// TODO: entity positions, master volume, etc, combine with `update_audio_manager``
+    pub fn test_update_sound_positions(&mut self) {
+        for (&handle, sound_instance) in &mut self.active_sounds {
+            // Apply position updates from entities
+            if let Some(entity_id) = sound_instance.entity_id {
+                // TODO:
+                // if let Some(position) = world.get_entity_position(entity_id) {}
+            }
+        }
+    }
+
+    // DEBUG: currently just shifting all panners, TODO: update with Entity position in tick
+    pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
+        for (_, sound_instance) in &mut self.active_sounds {
+            // Test from react to make sure it works
+            let Some(panner_displacement) = move_panner_opt else {
+                continue;
+            };
+            let old_pos_x = sound_instance.panner_node.position_x().value();
+            sound_instance
+                .panner_node
+                .position_x()
+                .set_value(old_pos_x + panner_displacement);
+        }
+    }
 }
 
 use serde::{Deserialize, Serialize};
@@ -255,15 +257,12 @@ impl SoundPosition {
 
 // TODO:
 // Preload sound assets
-// Refactor AudioManager to keep track of a set of different `SoundInstance`s
 // For sounds played via `play_sound_at_entity`, update panner_node in `tick`
 // Handle ambient sounds by disabling spatialisation or matching with listener
 // Extract distortion functionality from `AudioPlayer`
-
-// TODO: (Later)
-// Make the sounds library good (and ideally export to typescript)
-// expose a `play_ambient_sound`
-// Scripting parameters: From `play_sound` store on `SoundInstance` or trigger mutation in `tick`
+// Make the sounds library typesafe (and ideally export to typescript)
+// expose a `play_ambient_sound` or just pass an optional `is_ambient` parameter to `play_sound`
+// - Scripting parameters: From `play_sound` store on `SoundInstance` or trigger mutation in `tick`
 // 1. looping parameter SoundInstance and an optional field on `play_sound` functions
 // 2. `is_looping`
 // 3. `reference distance` - clarify if just max or min as well
@@ -271,14 +270,7 @@ impl SoundPosition {
 // 5. `volume`
 // 6. `distortion` -  `distortion_node: Option<web_sys::WaveShaperNode>,`
 // Implement a mechanism to interrupt playback from scripts (on entity or position)
-// Make sure coordinate systems line up between Hytopia and WebAudio (Right handed)
-
-// #[wasm_bindgen]
-// impl AudioManager {
-//     pub fn play_sound_at_entity(&self, entity_id: u32, sound_id: &str) -> Result<(), JsValue> {
-//         todo!()
-//     }
-// }
+// Make sure coordinate systems line up between Hytopia and WebAudio (which is Right handed)
 
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
@@ -299,19 +291,21 @@ impl SoundInstance {
 
         let panner_node = context.create_panner()?;
 
-        // TODO: Connect to scripts (For now, just use the defaults)
-        // panner_node.set_distance_model(web_sys::DistanceModelType::Linear); // Supports Inverse and Exponential
-        // panner_node.set_max_distance(10000.);
-        // panner_node.set_ref_distance(1.);
-        // panner_node.set_rolloff_factor(10.);
+        // TODO: Connect these parameters to play_sound functions
+        // We'll want to expose them scripts (as per spec)
+        // However, For now, I'm just using the defaults
+        panner_node.set_panning_model(PanningModelType::Equalpower); // Also supports Hrtf
+        panner_node.set_distance_model(DistanceModelType::Inverse); // Also supports Linear and Exponential
 
-        panner_node.set_position(0.0, 0.0, 0.0); // Default position; can be updated later
+        panner_node.set_max_distance(10000.);
+        panner_node.set_ref_distance(1.);
+        panner_node.set_rolloff_factor(1.);
 
         source_node.connect_with_audio_node(&panner_node)?;
         panner_node.connect_with_audio_node(gain_node)?;
 
         // TODO: Implement
-        source_node.set_loop(true); // Set to true if you want the sound to loop
+        source_node.set_loop(true);
 
         Ok(SoundInstance {
             source_node,
