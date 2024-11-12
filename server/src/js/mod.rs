@@ -1,7 +1,8 @@
 use deno_core::OpState;
-use entities::{EntityData, EntityState, EntityTypeRegistry};
+use entities::{EntityData, EntityID, EntityState, EntityTypeID};
 use net_types::Controls;
 use std::{
+    collections::HashMap,
     path::PathBuf,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -9,33 +10,31 @@ use std::{
 use {
     crate::game::PlayerCollision,
     deno_core::{
-        error::AnyError,
         extension, op2, serde_v8,
         v8::{self},
     },
 };
 
-use crate::game::PlayerState;
+use crate::game::{PlayerState, World};
 
-#[op2(fast)]
-fn hello(state: &mut OpState, new_foo: u32) -> Result<(), AnyError> {
-    let shared_state = state.borrow::<Arc<Mutex<Thing>>>();
-    let mut state = shared_state.lock().unwrap();
-    state.foo = new_foo;
-    Ok(())
-}
+#[op2]
+#[serde]
+// NOTE(kmrw: serde is apparently slow but who cares)
+fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
+    tracing::info!("Get entities called");
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let state = shared_state.lock().unwrap();
 
-struct Thing {
-    foo: u32,
+    state.entities.clone()
 }
 
 extension!(
-    crimes,
-    ops = [hello],
-    esm_entry_point = "ext:crimes/runtime.js",
+    hy,
+    ops = [get_entities],
+    esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],
     options = {
-        shared_state: Arc<Mutex<Thing>>,
+        shared_state: Arc<Mutex<World>>,
     },
     state = |state, options| {
         state.put(options.shared_state.clone())
@@ -47,18 +46,24 @@ pub struct JSContext {
     // Safe to hold onto as long as the runtime is alive (probably)
     player_module_namespace: v8::Global<v8::Object>,
     entity_module_namespaces: Vec<v8::Global<v8::Object>>,
+    world: Arc<Mutex<World>>,
 }
 
 impl JSContext {
     pub async fn new(
         script_root: impl Into<PathBuf>,
-        entity_type_registry: &EntityTypeRegistry,
+        world: Arc<Mutex<World>>,
     ) -> anyhow::Result<Self> {
+        // Get a clone the entity type registry before we pass it over to the runtime
+        let entity_type_registry = {
+            let world = world.lock().expect("Deadlock!");
+            world.entity_type_registry.clone()
+        };
+
         // Load the runtime
-        let thing = Arc::new(Mutex::new(Thing { foo: 0 }));
         let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
-            extensions: vec![crimes::init_ops_and_esm(thing.clone())],
+            extensions: vec![hy::init_ops_and_esm(world.clone())],
             ..Default::default()
         });
 
@@ -86,6 +91,7 @@ impl JSContext {
             runtime,
             player_module_namespace,
             entity_module_namespaces,
+            world,
         })
     }
 
@@ -121,12 +127,13 @@ impl JSContext {
         Ok(next_state)
     }
 
-    pub async fn get_entity_next_state(
+    pub async fn run_script_for_entity(
         &mut self,
-        entity: &EntityData,
-    ) -> anyhow::Result<EntityState> {
+        entity_id: &str,
+        entity_type_id: EntityTypeID,
+    ) -> anyhow::Result<()> {
         let scope = &mut self.runtime.handle_scope();
-        let module_namespace = &self.entity_module_namespaces[entity.entity_type as usize];
+        let module_namespace = &self.entity_module_namespaces[entity_type_id as usize];
         let module_namespace = module_namespace.open(scope);
 
         let function_name = v8::String::new(scope, "update").unwrap();
@@ -141,13 +148,30 @@ impl JSContext {
         let entity_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
-        let current_state = serde_v8::to_v8(scope, &entity.state).unwrap();
+        let current_state = {
+            let world = self.world.lock().expect("Deadlock!");
+            let current_state = &world
+                .entities
+                .get(entity_id)
+                .expect("Entity does not exist")
+                .state;
+            serde_v8::to_v8(scope, &current_state).unwrap()
+        };
+
         let args = [current_state.into()];
 
         let result = entity_update.call(scope, undefined, &args).unwrap();
+
+        // Get the entity's next state
         let next_state: EntityState = serde_v8::from_v8(scope, result)?;
 
-        Ok(next_state)
+        // Update the entity
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            world.entities.get_mut(entity_id).unwrap().state = next_state;
+        }
+
+        Ok(())
     }
 }
 
