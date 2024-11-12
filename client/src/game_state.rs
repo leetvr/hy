@@ -1,4 +1,7 @@
-use {entities::EntityID, std::collections::HashMap};
+use {
+    entities::{EntityID, EntityTypeID},
+    std::collections::HashMap,
+};
 
 use blocks::{BlockGrid, BlockId, BlockRegistry, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
@@ -27,6 +30,7 @@ pub enum GameState {
         camera: FlyCamera,
         target_raycast: Option<RayHit>,
         selected_block_id: Option<BlockId>,
+        selected_entity_type_id: Option<EntityTypeID>,
     },
 }
 
@@ -54,6 +58,7 @@ impl GameState {
                     camera,
                     target_raycast: None,
                     selected_block_id: None,
+                    selected_entity_type_id: None,
                 }
             }
             // Editing -> Playing

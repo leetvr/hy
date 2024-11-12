@@ -3,7 +3,7 @@ import BlockButton from "./BlockButton.tsx";
 import { BlockRegistry } from "../../pkg/client.js";
 import { useState } from "react";
 
-export default function BlockList({ blockRegistry, setEngineBlockIndex }: { BlockRegistry?, setEngineBlockIndex: (number) => void }) {
+export default function BlockList({ blockRegistry, setEngineBlockIndex }: { blockRegistry: BlockRegistry, setEngineBlockIndex: (number: number) => void }) {
     const blockTypes = Array.from(blockRegistry.block_types);
 
     if (!blockRegistry) {
@@ -22,9 +22,9 @@ export default function BlockList({ blockRegistry, setEngineBlockIndex }: { Bloc
 
     return <div className="block-button-container">
         <BlockButton isOn={selectedBlockIndex === 0} onClickHandler={() => { setSelectedBlock(0); }} />
-        {blockRegistry.block_types.map((blockType, index) => {
+        {blockTypes.map((blockType, index) => {
             return (
-                <BlockButton isOn={selectedBlockIndex === 1+index} blockType={blockType} onClickHandler={(_) => { setSelectedBlock(1+index); }} />
+                <BlockButton isOn={selectedBlockIndex === 1 + index} blockType={blockType} onClickHandler={(_) => { setSelectedBlock(1 + index); }} />
             );
         })}
     </div>;

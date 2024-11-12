@@ -7,3 +7,4 @@ edition = "2021"
 glam.workspace = true
 serde.workspace = true
 wasm-bindgen.workspace = true
+tsify.workspace = true
