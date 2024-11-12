@@ -21,6 +21,105 @@
       "bottom_texture": "kibble_ctf/dirt.png",
       "metallic_factor": 0.2,
       "roughness_factor": 0.5
+    },
+    {
+      "name": "Dirt",
+      "north_texture": "kibble_ctf/dirt.png",
+      "south_texture": "kibble_ctf/dirt.png",
+      "east_texture": "kibble_ctf/dirt.png",
+      "west_texture": "kibble_ctf/dirt.png",
+      "top_texture": "kibble_ctf/dirt.png",
+      "bottom_texture": "kibble_ctf/dirt.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Gravel",
+      "north_texture": "kibble_ctf/gravel.png",
+      "south_texture": "kibble_ctf/gravel.png",
+      "east_texture": "kibble_ctf/gravel.png",
+      "west_texture": "kibble_ctf/gravel.png",
+      "top_texture": "kibble_ctf/gravel.png",
+      "bottom_texture": "kibble_ctf/gravel.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Bricks",
+      "north_texture": "kibble_ctf/bricks.png",
+      "south_texture": "kibble_ctf/bricks.png",
+      "east_texture": "kibble_ctf/bricks.png",
+      "west_texture": "kibble_ctf/bricks.png",
+      "top_texture": "kibble_ctf/bricks.png",
+      "bottom_texture": "kibble_ctf/bricks.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Stone Bricks",
+      "north_texture": "kibble_ctf/stone_bricks.png",
+      "south_texture": "kibble_ctf/stone_bricks.png",
+      "east_texture": "kibble_ctf/stone_bricks.png",
+      "west_texture": "kibble_ctf/stone_bricks.png",
+      "top_texture": "kibble_ctf/stone_bricks.png",
+      "bottom_texture": "kibble_ctf/stone_bricks.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Stone",
+      "north_texture": "kibble_ctf/stone.png",
+      "south_texture": "kibble_ctf/stone.png",
+      "east_texture": "kibble_ctf/stone.png",
+      "west_texture": "kibble_ctf/stone.png",
+      "top_texture": "kibble_ctf/stone.png",
+      "bottom_texture": "kibble_ctf/stone.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Oak Planks",
+      "north_texture": "kibble_ctf/oak_planks.png",
+      "south_texture": "kibble_ctf/oak_planks.png",
+      "east_texture": "kibble_ctf/oak_planks.png",
+      "west_texture": "kibble_ctf/oak_planks.png",
+      "top_texture": "kibble_ctf/oak_planks.png",
+      "bottom_texture": "kibble_ctf/oak_planks.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Spruce Planks",
+      "north_texture": "kibble_ctf/spruce_planks.png",
+      "south_texture": "kibble_ctf/spruce_planks.png",
+      "east_texture": "kibble_ctf/spruce_planks.png",
+      "west_texture": "kibble_ctf/spruce_planks.png",
+      "top_texture": "kibble_ctf/spruce_planks.png",
+      "bottom_texture": "kibble_ctf/spruce_planks.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Sand",
+      "north_texture": "kibble_ctf/sand.png",
+      "south_texture": "kibble_ctf/sand.png",
+      "east_texture": "kibble_ctf/sand.png",
+      "west_texture": "kibble_ctf/sand.png",
+      "top_texture": "kibble_ctf/sand.png",
+      "bottom_texture": "kibble_ctf/sand.png",
+      "metallic_factor": 0.2,
+      "roughness_factor": 0.5
+    },
+    {
+      "name": "Gold",
+      "north_texture": "kibble_ctf/gold.png",
+      "south_texture": "kibble_ctf/gold.png",
+      "east_texture": "kibble_ctf/gold.png",
+      "west_texture": "kibble_ctf/gold.png",
+      "top_texture": "kibble_ctf/gold.png",
+      "bottom_texture": "kibble_ctf/gold.png",
+      "metallic_factor": 1.0,
+      "roughness_factor": 0.1
     }
   ]
 }
