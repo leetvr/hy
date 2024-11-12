@@ -8,8 +8,7 @@ use {
     std::ops::{Add, Index, IndexMut, Sub},
 };
 
-use glam::{UVec3, Vec3};
-pub use raycast::RaycastMode;
+use glam::{IVec3, UVec3, Vec3};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
@@ -35,7 +34,7 @@ impl BlockPos {
         Self { x, y, z }
     }
 
-    pub fn from_signed(vec: Vec3) -> Option<Self> {
+    pub fn from_float(vec: Vec3) -> Option<Self> {
         if vec.cmplt(Vec3::ZERO).any() {
             return None;
         }
@@ -44,6 +43,20 @@ impl BlockPos {
             x: vec.x as u32,
             y: vec.y as u32,
             z: vec.z as u32,
+        })
+    }
+
+    pub fn add_signed(&self, vec: IVec3) -> Option<Self> {
+        let result = UVec3::new(self.x, self.y, self.z).as_ivec3() + vec;
+
+        if result.cmplt(IVec3::ZERO).any() {
+            return None;
+        }
+
+        Some(Self {
+            x: result.x as u32,
+            y: result.y as u32,
+            z: result.z as u32,
         })
     }
 }
@@ -143,13 +156,8 @@ impl BlockGrid {
         })
     }
 
-    pub fn raycast(
-        &self,
-        start: Vec3,
-        direction: glam::Vec3,
-        mode: RaycastMode,
-    ) -> Option<raycast::RayHit> {
-        raycast::raycast(self, start, direction, 0.0, mode)
+    pub fn raycast(&self, start: Vec3, direction: glam::Vec3) -> Option<raycast::RayHit> {
+        raycast::raycast(self, start, direction, 0.0)
     }
 }
 
