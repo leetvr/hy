@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use {
+    entities::{EntityID, EntityTypeID},
+    std::collections::HashMap,
+};
 
-use blocks::{BlockGrid, BlockId, BlockPos, BlockRegistry};
+use blocks::{BlockGrid, BlockId, BlockRegistry, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
 use net_types::PlayerId;
 
@@ -13,7 +16,7 @@ pub enum GameState {
     Playing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
-        entities: Vec<EntityData>,
+        entities: HashMap<EntityID, EntityData>,
         entity_type_registry: EntityTypeRegistry,
         client_player: PlayerId,
         camera: FlyCamera,
@@ -22,11 +25,12 @@ pub enum GameState {
     Editing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
-        entities: Vec<EntityData>,
+        entities: HashMap<EntityID, EntityData>,
         entity_type_registry: EntityTypeRegistry,
         camera: FlyCamera,
-        target_block: Option<BlockPos>,
+        target_raycast: Option<RayHit>,
         selected_block_id: Option<BlockId>,
+        selected_entity_type_id: Option<EntityTypeID>,
     },
 }
 
@@ -52,8 +56,9 @@ impl GameState {
                     entities,
                     entity_type_registry,
                     camera,
-                    target_block: None,
+                    target_raycast: None,
                     selected_block_id: None,
+                    selected_entity_type_id: None,
                 }
             }
             // Editing -> Playing

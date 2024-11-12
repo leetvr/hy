@@ -56,11 +56,11 @@ impl JSContext {
         // Load entity scripts
         // PARANOIA: Ensure we load the entity types in the correct order
         let mut entity_types = entity_type_registry.entity_types();
-        entity_types.sort_by_key(|et| et.id);
+        entity_types.sort_by_key(|et| et.id());
 
         for entity_type in entity_type_registry.entity_types().iter() {
             let module_namespace =
-                get_module_namespace(script_root.join(&entity_type.script_path), &mut runtime)
+                get_module_namespace(script_root.join(&entity_type.script_path()), &mut runtime)
                     .await?;
             entity_module_namespaces.push(module_namespace);
         }

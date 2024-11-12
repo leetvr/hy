@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import init, { BlockRegistry, Engine, EngineMode } from "../../pkg/client.js";
+import init, { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../../pkg/client.js";
 import "./App.css";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
@@ -9,25 +9,31 @@ function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
   const [currentMode, setModeState] = useState(initialEngineMode);
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
+  const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
   useEffect(() => {
-    engine.ctx_on_init(setBlockRegistry);
+    engine.ctx_on_init((blockRegistry: BlockRegistry, entityTypeRegistry: EntityTypeRegistry) => {
+      setBlockRegistry(blockRegistry);
+      setEntityTypeRegistry(entityTypeRegistry);
+    });
   }, [engine]);
 
   const setMode = (newMode: EngineMode) => {
-    if(newMode != currentMode) {
-        setModeState(newMode);
-        engine.ctx_set_engine_mode(newMode);
+    if (newMode != currentMode) {
+      setModeState(newMode);
+      engine.ctx_set_engine_mode(newMode);
     }
   };
 
   const editClass = getEngineModeText(currentMode);
 
   return (
-    <div className={"mode-"+editClass}>
-        <TopBar setMode={setMode} />
-        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} />
-        <RightBar selectedEntity={false} />
+    <div className={"mode-" + editClass}>
+      <TopBar setMode={setMode} />
+      {blockRegistry && entityTypeRegistry && (
+        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} entityTypeRegistry={entityTypeRegistry} />
+      )}
+      <RightBar selectedEntity={false} />
     </div>
   );
 }

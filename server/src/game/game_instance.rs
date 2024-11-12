@@ -1,6 +1,6 @@
 use {
-    crate::game::PlayerCollision,
-    blocks::{BlockGrid, BlockPos, EMPTY_BLOCK},
+    crate::game::player,
+    entities::{EntityData, EntityID},
     std::collections::{HashMap, HashSet},
 };
 
@@ -51,8 +51,8 @@ impl GameInstance {
         } = editor_instance;
         let mut game_instance = GameInstance::new(world);
 
-        // IMPORTANT: We need the client to forget about any players it's seen
-        editor_client.known_players.clear();
+        // IMPORTANT: We need the client to forget any previous world state
+        editor_client.awareness = Default::default();
 
         // Create a player for the editor client
         let player_id = PlayerId::new(game_instance.next_player_id);
@@ -94,7 +94,7 @@ impl GameInstance {
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
             let collisions =
-                player_aabb_block_collisions(player.state.position, &self.world.blocks);
+                player::player_aabb_block_collisions(player.state.position, &self.world.blocks);
 
             player.state = js_context
                 .get_player_next_state(&player.state, &client.last_controls, collisions)
@@ -103,7 +103,7 @@ impl GameInstance {
         }
 
         // Update entities
-        for entity in self.world.entities.iter_mut() {
+        for entity in self.world.entities.values_mut() {
             entity.state = js_context.get_entity_next_state(entity).await.unwrap();
         }
 
@@ -148,7 +148,7 @@ impl GameInstance {
             Client {
                 last_controls: net_types::Controls::default(),
                 player_id,
-                known_players: HashMap::new(),
+                awareness: Default::default(),
                 incoming_rx,
                 outgoing_tx,
             },
@@ -161,6 +161,7 @@ impl GameInstance {
         let mut disconnected = Vec::new();
         let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
+        let live_entities = self.world.entities.keys().copied().collect::<HashSet<_>>();
         'client_loop: for (client_id, client) in self.clients.iter_mut() {
             while let Some(packet) = match client.incoming_rx.try_recv() {
                 Ok(v) => Some(v),
@@ -190,56 +191,8 @@ impl GameInstance {
                 }
             }
 
-            let known_players = client.known_players.keys().copied().collect::<HashSet<_>>();
-
-            let new_players = live_players.difference(&known_players);
-            let removed_players = known_players.difference(&live_players);
-
-            // Add new players to this client
-            for player_id in new_players {
-                let player = self.players.get(player_id).unwrap();
-                let _ = client
-                    .outgoing_tx
-                    .send(
-                        net_types::AddPlayer {
-                            id: *player_id,
-                            position: player.state.position,
-                        }
-                        .into(),
-                    )
-                    .await;
-                client
-                    .known_players
-                    .insert(*player_id, player.state.position);
-            }
-
-            // Remove old players from this client
-            for player_id in removed_players {
-                let _ = client
-                    .outgoing_tx
-                    .send(net_types::RemovePlayer { id: *player_id }.into())
-                    .await;
-                client.known_players.remove(player_id);
-            }
-
-            // Update player positions for all known players
-            // TODO: Update sates instead?
-            for (player_id, known_position) in client.known_players.iter_mut() {
-                let player = self.players.get(player_id).unwrap();
-                if player.state.position != *known_position {
-                    let _ = client
-                        .outgoing_tx
-                        .send(
-                            net_types::UpdatePosition {
-                                id: *player_id,
-                                position: player.state.position,
-                            }
-                            .into(),
-                        )
-                        .await;
-                    *known_position = player.state.position;
-                }
-            }
+            sync_players_to_client(&self.players, &live_players, client).await;
+            sync_entities_to_client(&self.world.entities, &live_entities, client).await;
         }
 
         // Remove disconnected clients, and their associated players
@@ -260,113 +213,132 @@ impl GameInstance {
     }
 }
 
-fn player_aabb_block_collisions(position: glam::Vec3, blocks: &BlockGrid) -> Vec<PlayerCollision> {
-    let player_aabb = aabb_for_player(position);
+async fn sync_players_to_client(
+    players: &HashMap<PlayerId, Player>,
+    live_players: &HashSet<PlayerId>,
+    client: &mut Client,
+) {
+    let known_players = client
+        .awareness
+        .players
+        .keys()
+        .copied()
+        .collect::<HashSet<_>>();
 
-    let mut collisions = Vec::new();
-    for BlockPos { x, y, z } in aabb_colliding_blocks(blocks, &player_aabb) {
-        // Collect the 6 possible collisions and the way to resolve getting out of the block
-        collisions.extend(
-            [
-                (glam::Vec3::X, player_aabb.min.x - (x + 1) as f32),
-                (-glam::Vec3::X, x as f32 - player_aabb.max.x),
-                (glam::Vec3::Y, player_aabb.min.y - (y + 1) as f32),
-                (-glam::Vec3::Y, y as f32 - player_aabb.max.y),
-                (glam::Vec3::Z, player_aabb.min.z - (z + 1) as f32),
-                (-glam::Vec3::Z, z as f32 - player_aabb.max.z),
-            ]
-            .into_iter()
-            .map(|(normal, dist)| PlayerCollision {
-                block: BlockPos::new(x, y, z),
-                normal,
-                resolution: normal * dist.abs() * 1.1,
-            })
-            .filter(|collision| {
-                // Filter out collisions where the resolution would make the player
-                // collide even more. We want less collisions, not more.
-                if aabb_colliding_blocks(blocks, &aabb_for_player(position + collision.resolution))
-                    .next()
-                    .is_none()
-                {
-                    true
-                } else {
-                    false
+    let new_players = live_players.difference(&known_players);
+    let removed_players = known_players.difference(live_players);
+
+    // Add new players to this client
+    for player_id in new_players {
+        let player = players.get(player_id).unwrap();
+        let _ = client
+            .outgoing_tx
+            .send(
+                net_types::AddPlayer {
+                    id: *player_id,
+                    position: player.state.position,
                 }
-            }),
-        );
+                .into(),
+            )
+            .await;
+        client
+            .awareness
+            .players
+            .insert(*player_id, player.state.position);
     }
-    collisions
-}
 
-fn aabb_colliding_blocks<'a>(
-    blocks: &'a BlockGrid,
-    aabb: &'a AABB,
-) -> impl Iterator<Item = BlockPos> + 'a {
-    let min = aabb.min_block_pos();
-    let max = aabb.max_block_pos();
+    // Remove old players from this client
+    for player_id in removed_players {
+        let _ = client
+            .outgoing_tx
+            .send(net_types::RemovePlayer { id: *player_id }.into())
+            .await;
+        client.awareness.players.remove(player_id);
+    }
 
-    // Broad phase, all the blocks we could possibly collide with
-    let collidable_blocks = (min.x..=max.x).flat_map(move |x| {
-        (min.y..=max.y).flat_map(move |y| {
-            (min.z..=max.z).filter_map(move |z| {
-                let pos = BlockPos::new(x, y, z);
-                if blocks
-                    .get(BlockPos::new(x, y, z))
-                    .cloned()
-                    .map(|b| b != EMPTY_BLOCK)
-                    // Out of bounds is solid
-                    .unwrap_or(true)
-                {
-                    Some(pos)
-                } else {
-                    None
-                }
-            })
-        })
-    });
-
-    // Narrow phase, only the blocks we actually collide with
-    collidable_blocks.filter(|pos| {
-        if aabb.min.x > pos.x as f32 + 1.
-            || aabb.max.x < pos.x as f32
-            || aabb.min.y > pos.y as f32 + 1.
-            || aabb.max.y < pos.y as f32
-            || aabb.min.z > pos.z as f32 + 1.
-            || aabb.max.z < pos.z as f32
-        {
-            false
-        } else {
-            true
+    // Update player positions for all known players
+    // TODO: Update sates instead?
+    for (player_id, known_position) in client.awareness.players.iter_mut() {
+        let player = players.get(player_id).unwrap();
+        if player.state.position != *known_position {
+            let _ = client
+                .outgoing_tx
+                .send(
+                    net_types::UpdatePlayer {
+                        id: *player_id,
+                        position: player.state.position,
+                    }
+                    .into(),
+                )
+                .await;
+            *known_position = player.state.position;
         }
-    })
+    }
 }
 
-fn aabb_for_player(player_pos: glam::Vec3) -> AABB {
-    let size = glam::Vec3::new(0.5, 1.5, 0.5);
-    let min = player_pos - size / 2.;
-    let max = player_pos + size / 2.;
-    AABB { min, max }
-}
+async fn sync_entities_to_client(
+    entities: &HashMap<EntityID, EntityData>,
+    live_entities: &HashSet<u64>,
+    client: &mut Client,
+) {
+    let known_entities = client
+        .awareness
+        .entities
+        .keys()
+        .copied()
+        .collect::<HashSet<_>>();
 
-struct AABB {
-    min: glam::Vec3,
-    max: glam::Vec3,
-}
+    let new_entities = live_entities.difference(&known_entities);
+    let removed_entities = known_entities.difference(live_entities);
 
-impl AABB {
-    fn min_block_pos(&self) -> BlockPos {
-        BlockPos::new(
-            self.min.x.floor() as u32,
-            self.min.y.floor() as u32,
-            self.min.z.floor() as u32,
-        )
+    // Add new entities to this client
+    for entity_id in new_entities {
+        let entity = entities.get(entity_id).unwrap();
+        let _ = client
+            .outgoing_tx
+            .send(
+                net_types::AddEntity {
+                    entity_id: *entity_id,
+                    entity_data: entity.clone(),
+                }
+                .into(),
+            )
+            .await;
+        client
+            .awareness
+            .entities
+            .insert(*entity_id, entity.state.position);
     }
 
-    fn max_block_pos(&self) -> BlockPos {
-        BlockPos::new(
-            self.max.x.floor() as u32,
-            self.max.y.floor() as u32,
-            self.max.z.floor() as u32,
-        )
+    // Remove old entities from this client
+    for entity_id in removed_entities {
+        let _ = client
+            .outgoing_tx
+            .send(
+                net_types::RemoveEntity {
+                    entity_id: *entity_id,
+                }
+                .into(),
+            )
+            .await;
+        client.awareness.entities.remove(entity_id);
+    }
+
+    // Update client's entity positions for all known entities
+    for (entity_id, known_position) in &mut client.awareness.entities {
+        let entity = entities.get(entity_id).unwrap();
+        if entity.state.position != *known_position {
+            let _ = client
+                .outgoing_tx
+                .send(
+                    net_types::UpdateEntity {
+                        entity_id: *entity_id,
+                        position: entity.state.position,
+                    }
+                    .into(),
+                )
+                .await;
+            *known_position = entity.state.position;
+        }
     }
 }
