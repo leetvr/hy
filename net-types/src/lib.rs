@@ -71,7 +71,7 @@ pub struct Reset {
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct SetBlock {
     pub position: BlockPos,
-    pub block_id: blocks::BlockId,
+    pub block_id: blocks::BlockTypeID,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

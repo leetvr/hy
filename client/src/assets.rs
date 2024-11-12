@@ -1,17 +1,17 @@
 use {
-    anyhow::{format_err, Result},
     blocks::BlockRegistry,
     entities::EntityData,
     itertools::Itertools,
-    std::{cell::RefCell, collections::HashMap, rc::Rc},
-    tokio::sync::oneshot,
-    wasm_bindgen::{prelude::Closure, JsCast},
-    web_sys::{js_sys::Uint8Array, XmlHttpRequest, XmlHttpRequestResponseType},
+    std::{
+        cell::{Ref, RefCell},
+        collections::{HashMap, HashSet},
+        rc::Rc,
+    },
 };
 
 pub struct Assets {
-    pending: HashMap<String, oneshot::Receiver<Result<AssetData>>>,
-    loaded: HashMap<String, Option<AssetData>>,
+    pending: HashSet<String>,
+    loaded: Rc<RefCell<HashMap<String, AssetData>>>,
 }
 
 impl Assets {
@@ -24,12 +24,12 @@ impl Assets {
 
     pub fn load_block_textures(&mut self, block_registry: &BlockRegistry) {
         for block_type in block_registry.iter() {
-            self.get(&block_type.top_texture);
-            self.get(&block_type.bottom_texture);
-            self.get(&block_type.east_texture);
-            self.get(&block_type.west_texture);
-            self.get(&block_type.north_texture);
-            self.get(&block_type.south_texture);
+            self.get_or_load(&block_type.top_texture);
+            self.get_or_load(&block_type.bottom_texture);
+            self.get_or_load(&block_type.east_texture);
+            self.get_or_load(&block_type.west_texture);
+            self.get_or_load(&block_type.north_texture);
+            self.get_or_load(&block_type.south_texture);
         }
     }
 
@@ -39,72 +39,48 @@ impl Assets {
         }
     }
 
-    pub fn get(&mut self, path: &str) -> Option<&Vec<u8>> {
-        if let Some(data) = self.loaded.get(path) {
-            return data.as_ref();
+    pub fn get_or_load(&mut self, path: &str) -> Option<Ref<Vec<u8>>> {
+        // Do we have this asset loaded already?
+        if self.loaded.borrow().contains_key(path) {
+            return Some(Ref::map(self.loaded.borrow(), |loaded| &loaded[path]));
         }
 
-        if self.pending.contains_key(path) {
+        // Are we already trying to load the asset?
+        if self.pending.contains(path) {
+            tracing::debug!("{path:} is pending, ignoring");
             return None;
         }
 
-        let rx = fetch_asset(path.to_string());
-        self.pending.insert(path.to_string(), rx);
+        // Nope! Okay, so now let's load it. First, let's mark it in our pending list..
+        self.pending.insert(path.to_string());
+
+        tracing::debug!("Fetching {path:}..");
+
+        let path = path.to_string();
+        let loaded = self.loaded.clone();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let data = gloo_net::http::Request::get(&path)
+                .send()
+                .await
+                .unwrap()
+                .binary()
+                .await
+                .unwrap();
+            tracing::debug!("Fetched {path} successfully!");
+            loaded.borrow_mut().insert(path, data);
+        });
 
         None
     }
 
-    pub fn maintain(&mut self) {
-        self.pending.retain(|name, rx| {
-            if let Some(data) = rx.try_recv().ok() {
-                let data = match data {
-                    Ok(data) => Some(data),
-                    Err(err) => {
-                        tracing::error!("Failed to load asset {name}: {err}");
-                        None
-                    }
-                };
-                self.loaded.insert(name.clone(), data);
-                false
-            } else {
-                true
-            }
-        });
+    pub fn get(&self, path: &str) -> Option<Ref<Vec<u8>>> {
+        if self.loaded.borrow().contains_key(path) {
+            Some(Ref::map(self.loaded.borrow(), |loaded| &loaded[path]))
+        } else {
+            None
+        }
     }
 }
 
 type AssetData = Vec<u8>;
-
-fn fetch_asset(path: String) -> oneshot::Receiver<Result<AssetData>> {
-    let req = XmlHttpRequest::new().expect("Failed to create XmlHttpRequest");
-    req.open("GET", &format!("/{path}"))
-        .expect("Failed to open request");
-    req.set_response_type(XmlHttpRequestResponseType::Arraybuffer);
-    let (tx, rx) = oneshot::channel();
-
-    let f = Rc::new(RefCell::new(None));
-    *f.borrow_mut() = Some(Closure::wrap(Box::new({
-        let req = req.clone();
-        let tx = RefCell::new(Some(tx));
-        let f = f.clone();
-        move || {
-            tracing::info!("Request complete");
-            let res = if req.status() == Ok(200) {
-                let data = req.response().unwrap();
-                let data = Uint8Array::new(&data);
-                Ok(data.to_vec())
-            } else {
-                let err = req.status_text();
-                Err(format_err!("Request failed: {err:?}"))
-            };
-            let _ = tx.take().unwrap().send(res);
-
-            f.borrow_mut().take().unwrap();
-        }
-    }) as Box<dyn FnMut()>));
-
-    req.set_onload(Some(f.borrow().as_ref().unwrap().as_ref().unchecked_ref()));
-
-    req.send().expect("Failed to send request");
-    rx
-}
