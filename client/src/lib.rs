@@ -251,9 +251,12 @@ impl Engine {
 
                             // Tell the React frontend
                             if let Some(on_init) = self.context.on_init_callback.take() {
-                                let data = serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let block_registry =
+                                    serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let entity_type_registry =
+                                    serde_wasm_bindgen::to_value(&entity_type_registry).unwrap();
                                 on_init
-                                    .call1(&JsValue::NULL, &data)
+                                    .call2(&JsValue::NULL, &block_registry, &entity_type_registry)
                                     .expect("Unable to call on_init!");
                             }
 
@@ -265,6 +268,7 @@ impl Engine {
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_raycast: None,
                                 selected_block_id: None,
+                                selected_entity_type_id: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
