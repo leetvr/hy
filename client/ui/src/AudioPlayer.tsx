@@ -14,9 +14,10 @@ export function TestAudioPlayback({ engine }: { engine: Engine }) {
   const loadAndPlaySound = async () => {
     try {
       // await engine.load_url_sound(sampleSound);
-      await engine.load_sound("pain");
-      
-      console.log('Sound loaded');
+      // await engine.load_sound("pain");
+      // console.log('Sound loaded');
+
+
       engine.play_sound("pain");
       console.log('Sound is now playing');
       setIsPlaying(true);
@@ -28,31 +29,105 @@ export function TestAudioPlayback({ engine }: { engine: Engine }) {
     }
   };
 
-  const panLeft = () => {
-    const newX = xPosition - 1;
-    setXPosition(newX);
-    engine.set_sound_position(newX, 0, 0);
-  };
+  // const panLeft = () => {
+  //   const newX = xPosition - 1;
+  //   setXPosition(newX);
+  //   engine.set_sound_position(newX, 0, 0);
+  // };
 
-  const panRight = () => {
-    const newX = xPosition + 1;
-    setXPosition(newX);
-    engine.set_sound_position(newX, 0, 0);
-  };
+  // const panRight = () => {
+  //   const newX = xPosition + 1;
+  //   setXPosition(newX);
+  //   engine.set_sound_position(newX, 0, 0);
+  // };
 
+  return (<div>
+    <button onClick={loadAndPlaySound}>Play Wasm Sound</button>
+    {isPlaying ? <div>Sound Playing...</div> : <div>Sound Not Playing</div>}
+    {wasError && <div>Error: {errorMessage}</div>}
+    {/* {isPlaying && (
+      <div>
+        <button onClick={panLeft}>Pan Left</button>
+        <button onClick={panRight}>Pan Right</button>
+        <p>Current X Position: {xPosition}</p>
+      </div>
+    )} */}
+  </div>);
+}
+
+export function TestStopSounds({engine}: {engine: Engine}) {
+  const [stopError, setStopError] = useState<string>('');
+  const [killError, setKillError] = useState<string>('');
+
+  const [isStopSuccess, setIsStopSuccess] = useState<boolean>(false);
+  const [isKillSuccess, setIsKillSuccess] = useState<boolean>(false);
+
+  const handleStopAllSounds = () => {
+    try {
+      engine.stop_sounds();
+      console.log("All sounds stopped.");
+      setIsStopSuccess(true);       // Mark as successful
+      setStopError('');            // Clear any previous errors
+    } catch (error) {
+      console.error("Error stopping all sounds:", error);
+      setStopError(error instanceof Error ? error.message : String(error));
+      setIsStopSuccess(false);      // Reset success state on error
+      
+    }
+  };
+  
+  const handleClearSoundsBank = () => {
+    try {
+      engine.kill_sounds();
+      console.log("Sounds bank cleared.");
+      setIsKillSuccess(true);       // Mark as successful
+      setKillError('');             // Clear any previous errors
+    } catch (error) {
+      console.error("Error clearing sounds bank:", error);
+      setKillError(error instanceof Error ? error.message : String(error));
+      setKillError(error instanceof Error ? error.message : String(error));
+      setIsKillSuccess(false);      // Reset success state on error
+    }
+  };
+  
   return (
+  <div>
     <div>
-      <button onClick={loadAndPlaySound}>Play Wasm Sound</button>
-      {isPlaying ? <div>Sound Playing...</div> : <div>Sound Not Playing</div>}
-      {wasError && <div>Error: {errorMessage}</div>}
-      {isPlaying && (
-        <div>
-          <button onClick={panLeft}>Pan Left</button>
-          <button onClick={panRight}>Pan Right</button>
-          <p>Current X Position: {xPosition}</p>
-        </div>
-      )}
+      <button onClick={handleStopAllSounds}>
+            Stop All Sounds
+          </button>
+          {/* Display Error Message */}
+          {stopError && (
+            <div style={{ color: 'red', marginTop: '8px' }}>
+              Error: {stopError}
+            </div>
+          )}
+          {/* Display Success Message */}
+          {isStopSuccess && (
+            <div style={{ color: 'green', marginTop: '8px' }}>
+              All sounds have been stopped successfully.
+            </div>
+          )}
     </div>
+
+    <div>
+        <button onClick={handleClearSoundsBank}>
+          Clear Sounds Bank
+        </button>
+        {/* Display Error Message */}
+        {killError && (
+          <div style={{ color: 'red', marginTop: '8px' }}>
+            Error: {killError}
+          </div>
+        )}
+        {/* Display Success Message */}
+        {isKillSuccess && (
+          <div style={{ color: 'green', marginTop: '8px' }}>
+            Sounds bank has been cleared successfully.
+          </div>
+        )}
+      </div>
+  </div>
   );
 }
 

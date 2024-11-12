@@ -59,9 +59,8 @@ function WasmWrapper() {
         await init(); // init
         const engine = Engine.new();
         
-        // TODO(af): This is intermittently preventing BlockRegistry from loading
+        // Should we be loading sounds elsewhere?
         await engine.load_sounds_into_bank();
-        console.log("Sounds successfully loaded into sounds_bank");
 
         const tick = (timestamp: number) => {
           engine.tick(timestamp);

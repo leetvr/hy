@@ -330,6 +330,21 @@ impl Engine {
             _ => {}
         }
 
+        // Debug: Spawn sounds when left click block
+        if self.is_audio_manager_debug() {
+            if let GameState::Editing { target_block, .. } = &mut self.state {
+                if self.controls.mouse_left {
+                    if let Some(pos) = *target_block {
+                        if let Err(_) =
+                            self.play_sound_at_pos("pain", pos.x as f32, pos.y as f32, pos.z as f32)
+                        {
+                            tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
+                        }
+                    }
+                }
+            }
+        }
+
         // Send packets
         match &mut self.state {
             GameState::Playing {
@@ -497,20 +512,6 @@ impl Engine {
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
         packet_handlers::handle_set_block(blocks, set_block).expect("place block");
-
-        if self.is_audio_manager_debug() {
-            let Ok(_) = self.play_sound_at_pos(
-                "pain",
-                position.x as f32,
-                position.y as f32,
-                position.z as f32,
-            ) else {
-                tracing::debug!(
-                    "Failed to play_sound_at_pos: position {position:?} for {block_id}"
-                );
-                return;
-            };
-        }
 
         self.send_packet(ClientPacket::SetBlock(set_block));
     }
@@ -682,6 +683,14 @@ impl Engine {
 
     pub fn is_audio_manager_debug(&mut self) -> bool {
         self.audio_manager.is_debug()
+    }
+
+    pub fn kill_sounds(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.clear_sounds_bank()
+    }
+
+    pub fn stop_sounds(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.stop_all_sounds()
     }
 
     fn update_audio_manager(&mut self) {

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
+use web_sys::js_sys::Uint8Array;
 #[allow(unused)]
 use web_sys::{
     js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
@@ -16,20 +17,18 @@ const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
-    // Initial prototyping: Just track the latest sound
-    source_node: Option<AudioBufferSourceNode>,
-    panner_node: Option<PannerNode>,
-    // distortion_node: Option<web_sys::WaveShaperNode>,
-
-    // // TODO: Track all current instances of a sound
-    // sound_instances: RefCell<Vec<SoundInstance>>, // All current instances of a sound
-
+    panner_node: Option<PannerNode>, // TODO: Delete
     // Mapping of sound IDs to loaded AudioBuffers
     sounds_bank: HashMap<String, AudioBuffer>,
+    // Active sound instances mapped by a unique handle (e.g., u32)
+    active_sounds: HashMap<u32, SoundInstance>,
+    // Counter for generating unique handles
+    next_sound_handle: u32,
 }
 
 #[wasm_bindgen]
 impl AudioManager {
+    /// Create a new AudioManager and initialize its AudioContext and GainNode
     pub fn new() -> Result<AudioManager, JsValue> {
         let context = AudioContext::new()?;
         let gain_node = context.create_gain()?;
@@ -38,12 +37,10 @@ impl AudioManager {
         Ok(AudioManager {
             context,
             gain_node,
-            source_node: None,
             panner_node: None,
-            // distortion_node: None,
-
-            // sound_instances: RefCell::new(Vec::new()),
             sounds_bank: HashMap::new(),
+            active_sounds: HashMap::new(),
+            next_sound_handle: 0,
         })
     }
 
@@ -54,6 +51,7 @@ impl AudioManager {
         self.load_sound_from_id("step_gravel").await?;
         // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
         //     .await?;
+        web_sys::console::log_1(&"Sounds successfully loaded into sounds_bank".into());
         Ok(())
     }
 
@@ -73,14 +71,15 @@ impl AudioManager {
             "pain" => PAIN_WAV,
             "step_gravel" => STEP_GRAVEL_WAV,
             _ => {
-                web_sys::console::error_1(&format!("Unknown sound ID:{} -> pain", sound_id).into());
-                // return Err(JsValue::from_str("Unknown sound ID"));
-                PAIN_WAV
+                web_sys::console::error_1(&format!("Unknown sound ID:{}", sound_id).into());
+                return Err(JsValue::from_str(&format!(
+                    "Unable to load audio buffer: Unknown sound id {sound_id}"
+                )));
             }
         };
 
         // Create a Uint8Array from the embedded bytes
-        let uint8_array = web_sys::js_sys::Uint8Array::from(sound_bytes);
+        let uint8_array = Uint8Array::from(sound_bytes);
         // Get the ArrayBuffer from the Uint8Array
         let array_buffer = uint8_array.buffer();
         // Decode the audio data
@@ -116,32 +115,34 @@ impl AudioManager {
         &mut self,
         sound_id: &str,
         maybe_position: Option<SoundPosition>,
+        // TODO: pass in individual gain and other parameters
     ) -> Result<(), JsValue> {
-        if let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) {
-            let source_node = self.context.create_buffer_source()?;
-            source_node.set_buffer(Some(audio_buffer));
-
-            let panner_node = self.context.create_panner()?;
-            source_node.connect_with_audio_node(&panner_node)?;
-            panner_node.connect_with_audio_node(&self.gain_node)?;
-
-            // Set panner position if provided
-            if let Some(pos) = &maybe_position {
-                panner_node.position_x().set_value(pos.x);
-                panner_node.position_y().set_value(pos.y);
-                panner_node.position_z().set_value(pos.z);
-            }
-
-            source_node.start()?;
-
-            self.source_node = Some(source_node);
-            self.panner_node = Some(panner_node);
-
-            Ok(())
-        } else {
+        let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
-            Err(JsValue::from_str("Sound buffer not loaded"))
+            return Err(JsValue::from_str("Sound buffer not loaded"));
+        };
+
+        let Ok(sound_instance) =
+            SoundInstance::new(&self.context, audio_buffer, &self.gain_node, None)
+        else {
+            web_sys::console::error_1(&"Unable to create sound_instance".into());
+            return Err(JsValue::from_str("Unable to create sound_instance"));
+        };
+
+        // Generate a unique handle
+        let handle = self.next_sound_handle;
+        self.next_sound_handle += 1;
+
+        if let Some(pos) = maybe_position {
+            sound_instance.set_position(pos.x, pos.y, pos.z);
         }
+
+        sound_instance.start();
+
+        // Insert into active_sounds
+        self.active_sounds.insert(handle, sound_instance);
+
+        return Ok(());
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -181,10 +182,59 @@ impl AudioManager {
         );
     }
 
-    // DEBUG: Spawn footsteps sound on Engine initialisation and play a sound when placing blocks
+    // Will play a sound when placing left clicking on blocks
     pub fn is_debug(&self) -> bool {
         true
     }
+
+    /// Stops a sound given its handle.
+    pub fn stop_sound(&mut self, handle: u32) -> Result<(), JsValue> {
+        if let Some(sound_instance) = self.active_sounds.remove(&handle) {
+            sound_instance.stop()?;
+            Ok(())
+        } else {
+            web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
+            Err(JsValue::from_str("Sound handle not found"))
+        }
+    }
+
+    /// Stops all currently playing sounds and clears the active_sounds map.
+    pub fn stop_all_sounds(&mut self) -> Result<(), JsValue> {
+        for (&handle, sound_instance) in self.active_sounds.iter() {
+            match sound_instance.stop() {
+                Ok(_) => {
+                    web_sys::console::log_1(
+                        &format!("Stopped sound with handle {}", handle).into(),
+                    );
+                }
+                Err(err) => {
+                    web_sys::console::error_1(
+                        &format!("Failed to stop sound with handle {}: {:?}", handle, err).into(),
+                    );
+                }
+            }
+        }
+        self.active_sounds.clear(); // TODO: check memory
+        web_sys::console::log_1(&"All sounds stopped.".into());
+        Ok(())
+    }
+
+    /// Clears the sounds_bank, removing all loaded sounds.
+    pub fn clear_sounds_bank(&mut self) -> Result<(), JsValue> {
+        self.sounds_bank.clear();
+        web_sys::console::log_1(&"Sounds bank cleared.".into());
+        Ok(())
+    }
+
+    // /// Updates the positions of all sounds associated with their entities.
+    // pub fn update_sound_positions(&mut self) {
+    //     for (&handle, sound_instance) in &mut self.active_sounds {
+    //         if let Some(entity_id) = sound_instance.entity_id {
+    //             // TODO:
+    //             // if let Some(position) = world.get_entity_position(entity_id) {}
+    //         }
+    //     }
+    // }
 }
 
 use serde::{Deserialize, Serialize};
@@ -219,7 +269,7 @@ impl SoundPosition {
 // 3. `reference distance` - clarify if just max or min as well
 // 4. `playback_speed`
 // 5. `volume`
-// 6. `distortion`
+// 6. `distortion` -  `distortion_node: Option<web_sys::WaveShaperNode>,`
 // Implement a mechanism to interrupt playback from scripts (on entity or position)
 // Make sure coordinate systems line up between Hytopia and WebAudio (Right handed)
 
@@ -230,39 +280,61 @@ impl SoundPosition {
 //     }
 // }
 
-// struct SoundInstance {
-//     source_node: AudioBufferSourceNode,
-//     panner_node: PannerNode,
-//     entity_id: Option<u32>, // Associated entity ID, if any
-// }
+struct SoundInstance {
+    source_node: AudioBufferSourceNode,
+    panner_node: PannerNode,
+    entity_id: Option<u32>, // Associated entity ID, if any
+}
 
-// impl SoundInstance {
-//     fn new(
-//         context: &AudioContext,
-//         audio_buffer: &AudioBuffer,
-//         gain_node: &GainNode,
-//     ) -> Result<Self, JsValue> {
-//         let source_node = context.create_buffer_source()?;
-//         source_node.set_buffer(Some(audio_buffer));
+impl SoundInstance {
+    fn new(
+        context: &AudioContext,
+        audio_buffer: &AudioBuffer,
+        gain_node: &GainNode,
+        // TODO: Check if this should be hecs::Entity
+        entity_id: Option<u32>,
+    ) -> Result<Self, JsValue> {
+        let source_node = context.create_buffer_source()?;
+        source_node.set_buffer(Some(audio_buffer));
 
-//         let panner_node = context.create_panner()?;
-//         source_node.connect_with_audio_node(&panner_node)?;
-//         panner_node.connect_with_audio_node(gain_node)?;
+        let panner_node = context.create_panner()?;
 
-//         Ok(SoundInstance {
-//             source_node,
-//             panner_node,
-//             entity_id: None,
-//         })
-//     }
+        // TODO: Connect to scripts (For now, just use the defaults)
+        // panner_node.set_distance_model(web_sys::DistanceModelType::Linear); // Supports Inverse and Exponential
+        // panner_node.set_max_distance(10000.);
+        // panner_node.set_ref_distance(1.);
+        // panner_node.set_rolloff_factor(10.);
 
-//     fn start(&self) -> Result<(), JsValue> {
-//         self.source_node.start()
-//     }
+        panner_node.set_position(0.0, 0.0, 0.0); // Default position; can be updated later
 
-//     fn set_position(&self, x: f32, y: f32, z: f32) {
-//         self.panner_node.position_x().set_value(x);
-//         self.panner_node.position_y().set_value(y);
-//         self.panner_node.position_z().set_value(z);
-//     }
-// }
+        source_node.connect_with_audio_node(&panner_node)?;
+        panner_node.connect_with_audio_node(gain_node)?;
+
+        // TODO: Implement
+        source_node.set_loop(true); // Set to true if you want the sound to loop
+
+        Ok(SoundInstance {
+            source_node,
+            panner_node,
+            entity_id,
+        })
+    }
+
+    fn start(&self) -> Result<(), JsValue> {
+        self.source_node.start()
+    }
+
+    /// Stops playback and disconnects nodes to free resources.
+    fn stop(&self) -> Result<(), JsValue> {
+        self.source_node.stop()?;
+        self.source_node.disconnect()?;
+        self.panner_node.disconnect()?;
+        Ok(())
+    }
+
+    fn set_position(&self, x: f32, y: f32, z: f32) {
+        self.panner_node.position_x().set_value(x);
+        self.panner_node.position_y().set_value(y);
+        self.panner_node.position_z().set_value(z);
+    }
+}
