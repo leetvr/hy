@@ -1,6 +1,7 @@
 mod editor_instance;
 mod game_instance;
 mod network;
+mod player;
 mod world;
 
 use {

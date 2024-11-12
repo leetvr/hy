@@ -33,8 +33,8 @@ impl Assets {
         }
     }
 
-    pub fn load_entity_models(&mut self, entities: &[EntityData]) {
-        for model_name in entities.iter().map(|e| &e.model_path).unique() {
+    pub fn load_entity_models<'a>(&mut self, entities: impl Iterator<Item = &'a EntityData>) {
+        for model_name in entities.map(|e| &e.model_path).unique() {
             self.get(model_name);
         }
     }
