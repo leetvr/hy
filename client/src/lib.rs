@@ -66,9 +66,7 @@ pub struct Engine {
     player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
-    // Textures by path
-    // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
-    // and vacant for a texture that is still loading
+    // Textures by block type ID
     block_textures: HashMap<BlockTypeID, [render::Texture; 6]>,
 
     // Entity models by path

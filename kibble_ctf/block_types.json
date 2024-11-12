@@ -13,8 +13,8 @@
     },
     {
       "name": "Grass",
-      "north_texture": "kibble_ctf/grass_block_top.png",
-      "south_texture": "kibble_ctf/grass_block_top.png",
+      "north_texture": "kibble_ctf/grass_block_side.png",
+      "south_texture": "kibble_ctf/grass_block_side.png",
       "east_texture": "kibble_ctf/grass_block_side.png",
       "west_texture": "kibble_ctf/grass_block_side.png",
       "top_texture": "kibble_ctf/grass_block_top.png",
