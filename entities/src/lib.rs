@@ -5,7 +5,6 @@ pub type EntityID = u64;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
     pub name: String,
-    pub id: EntityID,
     pub entity_type: EntityTypeID,
     pub model_path: String,
     pub state: EntityState,

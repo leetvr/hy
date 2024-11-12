@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use {entities::EntityID, std::collections::HashMap};
 
 use blocks::{BlockGrid, BlockId, BlockRegistry, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
@@ -13,7 +13,7 @@ pub enum GameState {
     Playing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
-        entities: Vec<EntityData>,
+        entities: HashMap<EntityID, EntityData>,
         entity_type_registry: EntityTypeRegistry,
         client_player: PlayerId,
         camera: FlyCamera,
@@ -22,7 +22,7 @@ pub enum GameState {
     Editing {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
-        entities: Vec<EntityData>,
+        entities: HashMap<EntityID, EntityData>,
         entity_type_registry: EntityTypeRegistry,
         camera: FlyCamera,
         target_raycast: Option<RayHit>,
