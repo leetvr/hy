@@ -2,23 +2,46 @@ import { useState } from "react";
 import { Engine } from "../../pkg/client";
 import "./App.css";
 
-export function DebugAudioManager({engine}: {engine: Engine}) {
+export function DebugAudio({
+  engine,
+}: {engine: Engine}) {
+  // Use `fixed` positioning to remove from document flow
+  // to avoid impacting the rest of the layout
+  const audioWrapperStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: '10%',
+    right: '5%',
+    width: '200px',
+    backgroundColor: '#d9d9d9',
+    border: '1px solid #ccc',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    zIndex: 1000
+  };
+
+  return (
+    <div style={{
+      ...audioWrapperStyle,
+      display: engine.is_audio_manager_debug() ? 'block' : 'none'
+    }}>
+      {engine.is_audio_manager_debug() && <DebugAudioBar engine={engine} />}
+    </div>
+  );
+}
+
+function DebugAudioBar({engine}: {engine: Engine}) {
   const [stopError, setStopError] = useState<string>('');
   const [killError, setKillError] = useState<string>('');
   const [isStopSuccess, setIsStopSuccess] = useState<boolean>(false);
   const [isKillSuccess, setIsKillSuccess] = useState<boolean>(false);
 
-  const [loadError, setLoadError] = useState(false);
-  // const sound_name = ;
-
-  const handleLoadSounds = () => {
+  const handleLoadSounds = async () => {
     try {
       engine.load_sound("pain");
       console.log('Sound loaded');
-      setLoadError(false);
     } catch (error) {
       console.error("Error on loud_sound: {}", error); 
-      setLoadError(true);
     }
   }
 
@@ -55,7 +78,7 @@ export function DebugAudioManager({engine}: {engine: Engine}) {
     <div>
       {engine.is_audio_manager_debug() && (
         <div style={{ color: 'black', marginTop: '8px' }}>
-        Left click on block to spawn a sound
+        Left click on block to spawn a sound or right click to spawn sound @KaneFace
         </div>
         )}
     </div>

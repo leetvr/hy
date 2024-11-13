@@ -15,7 +15,6 @@ const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
 const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
 const KANE_CLOMP: &[u8] = include_bytes!("../../assets/kane.wav");
 
-#[wasm_bindgen]
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
@@ -27,7 +26,6 @@ pub struct AudioManager {
     next_sound_handle: u32,
 }
 
-#[wasm_bindgen]
 impl AudioManager {
     /// Create a new AudioManager and initialize its AudioContext and GainNode
     pub fn new() -> Result<AudioManager, JsValue> {
@@ -115,8 +113,8 @@ impl AudioManager {
 
     /// Attempt to create and play a sound
     ///
-    /// TODO pass in parameters used to configure SoundInstance: [volume, distortion, panning, is_looping, playback_speed]
-    /// TODO Should we be gracefully handling errors for methods exposed to user?
+    /// TODO pass in parameters used to configure SoundInstance: [volume, distortion, is_looping, playback_speed, reference_distance, attenuation max/min?]
+    /// TODO Should we be gracefully handling errors for methods exposed to user in `spawn_sound` or `play_sound`?
     ///
     /// ## Parameters:
     ///
@@ -169,31 +167,6 @@ impl AudioManager {
         return Ok(());
     }
 
-    pub fn set_listener_position(&self, x: f32, y: f32, z: f32) {
-        let listener = self.context.listener();
-        listener.set_position(x as f64, y as f64, z as f64);
-    }
-
-    pub fn set_listener_orientation(
-        &self,
-        forward_x: f32,
-        forward_y: f32,
-        forward_z: f32,
-        up_x: f32,
-        up_y: f32,
-        up_z: f32,
-    ) {
-        let listener = self.context.listener();
-        listener.set_orientation(
-            forward_x as f64,
-            forward_y as f64,
-            forward_z as f64,
-            up_x as f64,
-            up_y as f64,
-            up_z as f64,
-        );
-    }
-
     /// Stops a sound given its handle.
     pub fn stop_sound(&mut self, handle: u32) -> Result<(), JsValue> {
         if let Some(sound_instance) = self.active_sounds.remove(&handle) {
@@ -237,7 +210,7 @@ impl AudioManager {
         self.gain_node.gain().set_value(volume);
     }
 
-    // // DEBUG: currently just shifting all panners, TODO: update with Entity position in tick
+    // // DEBUG: currently just shifting all panners, (Make sure doesn't affect entity)
     pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
         if let Some(d) = move_panner_opt {
             self.active_sounds.values_mut().for_each(|s| {
@@ -246,6 +219,63 @@ impl AudioManager {
                     .set_value(s.panner_node.position_x().value() + d)
             });
         }
+    }
+
+    pub fn set_listener_position(&self, x: f32, y: f32, z: f32) {
+        let listener = self.context.listener();
+        listener.set_position(x as f64, y as f64, z as f64);
+    }
+
+    pub fn set_listener_orientation(
+        &self,
+        forward_x: f32,
+        forward_y: f32,
+        forward_z: f32,
+        up_x: f32,
+        up_y: f32,
+        up_z: f32,
+    ) {
+        let listener = self.context.listener();
+        listener.set_orientation(
+            forward_x as f64,
+            forward_y as f64,
+            forward_z as f64,
+            up_x as f64,
+            up_y as f64,
+            up_z as f64,
+        );
+    }
+
+    /// Updates the positions of all active sounds associated with entities.
+    pub fn synchronise_positions(&mut self, positions: &HashMap<EntityID, glam::Vec3>) {
+        for sound_instance in self.active_sounds.values_mut() {
+            if let Some(entity_id) = &sound_instance.entity_id {
+                if let Some(pos) = positions.get(entity_id) {
+                    sound_instance.set_position_from_vec3(*pos);
+                }
+            }
+        }
+    }
+
+    /// Cleans up sounds associated with non-existent entities.
+    pub fn cleanup_entity_sounds(
+        &mut self,
+        existing_entity_ids: &std::collections::HashSet<EntityID>,
+    ) {
+        self.active_sounds.retain(|_, sound_instance| {
+            if let Some(entity_id) = &sound_instance.entity_id {
+                existing_entity_ids.contains(entity_id)
+            } else {
+                true
+            }
+        });
+    }
+
+    /// Checks if a sound is active for a given entity.
+    pub fn has_active_sound(&self, entity_id: EntityID) -> bool {
+        self.active_sounds
+            .values()
+            .any(|sound_instance| sound_instance.entity_id == Some(entity_id.clone()))
     }
 }
 
@@ -258,27 +288,11 @@ pub struct SoundPosition {
     pub z: f32,
 }
 
-#[wasm_bindgen]
 impl SoundPosition {
     pub fn new(x: f32, y: f32, z: f32) -> SoundPosition {
         SoundPosition { x, y, z }
     }
 }
-
-// TODO:
-// Preload sound assets
-// For sounds played via `play_sound_at_entity`, update panner_node in `tick`
-// Extract distortion functionality from `AudioPlayer`
-// Make the sounds library typesafe (and ideally export to typescript)
-// - Scripting parameters: From `play_sound` store on `SoundInstance` or trigger mutation in `tick`
-// 1. looping parameter SoundInstance and an optional field on `play_sound` functions
-// 2. `is_looping`
-// 3. `reference distance` - clarify if just max or min as well
-// 4. `playback_speed`
-// 5. `volume`
-// 6. `distortion` -  `distortion_node: Option<web_sys::WaveShaperNode>,`
-// Implement a mechanism to interrupt playback from scripts (on entity or position)
-// Make sure coordinate systems line up between Hytopia and WebAudio (which is Right handed)
 
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
@@ -291,7 +305,6 @@ impl SoundInstance {
         context: &AudioContext,
         audio_buffer: &AudioBuffer,
         gain_node: &GainNode,
-        // TODO: Check if this should be hecs::Entity
         entity_id: Option<EntityID>,
         is_ambient: bool,
         is_looping: bool,
@@ -328,8 +341,13 @@ impl SoundInstance {
         source_node.connect_with_audio_node(&panner_node)?;
         panner_node.connect_with_audio_node(gain_node)?;
 
-        // TODO: Implement
         source_node.set_loop(is_looping);
+
+        // `playback_rate` is technically the same as `pitch` in minecraft
+        // Hytopia may be after altering playback speed without altering pitch
+        // which is a more advanced effect that could be done manually or
+        // possibly more easily with `Tone.js`
+        source_node.playback_rate().set_value(1.0); // default 1.0
 
         Ok(SoundInstance {
             source_node,
@@ -339,12 +357,13 @@ impl SoundInstance {
     }
 
     fn start(&self) -> Result<(), JsValue> {
-        // TODO: It may make sense to call this in SoundInstance.new(), need to check if difference between start/resume
+        // It may make sense to call this in SoundInstance.new(), Will need to check any difference between start/resume
+        // Also, it may depend on whether we decide to clean up any sounds not attached to an entity that are no longer playing
         self.source_node.start()
     }
 
     /// Stops playback and disconnects nodes to free resources.
-    fn stop(&self) -> Result<(), JsValue> {
+    pub fn stop(&self) -> Result<(), JsValue> {
         // TODO: use non deprecated
         self.source_node.stop()?;
         self.source_node.disconnect()?;
@@ -352,9 +371,14 @@ impl SoundInstance {
         Ok(())
     }
 
-    fn set_position(&self, x: f32, y: f32, z: f32) {
+    pub fn set_position(&self, x: f32, y: f32, z: f32) {
         self.panner_node.position_x().set_value(x);
         self.panner_node.position_y().set_value(y);
         self.panner_node.position_z().set_value(z);
+    }
+
+    // Alternatively, you can add a method that accepts `glam::Vec3` directly
+    pub fn set_position_from_vec3(&self, glam_vec: glam::Vec3) {
+        self.set_position(glam_vec.x, glam_vec.y, glam_vec.z);
     }
 }

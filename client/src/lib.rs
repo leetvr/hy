@@ -900,6 +900,32 @@ impl Engine {
 
         self.audio_manager
             .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
+
+        // Update the positions of all active sounds and handle cleanup for non-existent entities
+        // Access entities based on the current game state
+        let entities = match &self.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities,
+            GameState::Loading => return, // Early exit if the game is loading
+        };
+
+        // Step 1: Collect positions of entities with active sounds
+        let mut positions = HashMap::new();
+
+        for (entity_id, entity_data) in entities.iter() {
+            if self.audio_manager.has_active_sound(entity_id.clone()) {
+                positions.insert(entity_id.clone(), entity_data.state.position);
+            }
+        }
+
+        // Update sound positions in AudioManager
+        self.audio_manager.synchronise_positions(&positions);
+        // Collect existing entity IDs for cleanup
+        let existing_entity_ids: HashSet<entities::EntityID> = entities.keys().cloned().collect();
+        // Clean up sounds associated with non-existent entities
+        self.audio_manager
+            .cleanup_entity_sounds(&existing_entity_ids);
+
+        // We also need to cleanup up one shot (non looping) sounds that have finished playing
     }
 }
 
