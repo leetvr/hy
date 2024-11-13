@@ -1,4 +1,5 @@
 use {
+    glam::Vec3Swizzles,
     nalgebra::{point, Vector3},
     rapier3d::{
         dynamics::RigidBodyHandle,
@@ -181,6 +182,21 @@ impl PhysicsWorld {
             ],
             true,
         );
+    }
+
+    /// Set the velocity and position of a rigid body
+    pub fn set_velocity_and_position(
+        &mut self,
+        body: &PhysicsBody,
+        velocity: glam::Vec3,
+        position: glam::Vec3,
+    ) {
+        let Some(rigid_body) = self.bodies.get_mut(body.handle) else {
+            tracing::error!("Rigid body not found! Refusing to update");
+            return;
+        };
+        rigid_body.set_linvel(vector![velocity.x, velocity.y, velocity.z,], true);
+        rigid_body.set_position(vector![position.x, position.y, position.z,].into(), true);
     }
 
     /// Get the position of a rigidbody

@@ -145,6 +145,16 @@ impl GameInstance {
                 )
                 .await
                 .unwrap();
+
+            // Update Rapier
+            {
+                let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+                physics_world.set_velocity_and_position(
+                    &player.body,
+                    player.state.velocity,
+                    player.state.position,
+                );
+            }
         }
 
         // Update entities
