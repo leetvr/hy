@@ -2,7 +2,6 @@ const GRAVITY = -20; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 10.0; // Movement speed (units per second)
 const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
-const PLAYER_SIZE = [0.5, 1.5, 0.5]; // Player size (x, y, z)
 export const update = (playerID, currentState, controls, collisions) => {
     const { position, velocity, animationState } = currentState;
     let newPosition = [...position];
@@ -53,7 +52,6 @@ export const update = (playerID, currentState, controls, collisions) => {
     const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
     // Check for collisions with blocks
     if (adjustedMovement) {
-        console.log("Adjusted movement!", adjustedMovement);
         newPosition[0] += adjustedMovement[0];
         newPosition[1] += adjustedMovement[1];
         newPosition[2] += adjustedMovement[2];
