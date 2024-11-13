@@ -23,13 +23,14 @@ pub struct Controls {
     pub camera_yaw: f32, // radians
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientPacket {
     Controls(Controls),
     Start,
     Pause,
     Edit,
-    SetBlock(SetBlock), // used by editor
+    SetBlock(SetBlock),   // used by editor
+    AddEntity(AddEntity), // used by editor
 }
 
 // Packets from the server to the client

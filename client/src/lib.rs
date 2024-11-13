@@ -25,6 +25,7 @@ pub use blocks::BlockPos;
 use blocks::BlockType;
 use game_state::GameState;
 use glam::UVec2;
+use nanorand::Rng;
 use net_types::ClientPacket;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
@@ -409,6 +410,8 @@ impl Engine {
                 camera,
                 blocks,
                 target_raycast,
+                selected_block_id,
+                selected_entity_type_id,
                 ..
             } => {
                 // Camera input
@@ -446,8 +449,13 @@ impl Engine {
                 *target_raycast = blocks.raycast(position, ray_dir);
 
                 if self.controls.mouse_left {
-                    tracing::debug!("Placing block at {target_raycast:?}");
-                    self.place_block();
+                    if selected_block_id.is_some() {
+                        tracing::debug!("Placing block at {target_raycast:?}");
+                        self.place_block();
+                    } else if selected_entity_type_id.is_some() {
+                        tracing::debug!("Placing entity at {target_raycast:?}");
+                        self.place_entity();
+                    }
                 }
 
                 // Send empty player input
@@ -525,6 +533,56 @@ impl Engine {
         packet_handlers::handle_set_block(blocks, set_block).expect("place block");
 
         self.send_packet(ClientPacket::SetBlock(set_block));
+    }
+
+    fn place_entity(&mut self) {
+        // Ensure we're in the editing state and we have a selected block ID
+        let GameState::Editing {
+            target_raycast: Some(ref target_raycast),
+            selected_entity_type_id: Some(entity_type_id),
+            ..
+        } = self.state
+        else {
+            return;
+        };
+
+        let is_deleting = false;
+        let position = match is_deleting {
+            // When deleting a block, we place it at the position of the raycast.
+            true => target_raycast.position,
+            false => {
+                // When we place a block, we place it at the position of the raycast, but offset by
+                // the entrance face normal, as we're placing it "on" the face the ray entered.
+                let Some(position) = target_raycast
+                    .position
+                    .add_signed(target_raycast.entrance_face_normal.as_ivec3())
+                else {
+                    return;
+                };
+
+                position
+            }
+        };
+
+        // Idk how to make an entity_id
+        let entity_id = nanorand::tls_rng().generate::<u64>();
+
+        let add_entity = net_types::AddEntity {
+            entity_id: format!("{entity_id:x}"),
+            entity_data: entities::EntityData {
+                name: "Jeff".into(),
+                entity_type: entity_type_id,
+                model_path: "kibble_ctf/test_entity.gltf".into(),
+                state: entities::EntityState {
+                    position: position.into(),
+                    velocity: Vec3::ZERO,
+                },
+            },
+        };
+
+        tracing::debug!("Setting entity at {position:?} to {entity_type_id}");
+
+        self.send_packet(ClientPacket::AddEntity(add_entity));
     }
 
     fn load_block_textures(&mut self) {
