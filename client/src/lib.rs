@@ -57,7 +57,6 @@ pub struct Engine {
 
     elapsed_time: Duration,
     delta_time: Duration,
-    test: Option<LoadedGLTF>,
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
@@ -123,7 +122,6 @@ impl Engine {
             renderer,
             delta_time: Duration::ZERO,
             elapsed_time: Duration::ZERO,
-            test: None,
 
             ws,
             connection_state,
@@ -141,37 +139,6 @@ impl Engine {
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
-        if event.code() == "KeyR" {
-            let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
-            {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::info!("Error loading GLTF: {e:#?}");
-                    return;
-                }
-            };
-
-            let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
-
-            self.test = Some(LoadedGLTF { gltf, render_model });
-        }
-
-        if event.code() == "KeyT" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("idle", 0.5);
-            }
-        }
-        if event.code() == "KeyY" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("walk", 0.5);
-            }
-        }
-        if event.code() == "KeyG" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.stop_animation(0.5);
-            }
-        }
-
         self.controls
             .keyboard_inputs
             .insert(event.code().as_str().to_string());
@@ -722,16 +689,6 @@ impl Engine {
                 }
             }
             _ => (),
-        }
-
-        if let Some(ref mut test) = self.test {
-            gltf::animate_model(&mut test.gltf, self.delta_time);
-
-            draw_calls.extend(render::build_render_plan(
-                slice::from_ref(&test.gltf),
-                slice::from_ref(&test.render_model),
-                Transform::IDENTITY,
-            ));
         }
 
         self.renderer.render(&draw_calls, &self.debug_lines);
