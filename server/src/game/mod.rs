@@ -20,7 +20,7 @@ use {
     std::{
         fmt::Display,
         path::{Path, PathBuf},
-        sync::Arc,
+        sync::{Arc, Mutex},
     },
 };
 
@@ -43,7 +43,10 @@ impl GameServer {
 
         // Load the world
         let storage_dir: PathBuf = storage_dir.into();
-        let world = World::load(&storage_dir).expect("Failed to load world");
+        let world = Arc::new(Mutex::new(
+            World::load(&storage_dir).expect("Failed to load world"),
+        ));
+
         let game_instance = GameInstance::new(world.clone());
 
         tracing::info!("Starting JS context..");
@@ -135,8 +138,13 @@ impl ServerState {
             // Playing -> Editing
             (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    // Reload world when switching to editing
+                    let world = game_instance.world;
+                    *world.lock().expect("Deadlock!") =
+                        World::load(storage_dir).expect("couldn't load world");
+
                     let editor_instance = EditorInstance::from_transition(
-                        World::load(storage_dir).expect("Couldn't load world"),
+                        world,
                         editor_client,
                         game_instance.physics_world,
                     )
@@ -156,8 +164,13 @@ impl ServerState {
             // Paused -> Editing
             (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    // Reload world when switching to editing
+                    let world = game_instance.world;
+                    *world.lock().expect("Deadlock!") =
+                        World::load(storage_dir).expect("couldn't load world");
+
                     let editor_instance = EditorInstance::from_transition(
-                        World::load(storage_dir).expect("Couldn't load world"),
+                        world,
                         editor_client,
                         game_instance.physics_world,
                     )
