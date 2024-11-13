@@ -1,12 +1,14 @@
 #!/bin/bash
 # Clear out old assets
-rm assets/client_bg*.wasm
-rm assets/index-*.css
-rm assets/index-*.js
-rm assets/index.html
+
+set -xe
+
+rm -f assets/client_bg*.wasm
+rm -f assets/index-*.css
+rm -f assets/index-*.js
+rm -f assets/index.html
 
 # We want to know if any of these steps fail
-set -xe
 
 # Build the client
 (cd client && wasm-pack build --dev --target web)
