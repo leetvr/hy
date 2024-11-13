@@ -19,9 +19,9 @@ pub struct AudioManager {
     gain_node: GainNode,
     // Mapping of sound IDs to loaded AudioBuffers
     sounds_bank: HashMap<String, AudioBuffer>,
-    // Active sound instances mapped by a unique handle (e.g., u32)
+    // Active sound instances mapped by a unique handle
     active_sounds: HashMap<u32, SoundInstance>,
-    // Counter for generating unique handles
+    // Counter for generating unique handles for each SoundInstance in `active_sounds`
     next_sound_handle: u32,
 }
 
@@ -44,9 +44,9 @@ impl AudioManager {
 
     // Use this to preload our sounds
     pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
-        self.load_sound_from_id("footsteps").await?;
+        // self.load_sound_from_id("footsteps").await?;
         self.load_sound_from_id("pain").await?;
-        self.load_sound_from_id("step_gravel").await?;
+        // self.load_sound_from_id("step_gravel").await?;
         // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
         //     .await?;
         web_sys::console::log_1(&"Sounds successfully loaded into sounds_bank".into());
@@ -109,12 +109,22 @@ impl AudioManager {
         Ok(audio_buffer.dyn_into().unwrap())
     }
 
-    pub fn play_sound_at_pos(
+    /// Attempt to create and play a sound
+    ///
+    /// TODO pass in parameters used to configure SoundInstance: [volume, distortion, panning, is_looping, playback_speed]
+    ///
+    /// Parameters:
+    ///  - sound_id: the name of the sound to play from `sounds_bank`
+    ///  - maybe_position: Optional position of the sound (Otherwise will default to origin)
+    ///  - entity_id: Optional EntityID of the Hytopia entity used to dynamically update sound position
+    ///  - is_ambient: If set, spatialisation will be disabled so the sound will have constant volume from anywhere
+    pub fn spawn_sound(
         &mut self,
         sound_id: &str,
+        entity_id: Option<u64>,
         maybe_position: Option<SoundPosition>,
         is_ambient: bool,
-        // TODO: pass in individual gain and other parameters
+        is_looping: bool,
     ) -> Result<(), JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
@@ -125,8 +135,9 @@ impl AudioManager {
             &self.context,
             audio_buffer,
             &self.gain_node,
-            None,
+            entity_id,
             is_ambient,
+            is_looping,
         ) else {
             web_sys::console::error_1(&"Unable to create sound_instance".into());
             return Err(JsValue::from_str("Unable to create sound_instance"));
@@ -216,18 +227,6 @@ impl AudioManager {
         self.gain_node.gain().set_value(volume);
     }
 
-    /// Update all active sounds in tick
-    /// TODO: entity positions, master volume, etc, combine with `update_audio_manager``
-    pub fn update_sound_positions(&mut self) {
-        for (&handle, sound_instance) in &mut self.active_sounds {
-            // Apply position updates from entities
-            if let Some(entity_id) = sound_instance.entity_id {
-                // TODO:
-                // if let Some(position) = world.get_entity_position(entity_id) {}
-            }
-        }
-    }
-
     // // DEBUG: currently just shifting all panners, TODO: update with Entity position in tick
     pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
         if let Some(d) = move_panner_opt {
@@ -259,10 +258,8 @@ impl SoundPosition {
 // TODO:
 // Preload sound assets
 // For sounds played via `play_sound_at_entity`, update panner_node in `tick`
-// Handle ambient sounds by disabling spatialisation or matching with listener
 // Extract distortion functionality from `AudioPlayer`
 // Make the sounds library typesafe (and ideally export to typescript)
-// expose a `play_ambient_sound` or just pass an optional `is_ambient` parameter to `play_sound`
 // - Scripting parameters: From `play_sound` store on `SoundInstance` or trigger mutation in `tick`
 // 1. looping parameter SoundInstance and an optional field on `play_sound` functions
 // 2. `is_looping`
@@ -276,7 +273,7 @@ impl SoundPosition {
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
     panner_node: PannerNode,
-    entity_id: Option<u32>, // Associated entity ID, if any
+    entity_id: Option<u64>, // Associated entity ID, if any
 }
 
 impl SoundInstance {
@@ -285,8 +282,10 @@ impl SoundInstance {
         audio_buffer: &AudioBuffer,
         gain_node: &GainNode,
         // TODO: Check if this should be hecs::Entity
-        entity_id: Option<u32>,
+        entity_id: Option<u64>,
         is_ambient: bool,
+        is_looping: bool,
+        // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....
     ) -> Result<Self, JsValue> {
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
@@ -315,11 +314,12 @@ impl SoundInstance {
         panner_node.set_ref_distance(1.);
         panner_node.set_rolloff_factor(1.);
 
+        // Connect nodes: source -> panner -> gain
         source_node.connect_with_audio_node(&panner_node)?;
         panner_node.connect_with_audio_node(gain_node)?;
 
         // TODO: Implement
-        source_node.set_loop(false);
+        source_node.set_loop(is_looping);
 
         Ok(SoundInstance {
             source_node,
@@ -329,11 +329,13 @@ impl SoundInstance {
     }
 
     fn start(&self) -> Result<(), JsValue> {
+        // TODO: It may make sense to call this in SoundInstance.new(), need to check if difference between start/resume
         self.source_node.start()
     }
 
     /// Stops playback and disconnects nodes to free resources.
     fn stop(&self) -> Result<(), JsValue> {
+        // TODO: use non deprecated
         self.source_node.stop()?;
         self.source_node.disconnect()?;
         self.panner_node.disconnect()?;

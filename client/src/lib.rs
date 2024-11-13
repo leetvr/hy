@@ -348,29 +348,7 @@ impl Engine {
         }
 
         // Debug: Spawn sounds when left click block
-        if self.is_audio_manager_debug() {
-            if let GameState::Editing {
-                blocks,
-                target_raycast,
-                ..
-            } = &mut self.state
-            {
-                if self.controls.mouse_left {
-                    if let Some(ray_hit) = target_raycast {
-                        let pos = ray_hit.position;
-                        if let Err(_) = self.play_sound_at_pos(
-                            "pain",
-                            pos.x as f32,
-                            pos.y as f32,
-                            pos.z as f32,
-                            false,
-                        ) {
-                            tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
-                        }
-                    }
-                }
-            }
-        }
+        spawn_debug_sound_on_left_click(self, "pain");
 
         // Send packets
         match &mut self.state {
@@ -729,9 +707,14 @@ impl Engine {
         self.audio_manager.load_sound_from_url(url).await
     }
 
-    pub fn play_sound(&mut self, sound_id: &str, is_ambient: bool) -> Result<(), JsValue> {
+    pub fn play_sound(
+        &mut self,
+        sound_id: &str,
+        is_ambient: bool,
+        is_looping: bool,
+    ) -> Result<(), JsValue> {
         self.audio_manager
-            .play_sound_at_pos(sound_id, None, is_ambient)
+            .spawn_sound(sound_id, None, None, is_ambient, is_looping)
     }
 
     pub fn play_sound_at_pos(
@@ -741,14 +724,15 @@ impl Engine {
         y: f32,
         z: f32,
         is_ambient: bool,
+        is_looping: bool,
     ) -> Result<(), JsValue> {
         let sound_position = audio::SoundPosition::new(x, y, z);
         self.audio_manager
-            .play_sound_at_pos(sound_id, Some(sound_position), is_ambient)
+            .spawn_sound(sound_id, None, Some(sound_position), is_ambient, is_looping)
     }
 
-    // if `true` then renders TestStopSounds and spawns
-    // sounds when left clicking on blocks in the Editor
+    // if `true` then TestStopSounds Component will be rendered
+    // and spawn_debug_sound_on_left_click will be enabled
     pub fn is_audio_manager_debug(&mut self) -> bool {
         true
     }
@@ -761,6 +745,7 @@ impl Engine {
         self.audio_manager.stop_all_sounds()
     }
 
+    // TODO delete or rename
     pub fn update_sound_positions(&mut self, move_panner_opt: Option<f32>) {
         self.audio_manager.move_all_panner_nodes(move_panner_opt);
     }
@@ -848,3 +833,31 @@ const MOUSE_SENSITIVITY_Y: f32 = 0.005;
 
 const CAMERA_DISTANCE: f32 = 15.0;
 const CAMERA_HEIGHT: f32 = 2.0;
+
+// Will fail if the sound hasn't been loaded
+fn spawn_debug_sound_on_left_click(engine: &mut Engine, sound_id: &str) {
+    if engine.is_audio_manager_debug() {
+        if let GameState::Editing {
+            // blocks,
+            target_raycast,
+            ..
+        } = &mut engine.state
+        {
+            if engine.controls.mouse_left {
+                if let Some(ray_hit) = target_raycast {
+                    let pos = ray_hit.position;
+                    if let Err(_) = engine.play_sound_at_pos(
+                        sound_id,
+                        pos.x as f32,
+                        pos.y as f32,
+                        pos.z as f32,
+                        false,
+                        true,
+                    ) {
+                        tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
+                    }
+                }
+            }
+        }
+    }
+}

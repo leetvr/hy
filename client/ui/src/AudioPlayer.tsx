@@ -51,13 +51,23 @@ export function DebugAudioManager({engine}: {engine: Engine}) {
 
   return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+    <h3>Audio Debugging</h3>
+    <div>
+      {engine.is_audio_manager_debug() && (
+        <div style={{ color: 'black', marginTop: '8px' }}>
+        Left click on block to spawn a sound
+        </div>
+        )}
+    </div>
     <div>
       <button onClick={handleLoadSounds}>Load {"pain"} sound</button>
     </div>
     <div>
+        <div style={{ color: 'black', marginTop: '8px' }}>
+          Pan all sounds along the X axis
+        </div>
         <button onClick={() => engine.update_sound_positions(-5.0)}>Pan Left</button>
         <button onClick={() => engine.update_sound_positions(5.0)}>Pan Right</button>
-        
     </div>
     <div>
       <button onClick={handleStopAllSounds}>
