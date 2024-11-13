@@ -184,11 +184,11 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
-        let mut mode_switch: Option<ClientShouldSwitchMode> = None;
-
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
+                let mut mode_switch: Option<ClientShouldSwitchMode> = None;
+
                 // Incoming messages are stored by their sequence number
                 let Some(packet) = self
                     .incoming_messages
@@ -302,15 +302,17 @@ impl Engine {
                             tracing::debug!("EDITING: Server wants us to switch modes");
                             mode_switch = Some(new_mode)
                         }
-                        _ => {}
+                        p => {
+                            tracing::error!("Received unexpected packet: {:#?}", p);
+                        }
                     },
                 }
-            }
-        }
 
-        // If the server wanted us to switch modes, let's do that now.
-        if let Some(mode_switch) = mode_switch {
-            self.state.switch_mode(mode_switch);
+                // If the server wanted us to switch modes, let's do that now.
+                if let Some(mode_switch) = mode_switch {
+                    self.state.switch_mode(mode_switch);
+                }
+            }
         }
 
         self.load_block_textures();
