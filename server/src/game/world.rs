@@ -5,7 +5,6 @@ use {
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
-        sync::{Arc, Mutex},
     },
 };
 
@@ -22,7 +21,7 @@ pub struct World {
 }
 
 impl World {
-    pub fn load(storage_dir: impl AsRef<Path>) -> Result<Arc<Mutex<Self>>> {
+    pub fn load(storage_dir: impl AsRef<Path>) -> Result<Self> {
         let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
         let blocks = serde_json::from_slice(&std::fs::read(blocks_path)?)?;
 
@@ -35,12 +34,12 @@ impl World {
         let entity_types_path = storage_dir.as_ref().join(ENTITY_TYPES_PATH);
         let entity_type_registry = serde_json::from_slice(&std::fs::read(entity_types_path)?)?;
 
-        Ok(Arc::new(Mutex::new(Self {
+        Ok(Self {
             blocks,
             block_registry,
             entities,
             entity_type_registry,
-        })))
+        })
     }
 
     pub fn save(&mut self, storage_dir: &PathBuf) -> anyhow::Result<()> {
