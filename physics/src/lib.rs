@@ -279,7 +279,7 @@ impl PhysicsWorld {
 
         // Ground detection
         let down_direction = -Vector3::y_axis();
-        let ground_check_distance = 0.3;
+        let ground_check_distance = 0.1;
         let mut options = ShapeCastOptions::default();
         options.max_time_of_impact = ground_check_distance;
 
@@ -301,6 +301,66 @@ impl PhysicsWorld {
             false
         }
     }
+
+    pub fn check_movement_for_collisions(
+        &self,
+        player_id: u64,
+        movement: glam::Vec3,
+    ) -> Option<glam::Vec3> {
+        // Extract the player's shape
+        let Some(player_body_handle) = self.player_handles.get(&player_id) else {
+            tracing::warn!("Couldn't find a player handle for {player_id}");
+            return None;
+        };
+        let player_body_handle = *player_body_handle;
+        let player_body = &self.bodies[player_body_handle];
+        let current_position = player_body.position();
+        let Some(player_collider_handle) = player_body.colliders().first() else {
+            tracing::warn!("Couldn't find a collider for {player_id}");
+            return None;
+        };
+
+        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
+
+        // Collision detection
+        let movement = glam_to_na(movement);
+        let max_distance = movement.norm();
+        let movement_normalized = if max_distance > 0.0 {
+            movement / max_distance
+        } else {
+            Vector3::zeros()
+        };
+
+        let options = ShapeCastOptions::with_max_time_of_impact(max_distance);
+
+        let Some((_, hit)) = self.query_pipeline.cast_shape(
+            &self.bodies,
+            &self.colliders,
+            &current_position,
+            &movement_normalized,
+            shape,
+            options,
+            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
+        ) else {
+            return None;
+        };
+
+        // Collision detected
+        let adjusted_distance = hit.time_of_impact;
+        let safe_movement = movement_normalized * adjusted_distance;
+
+        // Sliding
+        let slide_plane_normal = *hit.normal1;
+        let remaining_movement = movement - safe_movement;
+        let dot_product = remaining_movement.dot(&slide_plane_normal);
+        let projection_onto_normal = slide_plane_normal * dot_product;
+        let slide_movement = remaining_movement - projection_onto_normal;
+        Some(na_to_glam(slide_movement))
+    }
+}
+
+fn na_to_glam(input: nalgebra::Vector3<f32>) -> glam::Vec3 {
+    glam::vec3(input.x, input.y, input.z)
 }
 
 /// A handle to a rigidbody in the physics world, with a collider attached
@@ -338,4 +398,8 @@ impl Drop for PhysicsCollider {
             tracing::warn!("PhysicsCollider dropped without being removed from the physics world");
         }
     }
+}
+
+fn glam_to_na(input: glam::Vec3) -> nalgebra::Vector3<f32> {
+    vector![input.x, input.y, input.z]
 }

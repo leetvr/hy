@@ -55,6 +55,7 @@ interface GlobalHy {
   isPlayerOnGround: (id: number) => boolean;
   spawnEntity: (entity: number, position: Vec3) => String;
   despawnEntity: (entity_id: String) => void;
+  checkMovementForCollisions: (playerID: number, movement: Vec3) => Vec3 | null;
 }
 
 declare global {

@@ -45,16 +45,31 @@ export const update = (playerID, currentState, controls, collisions) => {
     else {
         newVelocity[1] = 0;
     }
-    // Apply gravity to vertical velocity
     // Update position based on velocity and delta time
-    newPosition[0] += newVelocity[0] * DT;
-    newPosition[1] += newVelocity[1] * DT;
-    newPosition[2] += newVelocity[2] * DT;
-    return {
-        position: newPosition,
-        velocity: newVelocity,
-        animationState: newAnimationState,
-    };
+    const movement = [newVelocity[0] * DT, newVelocity[1] * DT, newVelocity[2] * DT];
+    newPosition[0] += movement[0];
+    newPosition[1] += movement[1];
+    newPosition[2] += movement[2];
+    const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
+    // Check for collisions with blocks
+    if (adjustedMovement) {
+        console.log("Adjusted movement!", adjustedMovement);
+        newPosition[0] += adjustedMovement[0];
+        newPosition[1] += adjustedMovement[1];
+        newPosition[2] += adjustedMovement[2];
+        return {
+            position: newPosition,
+            velocity: newVelocity,
+            animationState: newAnimationState,
+        };
+    }
+    else {
+        return {
+            position: newPosition,
+            velocity: newVelocity,
+            animationState: newAnimationState,
+        };
+    }
 };
 function length(v) {
     return Math.hypot(v[0], v[1], v[2]);

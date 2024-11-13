@@ -43,6 +43,20 @@ fn is_player_on_ground(state: &mut OpState, #[bigint] player_id: u64) -> bool {
 
 #[op2]
 #[serde]
+// NOTE(kmrw: serde is apparently slow but who cares)
+fn check_movement_for_collisions(
+    state: &mut OpState,
+    #[bigint] player_id: u64,
+    #[serde] movement: glam::Vec3,
+) -> Option<glam::Vec3> {
+    let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
+    let physics_world = physics_world.lock().expect("Deadlock!");
+
+    physics_world.check_movement_for_collisions(player_id, movement)
+}
+
+#[op2]
+#[serde]
 fn spawn_entity(
     state: &mut OpState,
     entity_type_id: u8,
@@ -82,7 +96,7 @@ fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
 
 extension!(
     hy,
-    ops = [get_entities, is_player_on_ground, spawn_entity, despawn_entity],
+    ops = [get_entities, is_player_on_ground, check_movement_for_collisions, spawn_entity, despawn_entity],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],
     options = {

@@ -27,4 +27,7 @@ globalThis.hy = {
   despawnEntity: (entity_id) => {
     return core.ops.despawn_entity(entity_id);
   },
+  checkMovementForCollisions: (playerID, movement) => {
+    return core.ops.check_movement_for_collisions(playerID, movement);
+  },
 };

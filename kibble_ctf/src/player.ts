@@ -60,15 +60,31 @@ export const update: PlayerUpdate = (
   }
 
   // Update position based on velocity and delta time
-  newPosition[0] += newVelocity[0] * DT;
-  newPosition[1] += newVelocity[1] * DT;
-  newPosition[2] += newVelocity[2] * DT;
+  const movement: Vec3 = [newVelocity[0] * DT, newVelocity[1] * DT, newVelocity[2] * DT];
 
-  return {
-    position: newPosition,
-    velocity: newVelocity,
-    animationState: newAnimationState,
-  };
+  newPosition[0] += movement[0];
+  newPosition[1] += movement[1];
+  newPosition[2] += movement[2];
+
+  const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
+  // Check for collisions with blocks
+  if (adjustedMovement) {
+    newPosition[0] += adjustedMovement[0];
+    newPosition[1] += adjustedMovement[1];
+    newPosition[2] += adjustedMovement[2];
+
+    return {
+      position: newPosition,
+      velocity: newVelocity,
+      animationState: newAnimationState,
+    };
+  } else {
+    return {
+      position: newPosition,
+      velocity: newVelocity,
+      animationState: newAnimationState,
+    };
+  }
 };
 
 function length(v: Vec3): number {
