@@ -55,19 +55,23 @@ impl Engine {
     pub fn ctx_set_editor_block_id(&mut self, block_id: BlockTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
-            selected_block_id, ..
+            selected_block_id,
+            selected_entity_type_id,
+            ..
         } = &mut self.state
         else {
             return;
         };
 
         // Set the block ID
-        selected_block_id.replace(block_id);
+        *selected_block_id = Some(block_id);
+        *selected_entity_type_id = None;
     }
 
     pub fn ctx_set_editor_entity_type_id(&mut self, entity_type_id: EntityTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
+            selected_block_id,
             selected_entity_type_id,
             ..
         } = &mut self.state
@@ -77,6 +81,7 @@ impl Engine {
 
         tracing::info!("Set entity type id to {}", entity_type_id);
         // Set the entity type ID
-        selected_entity_type_id.replace(entity_type_id);
+        *selected_block_id = None;
+        *selected_entity_type_id = Some(entity_type_id);
     }
 }

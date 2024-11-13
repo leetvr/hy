@@ -41,6 +41,9 @@ impl EditorInstance {
                 net_types::ClientPacket::SetBlock(set_block) => {
                     self.set_block(set_block, storage_dir);
                 }
+                net_types::ClientPacket::AddEntity(entity) => {
+                    self.add_entity(entity, storage_dir);
+                }
                 _ => {}
             }
         }
@@ -48,13 +51,25 @@ impl EditorInstance {
         maybe_next_state
     }
 
-    fn set_block(&mut self, set_block: SetBlock, storage_dir: impl AsRef<Path>) {
+    fn set_block(&mut self, set_block: SetBlock, storage_dir: &PathBuf) {
         let SetBlock { position, block_id } = set_block;
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
         let mut world = self.world.lock().expect("Deadlock!!");
 
         world.blocks[position] = block_id;
+        world.save(storage_dir).expect("save world");
+    }
+
+    fn add_entity(&mut self, entity: net_types::AddEntity, storage_dir: &PathBuf) {
+        let id = entity.entity_id;
+        let position = entity.entity_data.state.position;
+        let entity_type_id = entity.entity_data.entity_type;
+        tracing::info!("Adding entity {id:?} at {position:?} of type {entity_type_id}");
+
+        let mut world = self.world.lock().expect("Deadlock!!");
+
+        world.entities.insert(id, entity.entity_data);
         world.save(storage_dir).expect("save world");
     }
 }

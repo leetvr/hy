@@ -128,7 +128,7 @@ impl Renderer {
 
                 // Set tint
                 let tint = draw_call.tint.unwrap_or(glam::Vec4::ONE);
-                gl.uniform_4_f32(self.tint_location.as_ref(), tint.x, tint.y, tint.z, tint.w);
+                gl.uniform_4_f32_slice(self.tint_location.as_ref(), tint.as_ref());
 
                 gl.bind_vertex_array(Some(draw_call.primitive.vao));
 
