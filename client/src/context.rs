@@ -1,5 +1,6 @@
 use blocks::BlockTypeID;
-use entities::EntityTypeID;
+use entities::{EntityData, EntityState, EntityTypeID};
+use nanorand::Rng;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys;
@@ -31,9 +32,6 @@ impl Context {
 #[wasm_bindgen]
 impl Engine {
     pub fn ctx_set_engine_mode(&mut self, mode: EngineMode) {
-        // Transition to next state
-        self.state.transition(mode);
-
         // Tell the server about the new state
         let packet = match mode {
             EngineMode::Play => ClientPacket::Start,
@@ -56,7 +54,7 @@ impl Engine {
         // Ensure we're in edit mode
         let GameState::Editing {
             selected_block_id,
-            selected_entity_type_id,
+            preview_entity,
             ..
         } = &mut self.state
         else {
@@ -65,14 +63,15 @@ impl Engine {
 
         // Set the block ID
         *selected_block_id = Some(block_id);
-        *selected_entity_type_id = None;
+        *preview_entity = None;
     }
 
     pub fn ctx_set_editor_entity_type_id(&mut self, entity_type_id: EntityTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
             selected_block_id,
-            selected_entity_type_id,
+            preview_entity,
+            entity_type_registry,
             ..
         } = &mut self.state
         else {
@@ -80,8 +79,25 @@ impl Engine {
         };
 
         tracing::info!("Set entity type id to {}", entity_type_id);
-        // Set the entity type ID
+
+        // Create a preview entity
         *selected_block_id = None;
-        *selected_entity_type_id = Some(entity_type_id);
+
+        let Some(entity_type) = entity_type_registry.get(entity_type_id) else {
+            tracing::warn!("{entity_type_id} is not a valid entity type ID!");
+            return;
+        };
+
+        let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+        *preview_entity = Some(EntityData {
+            id: entity_id,
+            name: "We should let you set entity names in the editor".into(),
+            entity_type: entity_type_id,
+            model_path: entity_type.default_model_path().into(),
+            state: EntityState {
+                position: Default::default(),
+                velocity: Default::default(),
+            },
+        });
     }
 }

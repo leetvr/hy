@@ -27,6 +27,7 @@ use game_state::GameState;
 use glam::UVec2;
 use nanorand::Rng;
 use net_types::ClientPacket;
+use net_types::ClientShouldSwitchMode;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
@@ -58,7 +59,6 @@ pub struct Engine {
 
     elapsed_time: Duration,
     delta_time: Duration,
-    test: Option<LoadedGLTF>,
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
@@ -128,7 +128,6 @@ impl Engine {
             renderer,
             delta_time: Duration::ZERO,
             elapsed_time: Duration::ZERO,
-            test: None,
 
             ws,
             connection_state,
@@ -147,37 +146,6 @@ impl Engine {
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
-        if event.code() == "KeyR" {
-            let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
-            {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::info!("Error loading GLTF: {e:#?}");
-                    return;
-                }
-            };
-
-            let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
-
-            self.test = Some(LoadedGLTF { gltf, render_model });
-        }
-
-        if event.code() == "KeyT" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("idle", 0.5);
-            }
-        }
-        if event.code() == "KeyY" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("walk", 0.5);
-            }
-        }
-        if event.code() == "KeyG" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.stop_animation(0.5);
-            }
-        }
-
         self.controls
             .keyboard_inputs
             .insert(event.code().as_str().to_string());
@@ -225,6 +193,8 @@ impl Engine {
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
+                let mut mode_switch: Option<ClientShouldSwitchMode> = None;
+
                 // Incoming messages are stored by their sequence number
                 let Some(packet) = self
                     .incoming_messages
@@ -246,6 +216,7 @@ impl Engine {
                             entity_type_registry,
                             ..
                         }) => {
+                            tracing::info!("Init received:");
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             tracing::info!("Block registry: {:#?}", block_registry);
 
@@ -269,26 +240,27 @@ impl Engine {
                                 block_registry,
                                 entities,
                                 entity_type_registry,
-                                camera: FlyCamera::new(Vec3::ZERO),
+                                camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
                                 target_raycast: None,
                                 selected_block_id: None,
-                                selected_entity_type_id: None,
+                                preview_entity: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
                             self.send_packet(net_types::ClientPacket::Edit);
                         }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("LOADING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
                     GameState::Playing {
                         players,
                         entities,
                         blocks,
-                        client_player,
                         ..
                     } => match packet {
                         ServerPacket::SetBlock(set_block) => {
@@ -310,13 +282,6 @@ impl Engine {
                             packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
-                        // Sent by the server when we leave edit mode
-                        ServerPacket::Reset(net_types::Reset {
-                            new_client_player, ..
-                        }) => {
-                            players.clear();
-                            *client_player = new_client_player;
-                        }
                         ServerPacket::AddEntity(add_entity) => {
                             packet_handlers::handle_add_entity(entities, add_entity);
                         }
@@ -330,13 +295,28 @@ impl Engine {
                         ServerPacket::RemoveEntity(remove_entity) => {
                             packet_handlers::handle_remove_entity(entities, remove_entity);
                         }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("PLAYING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
-                    GameState::Editing { .. } => {}
+                    GameState::Editing { .. } => match packet {
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("EDITING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
+                        p => {
+                            tracing::error!("Received unexpected packet: {:#?}", p);
+                        }
+                    },
+                }
+
+                // If the server wanted us to switch modes, let's do that now.
+                if let Some(mode_switch) = mode_switch {
+                    self.state.switch_mode(mode_switch);
                 }
             }
         }
@@ -424,7 +404,7 @@ impl Engine {
                 blocks,
                 target_raycast,
                 selected_block_id,
-                selected_entity_type_id,
+                preview_entity,
                 ..
             } => {
                 // Camera input
@@ -461,11 +441,23 @@ impl Engine {
 
                 *target_raycast = blocks.raycast(position, ray_dir);
 
+                if let Some(preview_entity) = preview_entity {
+                    let Some(position) = target_raycast.as_ref().and_then(|raycast| {
+                        raycast
+                            .position
+                            .add_signed(raycast.entrance_face_normal.as_ivec3())
+                    }) else {
+                        return;
+                    };
+
+                    preview_entity.state.position = position.into();
+                }
+
                 if self.controls.mouse_left {
                     if selected_block_id.is_some() {
                         tracing::debug!("Placing block at {target_raycast:?}");
                         self.place_block();
-                    } else if selected_entity_type_id.is_some() {
+                    } else if preview_entity.is_some() {
                         tracing::debug!("Placing entity at {target_raycast:?}");
                         self.place_entity();
                     }
@@ -553,49 +545,35 @@ impl Engine {
     fn place_entity(&mut self) {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
-            target_raycast: Some(ref target_raycast),
-            selected_entity_type_id: Some(entity_type_id),
+            entities,
+            preview_entity,
             ..
-        } = self.state
+        } = &mut self.state
         else {
             return;
         };
 
-        let is_deleting = false;
-        let position = match is_deleting {
-            // When deleting a block, we place it at the position of the raycast.
-            true => target_raycast.position,
-            false => {
-                // When we place a block, we place it at the position of the raycast, but offset by
-                // the entrance face normal, as we're placing it "on" the face the ray entered.
-                let Some(position) = target_raycast
-                    .position
-                    .add_signed(target_raycast.entrance_face_normal.as_ivec3())
-                else {
-                    return;
-                };
-
-                position
-            }
+        // First, get the preview_entity entity
+        let Some(placed_entity) = preview_entity.take() else {
+            tracing::warn!("Attempted to place entity but there is no preview_entity entity");
+            return;
         };
 
-        // Idk how to make an entity_id
-        let entity_id = nanorand::tls_rng().generate::<u64>();
+        // IMPORTANT: We have to replace the preview_entity entity with one that has a new ID
+        let next_entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+        let mut new_preview_entity = placed_entity.clone();
+        new_preview_entity.id = next_entity_id;
+        *preview_entity = Some(new_preview_entity);
 
+        // Great. Now, add the placed entity to the world
+        let entity_id = placed_entity.id.clone();
+        entities.insert(entity_id.clone(), placed_entity.clone());
+
+        // Finally, tell the server that we done added an entity
         let add_entity = net_types::AddEntity {
-            entity_id: format!("{entity_id:x}"),
-            entity_data: entities::EntityData {
-                name: "Jeff".into(),
-                entity_type: entity_type_id,
-                model_path: "kibble_ctf/test_entity.gltf".into(),
-                state: entities::EntityState {
-                    position: position.into(),
-                    velocity: Vec3::ZERO,
-                },
-            },
+            entity_id,
+            entity_data: placed_entity,
         };
-
-        tracing::debug!("Setting entity at {position:?} to {entity_type_id}");
 
         self.send_packet(ClientPacket::AddEntity(add_entity));
     }
@@ -725,6 +703,7 @@ impl Engine {
                     {
                         let blocks = [(block_position, textures)];
 
+                        // TODO(kmrw): Why isn't this working? I blame OpenGL.
                         draw_calls.extend(
                             render::build_cube_draw_calls(
                                 &self.cube_mesh_data,
@@ -736,17 +715,20 @@ impl Engine {
                     }
                 }
             }
+            // Ghost entity
+            GameState::Editing {
+                preview_entity: Some(preview_entity),
+                ..
+            } => {
+                if let Some(model) = self.entity_models.get(&preview_entity.model_path) {
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                    ));
+                }
+            }
             _ => (),
-        }
-
-        if let Some(ref mut test) = self.test {
-            gltf::animate_model(&mut test.gltf, self.delta_time);
-
-            draw_calls.extend(render::build_render_plan(
-                slice::from_ref(&test.gltf),
-                slice::from_ref(&test.render_model),
-                Transform::IDENTITY,
-            ));
         }
 
         self.renderer.render(&draw_calls, &self.debug_lines);

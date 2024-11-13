@@ -1,13 +1,10 @@
-use {
-    entities::{EntityID, EntityTypeID},
-    std::collections::HashMap,
-};
+use {entities::EntityID, std::collections::HashMap};
 
 use blocks::{BlockGrid, BlockRegistry, BlockTypeID, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
-use net_types::PlayerId;
+use net_types::{ClientShouldSwitchMode, PlayerId};
 
-use crate::{camera::FlyCamera, context::EngineMode, Player};
+use crate::{camera::FlyCamera, Player};
 
 #[derive(Debug, Default)]
 pub enum GameState {
@@ -17,7 +14,7 @@ pub enum GameState {
         blocks: BlockGrid,
         block_registry: BlockRegistry,
         entities: HashMap<EntityID, EntityData>,
-        entity_type_registry: EntityTypeRegistry,
+        _entity_type_registry: EntityTypeRegistry,
         client_player: PlayerId,
         camera: FlyCamera,
         players: HashMap<PlayerId, Player>,
@@ -30,35 +27,26 @@ pub enum GameState {
         camera: FlyCamera,
         target_raycast: Option<RayHit>,
         selected_block_id: Option<BlockTypeID>,
-        selected_entity_type_id: Option<EntityTypeID>,
+        preview_entity: Option<EntityData>,
     },
 }
 
 impl GameState {
-    pub fn transition(&mut self, next_state: EngineMode) {
+    pub fn switch_mode(&mut self, mode_switch: ClientShouldSwitchMode) {
         let current_state = std::mem::replace(self, GameState::Loading);
-        match (current_state, next_state) {
+        match (current_state, mode_switch) {
             // Playing -> Editing
-            (
-                GameState::Playing {
-                    blocks,
-                    block_registry,
-                    entities,
-                    entity_type_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Edit,
-            ) => {
+            (GameState::Playing { camera, .. }, ClientShouldSwitchMode::Edit { world }) => {
+                tracing::debug!("Transitioning from playing to editing");
                 *self = GameState::Editing {
-                    blocks,
-                    block_registry,
-                    entities,
-                    entity_type_registry,
+                    blocks: world.blocks,
+                    block_registry: world.block_registry,
+                    entities: world.entities,
+                    entity_type_registry: world.entity_type_registry,
                     camera,
                     target_raycast: None,
                     selected_block_id: None,
-                    selected_entity_type_id: None,
+                    preview_entity: None,
                 }
             }
             // Editing -> Playing
@@ -71,19 +59,23 @@ impl GameState {
                     entity_type_registry,
                     ..
                 },
-                EngineMode::Play,
+                ClientShouldSwitchMode::Play { new_player_id },
             ) => {
+                tracing::debug!("Transitioning from editing to playing");
                 *self = GameState::Playing {
                     blocks,
                     block_registry,
                     entities,
-                    entity_type_registry,
+                    _entity_type_registry: entity_type_registry,
                     camera,
-                    client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
+                    client_player: new_player_id,
                     players: Default::default(),
                 }
             }
-            _ => {}
+            // Invalid or no-op transition
+            (current_state, _) => {
+                *self = current_state;
+            }
         };
     }
 }
