@@ -12,7 +12,4 @@ uniform vec4 tint;
 
 void main() {
     fragColor = texture(tex, uvInterpolant) * tint;
-    if (fragColor.a < 1.0) {
-        discard;
-    }
 }
