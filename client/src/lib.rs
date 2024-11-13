@@ -633,7 +633,7 @@ impl Engine {
                                 render::build_cube_draw_calls(
                                     &self.cube_mesh_data,
                                     blocks.into_iter(),
-                                    Some([1.0, 0.0, 0., 1.0].into()),
+                                    Some([1.0, 0.0, 0., 0.5].into()),
                                 )
                                 .into_iter(),
                             );
@@ -650,6 +650,7 @@ impl Engine {
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
                         Transform::new(entity.state.position, Quat::IDENTITY),
+                        None,
                     ));
                 }
             }
@@ -672,6 +673,7 @@ impl Engine {
                             player.position,
                             Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
                         ),
+                        None,
                     ));
                 }
             }
@@ -688,12 +690,11 @@ impl Engine {
                     {
                         let blocks = [(block_position, textures)];
 
-                        // TODO(kmrw): Why isn't this working? I blame OpenGL.
                         draw_calls.extend(
                             render::build_cube_draw_calls(
                                 &self.cube_mesh_data,
                                 blocks.into_iter(),
-                                Some([0., 1.0, 0., 1.0].into()),
+                                Some([0., 1.0, 0., 0.5].into()),
                             )
                             .into_iter(),
                         );
@@ -710,6 +711,7 @@ impl Engine {
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
                         Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                        Some([0.0, 0.5, 1.0, 0.5].into()),
                     ));
                 }
             }
