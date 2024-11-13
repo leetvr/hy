@@ -1,4 +1,3 @@
-use deno_core::OpState;
 use entities::{EntityData, EntityID, EntityState, EntityTypeID};
 use net_types::{Controls, PlayerId};
 use physics::PhysicsWorld;
@@ -10,10 +9,15 @@ use std::{
 };
 use {
     crate::game::PlayerCollision,
+    anyhow::bail,
     deno_core::{
         extension, op2, serde_v8,
         v8::{self},
     },
+};
+use {
+    deno_core::{error::AnyError, OpState},
+    nanorand::Rng,
 };
 
 use crate::game::{PlayerState, World};
@@ -37,9 +41,48 @@ fn is_player_on_ground(state: &mut OpState, #[bigint] player_id: u64) -> bool {
     physics_world.is_player_on_ground(player_id)
 }
 
+#[op2]
+#[serde]
+fn spawn_entity(
+    state: &mut OpState,
+    entity_type_id: u8,
+    #[serde] position: glam::Vec3,
+) -> Result<EntityID, AnyError> {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+
+    let Some(entity_type) = world.entity_type_registry.get(entity_type_id) else {
+        bail!("Entity type not found");
+    };
+
+    let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+    let entity_data = EntityData {
+        id: entity_id.clone(),
+        name: "We should let you set entity names in the editor".into(),
+        entity_type: entity_type.id,
+        model_path: entity_type.default_model_path().into(),
+        state: EntityState {
+            position,
+            velocity: Default::default(),
+        },
+    };
+
+    world.spawn_entity(entity_id.clone(), entity_data);
+
+    Ok(entity_id)
+}
+
+#[op2(fast)]
+fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+
+    world.despawn_entity(entity_id);
+}
+
 extension!(
     hy,
-    ops = [get_entities, is_player_on_ground],
+    ops = [get_entities, is_player_on_ground, spawn_entity, despawn_entity],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],
     options = {

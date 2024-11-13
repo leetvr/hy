@@ -1908,6 +1908,7 @@ dependencies = [
  "entities",
  "futures-util",
  "glam 0.29.1",
+ "nanorand",
  "net-types",
  "physics",
  "serde",

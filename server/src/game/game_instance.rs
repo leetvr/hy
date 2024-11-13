@@ -185,6 +185,10 @@ impl GameInstance {
             self.physics_world.lock().expect("Deadlock!").step();
         }
 
+        // Run world commands queued from the scripts
+        let mut world = self.world.lock().expect("Deadlock!");
+        world.apply_queued_updates();
+
         maybe_next_state
     }
 
