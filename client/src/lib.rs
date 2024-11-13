@@ -668,9 +668,10 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new(
+                        Transform::new_with_scale(
                             player.position,
                             Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+                            glam::Vec3::splat(0.5),
                         ),
                     ));
                 }
@@ -828,5 +829,5 @@ struct Player {
 const MOUSE_SENSITIVITY_X: f32 = 0.005;
 const MOUSE_SENSITIVITY_Y: f32 = 0.005;
 
-const CAMERA_DISTANCE: f32 = 15.0;
+const CAMERA_DISTANCE: f32 = 8.0;
 const CAMERA_HEIGHT: f32 = 2.0;

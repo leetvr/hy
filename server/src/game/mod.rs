@@ -283,7 +283,7 @@ pub struct PlayerCollision {
 impl Player {
     pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
         let physics_body =
-            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 1.5, 0.5));
+            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 2.0, 0.5));
         Self {
             state: PlayerState {
                 position,

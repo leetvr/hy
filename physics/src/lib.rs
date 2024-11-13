@@ -105,6 +105,7 @@ impl PhysicsWorld {
     pub fn add_ball_body(&mut self, position: glam::Vec3, size: f32) -> PhysicsBody {
         let rigid_body = RigidBodyBuilder::dynamic()
             .translation(vector![position.x, position.y, position.z])
+            .ccd_enabled(true)
             .enabled_rotations(false, false, false)
             .build();
         let collider = ColliderBuilder::ball(size).build();
@@ -131,9 +132,11 @@ impl PhysicsWorld {
             .enabled_rotations(false, false, false)
             .enabled_translations(false, false, false)
             .user_data(player_id as _)
+            .ccd_enabled(true)
             .build();
-        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z)
+        let collider = ColliderBuilder::cuboid(size.x, size.y / 2.0, size.z)
             .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
+            .position(vector![0.0, -(size.y / 2.0), 0.0].into())
             .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
@@ -225,6 +228,7 @@ impl PhysicsWorld {
         let indices: Vec<_> = indices.collect();
         let collider = ColliderBuilder::trimesh(vertices, indices)
             .collision_groups(InteractionGroups::new(TERRAIN_GROUP, Group::all()))
+            .position(vector![0.0, -1.0, 0.0].into())
             .build();
         let handle = self.colliders.insert(collider);
         PhysicsCollider {
