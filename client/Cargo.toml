@@ -15,6 +15,7 @@ glam.workspace = true
 web-sys.workspace = true
 gltf.workspace = true
 bytemuck.workspace = true
+nanorand.workspace = true
 image.workspace = true
 tracing.workspace = true
 tracing-wasm.workspace = true
