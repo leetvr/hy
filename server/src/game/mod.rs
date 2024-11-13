@@ -129,10 +129,11 @@ impl ServerState {
             // Playing -> Editing
             (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    let editor_instance = EditorInstance::new(
+                    let editor_instance = EditorInstance::from_transition(
                         World::load(storage_dir).expect("Couldn't load world"),
                         editor_client,
-                    );
+                    )
+                    .await;
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
@@ -148,10 +149,11 @@ impl ServerState {
             // Paused -> Editing
             (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    let editor_instance = EditorInstance::new(
+                    let editor_instance = EditorInstance::from_transition(
                         World::load(storage_dir).expect("Couldn't load world"),
                         editor_client,
-                    );
+                    )
+                    .await;
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
@@ -162,12 +164,12 @@ impl ServerState {
             }
             // Editing -> Playing
             (ServerState::Editing(editor_instance), NextServerState::Playing) => {
-                let instance = GameInstance::from_editor(editor_instance).await;
+                let instance = GameInstance::from_transition(editor_instance).await;
                 *self = ServerState::Playing(instance);
             }
             // Editing -> Paused
             (ServerState::Editing(editor_instance), NextServerState::Paused) => {
-                let instance = GameInstance::from_editor(editor_instance).await;
+                let instance = GameInstance::from_transition(editor_instance).await;
                 *self = ServerState::Paused(instance);
             }
             // Invalid transition

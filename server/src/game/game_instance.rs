@@ -11,7 +11,7 @@ use {
 
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
 use glam::Vec3;
-use net_types::PlayerId;
+use net_types::{ClientShouldSwitchMode, PlayerId};
 use physics::{PhysicsCollider, PhysicsWorld};
 use tokio::sync::mpsc;
 
@@ -64,7 +64,7 @@ impl GameInstance {
         }
     }
 
-    pub async fn from_editor(editor_instance: EditorInstance) -> Self {
+    pub async fn from_transition(editor_instance: EditorInstance) -> Self {
         let EditorInstance {
             world,
             mut editor_client,
@@ -75,10 +75,10 @@ impl GameInstance {
         editor_client.awareness = Default::default();
 
         // Create a player for the editor client
-        let player_id = PlayerId::new(game_instance.next_player_id);
+        let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
         game_instance.players.insert(
-            player_id,
+            new_player_id,
             Player::new(
                 &mut game_instance.physics_world,
                 game_instance.player_spawn_point,
@@ -86,18 +86,18 @@ impl GameInstance {
         );
 
         // Set the player ID on the editor client
-        editor_client.player_id = player_id;
+        editor_client.player_id = new_player_id;
 
         let client_id = game_instance.next_client_id;
         game_instance.next_client_id = game_instance.next_client_id + 1;
 
-        // Send reset packet
+        // IMPORTANT: Send switch mode packet
         let _ = editor_client
             .outgoing_tx
             .send(
-                net_types::Reset {
-                    new_client_player: player_id,
-                }
+                net_types::ServerPacket::ClientShouldSwitchMode(ClientShouldSwitchMode::Play {
+                    new_player_id,
+                })
                 .into(),
             )
             .await;

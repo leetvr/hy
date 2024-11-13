@@ -27,6 +27,7 @@ use game_state::GameState;
 use glam::UVec2;
 use nanorand::Rng;
 use net_types::ClientPacket;
+use net_types::ClientShouldSwitchMode;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
@@ -183,6 +184,8 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
+        let mut mode_switch: Option<ClientShouldSwitchMode> = None;
+
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
@@ -207,6 +210,7 @@ impl Engine {
                             entity_type_registry,
                             ..
                         }) => {
+                            tracing::info!("Init received:");
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             tracing::info!("Block registry: {:#?}", block_registry);
 
@@ -239,17 +243,18 @@ impl Engine {
                             // When we've connected, tell the server we want to switch to edit mode.
                             self.send_packet(net_types::ClientPacket::Edit);
                         }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("LOADING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
                     GameState::Playing {
                         players,
                         entities,
                         blocks,
-                        client_player,
                         ..
                     } => match packet {
                         ServerPacket::SetBlock(set_block) => {
@@ -271,13 +276,6 @@ impl Engine {
                             packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
-                        // Sent by the server when we leave edit mode
-                        ServerPacket::Reset(net_types::Reset {
-                            new_client_player, ..
-                        }) => {
-                            players.clear();
-                            *client_player = new_client_player;
-                        }
                         ServerPacket::AddEntity(add_entity) => {
                             packet_handlers::handle_add_entity(entities, add_entity);
                         }
@@ -291,15 +289,28 @@ impl Engine {
                         ServerPacket::RemoveEntity(remove_entity) => {
                             packet_handlers::handle_remove_entity(entities, remove_entity);
                         }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("PLAYING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
-                    GameState::Editing { .. } => {}
+                    GameState::Editing { .. } => match packet {
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("EDITING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
+                        _ => {}
+                    },
                 }
             }
+        }
+
+        // If the server wanted us to switch modes, let's do that now.
+        if let Some(mode_switch) = mode_switch {
+            self.state.switch_mode(mode_switch);
         }
 
         self.load_block_textures();

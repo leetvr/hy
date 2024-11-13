@@ -32,9 +32,6 @@ impl Context {
 #[wasm_bindgen]
 impl Engine {
     pub fn ctx_set_engine_mode(&mut self, mode: EngineMode) {
-        // Transition to next state
-        self.state.transition(mode);
-
         // Tell the server about the new state
         let packet = match mode {
             EngineMode::Play => ClientPacket::Start,
