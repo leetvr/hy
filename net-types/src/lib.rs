@@ -68,8 +68,10 @@ pub struct Init {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Reset {
-    pub new_client_player: PlayerId,
+pub enum ClientShouldSwitchMode {
+    Play { new_player_id: PlayerId },
+    Pause { new_player_id: PlayerId },
+    Edit { world: Init },
 }
 
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
@@ -98,7 +100,7 @@ pub struct UpdateEntity {
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
-    Reset(Reset),
+    ClientShouldSwitchMode(ClientShouldSwitchMode),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
     UpdatePlayer(UpdatePlayer),
