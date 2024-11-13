@@ -123,6 +123,8 @@ impl AudioManager {
     /// `entity_id` - Optional EntityID of the Hytopia entity used to dynamically update sound position
     /// `is_ambient` - If set, spatialisation will be disabled so the sound will have constant volume from anywhere
     /// `is_looping` - Loop the track
+    /// `pitch` - playbackRate which is technically the same as `pitch` in minecraft
+    /// `reference_distance` - the distance from listener at which the volume starts attenuating
     pub fn spawn_sound(
         &mut self,
         sound_id: &str,
@@ -130,6 +132,8 @@ impl AudioManager {
         maybe_position: Option<SoundPosition>,
         is_ambient: bool,
         is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
     ) -> Result<(), JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
@@ -143,6 +147,8 @@ impl AudioManager {
             entity_id,
             is_ambient,
             is_looping,
+            pitch,
+            reference_distance,
         ) else {
             web_sys::console::error_1(&"Unable to create sound_instance".into());
             return Err(JsValue::from_str("Unable to create sound_instance"));
@@ -308,7 +314,10 @@ impl SoundInstance {
         entity_id: Option<EntityID>,
         is_ambient: bool,
         is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
         // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....
+        // volume_override:
     ) -> Result<Self, JsValue> {
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
@@ -319,6 +328,8 @@ impl SoundInstance {
             // make more sense to make `SoundInstance::panner_node` optional But a disconnected
             // panner node should be cheap and disable spatialistaion which simplifies the code
             // and it will make it easier to switch a sound between ambient and spatialised
+            // Note, this will need to be updated if we want to change
+            // convert pre-existing sounds from ambient to spatialised
             source_node.connect_with_audio_node(&gain_node)?;
             return Ok(SoundInstance {
                 source_node,
@@ -332,9 +343,8 @@ impl SoundInstance {
         // However, For now, I'm just using the defaults
         panner_node.set_panning_model(PanningModelType::Equalpower); // Also supports Hrtf
         panner_node.set_distance_model(DistanceModelType::Inverse); // Also supports Linear and Exponential
-
+        panner_node.set_ref_distance(reference_distance.unwrap_or(1.) as f64);
         panner_node.set_max_distance(10000.);
-        panner_node.set_ref_distance(1.);
         panner_node.set_rolloff_factor(1.);
 
         // Connect nodes: source -> panner -> gain
@@ -347,7 +357,9 @@ impl SoundInstance {
         // Hytopia may be after altering playback speed without altering pitch
         // which is a more advanced effect that could be done manually or
         // possibly more easily with `Tone.js`
-        source_node.playback_rate().set_value(1.0); // default 1.0
+        source_node
+            .playback_rate()
+            .set_value(pitch.unwrap_or(1.0).max(0.01));
 
         Ok(SoundInstance {
             source_node,

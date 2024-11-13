@@ -793,6 +793,8 @@ impl Engine {
         entity_id: entities::EntityID,
         // is_ambient: bool,
         is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
     ) -> Result<(), JsValue> {
         // Retrieve the entity's current position
         let position = self
@@ -804,8 +806,15 @@ impl Engine {
             })?;
 
         // Play the sound at the entity's position
-        self.audio_manager
-            .spawn_sound(sound_id, Some(entity_id), Some(position), false, is_looping)
+        self.audio_manager.spawn_sound(
+            sound_id,
+            Some(entity_id),
+            Some(position),
+            false,
+            is_looping,
+            pitch,
+            reference_distance,
+        )
     }
 
     fn get_entity_sound_pos(&self, entity_id: entities::EntityID) -> Option<audio::SoundPosition> {
@@ -826,9 +835,18 @@ impl Engine {
         sound_id: &str,
         is_ambient: bool,
         is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
     ) -> Result<(), JsValue> {
-        self.audio_manager
-            .spawn_sound(sound_id, None, None, is_ambient, is_looping)
+        self.audio_manager.spawn_sound(
+            sound_id,
+            None,
+            None,
+            is_ambient,
+            is_looping,
+            pitch,
+            reference_distance,
+        )
     }
 
     pub fn play_sound_at_pos(
@@ -839,10 +857,19 @@ impl Engine {
         z: f32,
         is_ambient: bool,
         is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
     ) -> Result<(), JsValue> {
         let sound_position = audio::SoundPosition::new(x, y, z);
-        self.audio_manager
-            .spawn_sound(sound_id, None, Some(sound_position), is_ambient, is_looping)
+        self.audio_manager.spawn_sound(
+            sound_id,
+            None,
+            Some(sound_position),
+            is_ambient,
+            is_looping,
+            pitch,
+            reference_distance,
+        )
     }
 
     // if `true` then TestStopSounds Component will be rendered
@@ -1003,6 +1030,8 @@ pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str
                     pos.z as f32,
                     false,
                     false,
+                    None,
+                    None,
                 ) {
                     tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
                 }
@@ -1016,12 +1045,10 @@ pub fn spawn_sound_at_kane_face(engine: &mut Engine, sound_id: &str) {
     if matches!(engine.state, GameState::Loading) || !engine.controls.mouse_right {
         return;
     }
-
     let entity_id = "0".to_string();
     let is_looping = true;
 
-    // Attempt to play the sound at the specified entity; log the result.
-    match engine.play_sound_at_entity(sound_id, entity_id.clone(), is_looping) {
+    match engine.play_sound_at_entity(sound_id, entity_id.clone(), is_looping, Some(0.5), None) {
         Ok(_) => tracing::debug!(
             "Successfully played sound '{}' at EntityID '{}'",
             sound_id,
