@@ -1,5 +1,6 @@
 {
   "0": {
+    "id": "0",
     "name": "Test Entity",
     "entity_type": 0,
     "model_path": "kibble_ctf/test_entity.gltf",

@@ -233,7 +233,7 @@ impl Engine {
                                 camera: FlyCamera::new(Vec3::ZERO),
                                 target_raycast: None,
                                 selected_block_id: None,
-                                selected_entity_type_id: None,
+                                ghost_entity: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
@@ -378,7 +378,7 @@ impl Engine {
                 blocks,
                 target_raycast,
                 selected_block_id,
-                selected_entity_type_id,
+                ghost_entity,
                 ..
             } => {
                 // Camera input
@@ -415,11 +415,23 @@ impl Engine {
 
                 *target_raycast = blocks.raycast(position, ray_dir);
 
+                if let Some(ghost_entity) = ghost_entity {
+                    let Some(position) = target_raycast.as_ref().and_then(|raycast| {
+                        raycast
+                            .position
+                            .add_signed(raycast.entrance_face_normal.as_ivec3())
+                    }) else {
+                        return;
+                    };
+
+                    ghost_entity.state.position = position.into();
+                }
+
                 if self.controls.mouse_left {
                     if selected_block_id.is_some() {
                         tracing::debug!("Placing block at {target_raycast:?}");
                         self.place_block();
-                    } else if selected_entity_type_id.is_some() {
+                    } else if ghost_entity.is_some() {
                         tracing::debug!("Placing entity at {target_raycast:?}");
                         self.place_entity();
                     }
@@ -505,60 +517,35 @@ impl Engine {
     fn place_entity(&mut self) {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
-            target_raycast: Some(ref target_raycast),
-            selected_entity_type_id: Some(entity_type_id),
             entities,
-            entity_type_registry,
+            ghost_entity,
             ..
         } = &mut self.state
         else {
             return;
         };
 
-        let is_deleting = false;
-        let position = match is_deleting {
-            // When deleting a block, we place it at the position of the raycast.
-            true => target_raycast.position,
-            false => {
-                // When we place a block, we place it at the position of the raycast, but offset by
-                // the entrance face normal, as we're placing it "on" the face the ray entered.
-                let Some(position) = target_raycast
-                    .position
-                    .add_signed(target_raycast.entrance_face_normal.as_ivec3())
-                else {
-                    return;
-                };
-
-                position
-            }
+        // First, get the ghost entity
+        let Some(placed_entity) = ghost_entity.take() else {
+            tracing::warn!("Attempted to place entity but there is no ghost entity");
+            return;
         };
 
-        // Idk how to make an entity_id
-        let entity_type_id = *entity_type_id;
-        let entity_type = entity_type_registry
-            .get(entity_type_id)
-            .expect("Entity type ID does not exist - this should be impossible");
+        // IMPORTANT: We have to replace the ghost entity with one that has a new ID
+        let next_entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+        let mut new_ghost_entity = placed_entity.clone();
+        new_ghost_entity.id = next_entity_id;
+        *ghost_entity = Some(new_ghost_entity);
 
-        let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+        // Great. Now, add the placed entity to the world
+        let entity_id = placed_entity.id.clone();
+        entities.insert(entity_id.clone(), placed_entity.clone());
 
-        let entity_data = entities::EntityData {
-            name: "Jeff".into(),
-            entity_type: entity_type_id,
-            model_path: entity_type.default_model_path().to_owned(),
-            state: entities::EntityState {
-                position: position.into(),
-                velocity: Vec3::ZERO,
-            },
-        };
-
-        entities.insert(entity_id.clone(), entity_data.clone());
-
+        // Finally, tell the server that we done added an entity
         let add_entity = net_types::AddEntity {
             entity_id,
-            entity_data,
+            entity_data: placed_entity,
         };
-
-        tracing::debug!("Setting entity at {position:?} to {entity_type_id}");
 
         self.send_packet(ClientPacket::AddEntity(add_entity));
     }
@@ -688,6 +675,7 @@ impl Engine {
                     {
                         let blocks = [(block_position, textures)];
 
+                        // TODO(kmrw): Why isn't this working? I blame OpenGL.
                         draw_calls.extend(
                             render::build_cube_draw_calls(
                                 &self.cube_mesh_data,
@@ -697,6 +685,19 @@ impl Engine {
                             .into_iter(),
                         );
                     }
+                }
+            }
+            // Ghost entity
+            GameState::Editing {
+                ghost_entity: Some(ghost_entity),
+                ..
+            } => {
+                if let Some(model) = self.entity_models.get(&ghost_entity.model_path) {
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(ghost_entity.state.position, Quat::IDENTITY),
+                    ));
                 }
             }
             _ => (),

@@ -8,6 +8,7 @@ pub type EntityID = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
+    pub id: String,
     pub name: String,
     pub entity_type: EntityTypeID,
     pub model_path: String,
