@@ -1,9 +1,11 @@
 use {
-    nalgebra::point,
+    nalgebra::{point, Vector3},
     rapier3d::{
         dynamics::RigidBodyHandle,
         math::Vector,
         na::vector,
+        parry::{query::ShapeCastOptions, utils::hashmap::HashMap},
+        pipeline::QueryFilter,
         prelude::{
             CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DefaultBroadPhase,
             ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
@@ -32,6 +34,7 @@ pub struct PhysicsWorld {
     colliders: ColliderSet,
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
+    player_handles: HashMap<u64, RigidBodyHandle>,
 }
 
 impl PhysicsWorld {
@@ -71,6 +74,7 @@ impl PhysicsWorld {
             query_pipeline,
             physics_hooks,
             event_handler,
+            player_handles: Default::default(),
         }
     }
 
@@ -111,16 +115,24 @@ impl PhysicsWorld {
 
     /// Add player body
     /// Creates a kinematic body with a cuboid collider
-    pub fn add_player_body(&mut self, position: glam::Vec3, size: glam::Vec3) -> PhysicsBody {
+    pub fn add_player_body(
+        &mut self,
+        player_id: u64, // evil
+        position: glam::Vec3,
+        size: glam::Vec3,
+    ) -> PhysicsBody {
         let rigid_body = RigidBodyBuilder::kinematic_position_based()
             .translation(vector![position.x, position.y, position.z])
             .enabled_rotations(false, false, false)
             .enabled_translations(false, false, false)
+            .user_data(player_id as _)
             .build();
         let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
             .insert_with_parent(collider, handle, &mut self.bodies);
+
+        self.player_handles.insert(player_id, handle);
 
         PhysicsBody {
             handle,
@@ -222,6 +234,42 @@ impl PhysicsWorld {
             &mut self.bodies,
             false, // There shouldn't be any rigidbody attached to this collider
         );
+    }
+
+    /// Checks if a player is standing on the ground
+    pub fn is_player_on_ground(&self, player_id: u64) -> bool {
+        // Extract the player's shape
+        let Some(player_body_handle) = self.player_handles.get(&player_id) else {
+            tracing::warn!("Couldn't find a player handle for {player_id}");
+            return false;
+        };
+        let player_body_handle = *player_body_handle;
+        let player_body = &self.bodies[player_body_handle];
+        let current_position = player_body.position();
+        let Some(player_collider_handle) = player_body.colliders().first() else {
+            tracing::warn!("Couldn't find a collider for {player_id}");
+            return false;
+        };
+
+        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
+
+        // Ground detection
+        let down_direction = -Vector3::y_axis();
+        let ground_check_distance = 0.1;
+        let mut options = ShapeCastOptions::default();
+        options.target_distance = ground_check_distance;
+
+        self.query_pipeline
+            .cast_shape(
+                &self.bodies,
+                &self.colliders,
+                &current_position,
+                &down_direction,
+                shape,
+                options,
+                QueryFilter::default(),
+            )
+            .is_some()
     }
 }
 

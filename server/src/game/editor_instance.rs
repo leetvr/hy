@@ -4,6 +4,7 @@ use std::{
 };
 
 use net_types::{ClientShouldSwitchMode, PlayerId, ServerPacket, SetBlock};
+use physics::PhysicsWorld;
 use tokio::sync::mpsc;
 
 use super::{network::Client, world::World, NextServerState};
@@ -11,17 +12,27 @@ use super::{network::Client, world::World, NextServerState};
 pub struct EditorInstance {
     pub world: Arc<Mutex<World>>,
     pub editor_client: Client,
+    pub physics_world: Arc<Mutex<PhysicsWorld>>,
 }
 
 impl EditorInstance {
-    pub fn new(world: Arc<Mutex<World>>, editor_client: Client) -> Self {
+    pub fn new(
+        world: Arc<Mutex<World>>,
+        editor_client: Client,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
+    ) -> Self {
         Self {
             world,
             editor_client,
+            physics_world,
         }
     }
 
-    pub async fn from_transition(world: Arc<Mutex<World>>, editor_client: Client) -> Self {
+    pub async fn from_transition(
+        world: Arc<Mutex<World>>,
+        editor_client: Client,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
+    ) -> Self {
         // The most important thing to do here is tell the client to switch to edit mode.
         {
             let world = world.lock().expect("Deadlock!");
@@ -47,6 +58,7 @@ impl EditorInstance {
         Self {
             world,
             editor_client,
+            physics_world,
         }
     }
 

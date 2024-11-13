@@ -41,16 +41,18 @@ export interface PlayerCollision {
 }
 
 type PlayerUpdate = (
-  current_state: PlayerState,
+  playerID: number,
+  currentState: PlayerState,
   controls: PlayerControls,
   collisions: PlayerCollision[],
 ) => PlayerState;
-type EntityUpdate = (current_state: EntityState) => EntityState;
+type EntityUpdate = (currentState: EntityState) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
   getEntities: () => Map<String, EntityData[]>;
+  isPlayerOnGround: (id: number) => boolean;
 }
 
 declare global {

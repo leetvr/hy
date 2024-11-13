@@ -18,4 +18,7 @@ globalThis.hy = {
   getEntities: () => {
     return core.ops.get_entities();
   },
+  isPlayerOnGround: (playerID) => {
+    return core.ops.is_player_on_ground(playerID);
+  },
 };

@@ -3,11 +3,12 @@ const MOVE_SPEED = 10.0; // Movement speed (units per second)
 const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 const PLAYER_SIZE = [0.5, 1.5, 0.5]; // Player size (x, y, z)
-export const update = (currentState, controls, collisions) => {
+export const update = (playerID, currentState, controls, collisions) => {
     const { position, velocity, animationState } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
+    console.log("I am playerID", playerID);
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];
@@ -70,15 +71,15 @@ export const update = (currentState, controls, collisions) => {
         ];
         // Cancel velocity along the normal
         if (newVelocity[0] * normal[0] < 0) {
-            newVelocity[0] = 0.;
+            newVelocity[0] = 0;
         }
         if (newVelocity[1] * normal[1] < 0) {
-            newVelocity[1] = 0.;
+            newVelocity[1] = 0;
         }
         if (newVelocity[2] * normal[2] < 0) {
-            newVelocity[2] = 0.;
+            newVelocity[2] = 0;
         }
-        if (normal[1] > 0. && newAnimationState == "jump" || newAnimationState == "jump_pre") {
+        if ((normal[1] > 0 && newAnimationState == "jump") || newAnimationState == "jump_pre") {
             newAnimationState = "jump_post_light";
         }
     }

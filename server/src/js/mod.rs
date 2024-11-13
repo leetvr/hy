@@ -1,6 +1,7 @@
 use deno_core::OpState;
 use entities::{EntityData, EntityID, EntityState, EntityTypeID};
-use net_types::Controls;
+use net_types::{Controls, PlayerId};
+use physics::PhysicsWorld;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -21,23 +22,33 @@ use crate::game::{PlayerState, World};
 #[serde]
 // NOTE(kmrw: serde is apparently slow but who cares)
 fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
-    // tracing::info!("Get entities called");
-    let shared_state = state.borrow::<Arc<Mutex<World>>>();
-    let state = shared_state.lock().unwrap();
+    let world = state.borrow::<Arc<Mutex<World>>>();
+    let world = world.lock().unwrap();
 
-    state.entities.clone()
+    world.entities.clone()
+}
+
+#[op2(fast)]
+// NOTE(kmrw: serde is apparently slow but who cares)
+fn is_player_on_ground(state: &mut OpState, #[bigint] player_id: u64) -> bool {
+    let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
+    let physics_world = physics_world.lock().expect("Deadlock!");
+
+    physics_world.is_player_on_ground(player_id)
 }
 
 extension!(
     hy,
-    ops = [get_entities],
+    ops = [get_entities, is_player_on_ground],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],
     options = {
-        shared_state: Arc<Mutex<World>>,
+        world: Arc<Mutex<World>>,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
     },
     state = |state, options| {
-        state.put(options.shared_state.clone())
+        state.put(options.world.clone());
+        state.put(options.physics_world.clone());
     }
 );
 
@@ -53,6 +64,7 @@ impl JSContext {
     pub async fn new(
         script_root: impl Into<PathBuf>,
         world: Arc<Mutex<World>>,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
     ) -> anyhow::Result<Self> {
         // Get a clone the entity type registry before we pass it over to the runtime
         let entity_type_registry = {
@@ -63,7 +75,7 @@ impl JSContext {
         // Load the runtime
         let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
-            extensions: vec![hy::init_ops_and_esm(world.clone())],
+            extensions: vec![hy::init_ops_and_esm(world.clone(), physics_world)],
             ..Default::default()
         });
 
@@ -97,6 +109,7 @@ impl JSContext {
 
     pub async fn get_player_next_state(
         &mut self,
+        player_id: PlayerId,
         current_state: &PlayerState,
         controls: &Controls,
         collisions: Vec<PlayerCollision>,
@@ -116,10 +129,16 @@ impl JSContext {
         let player_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
+        let player_id = serde_v8::to_v8(scope, player_id).unwrap();
         let current_state = serde_v8::to_v8(scope, current_state).unwrap();
         let controls = serde_v8::to_v8(scope, controls).unwrap();
         let colliding = serde_v8::to_v8(scope, collisions).unwrap();
-        let args = [current_state.into(), controls.into(), colliding.into()];
+        let args = [
+            player_id.into(),
+            current_state.into(),
+            controls.into(),
+            colliding.into(),
+        ];
 
         let result = player_update.call(scope, undefined, &args).unwrap();
         let next_state: PlayerState = serde_v8::from_v8(scope, result)?;

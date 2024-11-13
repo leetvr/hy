@@ -7,6 +7,7 @@ const DT = 1 / 60; // Fixed delta time (seconds per frame)
 const PLAYER_SIZE = [0.5, 1.5, 0.5]; // Player size (x, y, z)
 
 export const update: PlayerUpdate = (
+  playerID: number,
   currentState: PlayerState,
   controls: PlayerControls,
   collisions: PlayerCollision[],
@@ -33,20 +34,6 @@ export const update: PlayerUpdate = (
     // Compute movement direction in world space
     const moveDirX = normalizedInput[0] * cosYaw - normalizedInput[1] * sinYaw;
     const moveDirZ = normalizedInput[0] * sinYaw + normalizedInput[1] * cosYaw;
-    // console.log(
-    //   "Yaw",
-    //   yaw,
-    //   "sinYaw",
-    //   sinYaw,
-    //   "cosYaw",
-    //   cosYaw,
-    //   "normalizedInput",
-    //   normalizedInput,
-    //   "moveDirX",
-    //   moveDirX,
-    //   "moveDirZ",
-    //   moveDirZ,
-    // );
 
     // Update horizontal velocity
     newVelocity[0] = moveDirX * MOVE_SPEED;
@@ -61,44 +48,13 @@ export const update: PlayerUpdate = (
   }
 
   // Handle jumping
-  if (controls.jump && position[1] <= 1.01) {
-    // Simple ground check
+  if (controls.jump && hy.isPlayerOnGround(playerID)) {
     newVelocity[1] = JUMP_SPEED;
     newAnimationState = "jump_pre";
   }
 
   // Apply gravity to vertical velocity
   newVelocity[1] += GRAVITY * DT;
-
-  // Simple collision resolution
-  collisions = collisions.filter((collision) => {
-    return length(collision.resolution) < 0.5;
-  });
-  collisions.sort((a, b) => length(a.resolution) - length(b.resolution));
-  if (collisions.length > 0) {
-    const { block, resolution, normal } = collisions[0];
-    // Move player out of block
-    newPosition = [
-      newPosition[0] + resolution[0],
-      newPosition[1] + resolution[1],
-      newPosition[2] + resolution[2],
-    ];
-
-    // Cancel velocity along the normal
-    if (newVelocity[0] * normal[0] < 0) {
-      newVelocity[0] = 0.;
-    }
-    if (newVelocity[1] * normal[1] < 0) {
-      newVelocity[1] = 0.;
-    }
-    if (newVelocity[2] * normal[2] < 0) {
-      newVelocity[2] = 0.;
-    }
-
-    if (normal[1] > 0. && newAnimationState == "jump" || newAnimationState == "jump_pre") {
-      newAnimationState = "jump_post_light";
-    }
-  }
 
   // Update position based on velocity and delta time
   newPosition[0] += newVelocity[0] * DT;

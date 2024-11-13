@@ -13,6 +13,7 @@ use {
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
     game_instance::GameInstance,
+    net_types::PlayerId,
     network::ClientId,
     physics::PhysicsWorld,
     serde::{Deserialize, Serialize},
@@ -43,15 +44,20 @@ impl GameServer {
         // Load the world
         let storage_dir: PathBuf = storage_dir.into();
         let world = World::load(&storage_dir).expect("Failed to load world");
+        let game_instance = GameInstance::new(world.clone());
 
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
-        let js_context = JSContext::new(&script_root, world.clone())
-            .await
-            .expect("Failed to load JS Context");
+        let js_context = JSContext::new(
+            &script_root,
+            world.clone(),
+            game_instance.physics_world.clone(),
+        )
+        .await
+        .expect("Failed to load JS Context");
 
         // Set the initial state
-        let initial_state = ServerState::Paused(GameInstance::new(world));
+        let initial_state = ServerState::Paused(game_instance);
 
         tracing::info!("Done!");
 
@@ -132,6 +138,7 @@ impl ServerState {
                     let editor_instance = EditorInstance::from_transition(
                         World::load(storage_dir).expect("Couldn't load world"),
                         editor_client,
+                        game_instance.physics_world,
                     )
                     .await;
                     *self = ServerState::Editing(editor_instance);
@@ -152,6 +159,7 @@ impl ServerState {
                     let editor_instance = EditorInstance::from_transition(
                         World::load(storage_dir).expect("Couldn't load world"),
                         editor_client,
+                        game_instance.physics_world,
                     )
                     .await;
                     *self = ServerState::Editing(editor_instance);
@@ -230,8 +238,9 @@ pub struct PlayerCollision {
 }
 
 impl Player {
-    pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
-        let physics_body = physics_world.add_player_body(position, glam::Vec3::new(0.5, 1.5, 0.5));
+    pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
+        let physics_body =
+            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 1.5, 0.5));
         Self {
             state: PlayerState {
                 position,
