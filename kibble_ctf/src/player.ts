@@ -47,8 +47,11 @@ export const update: PlayerUpdate = (
     newAnimationState = "idle";
   }
 
+  // Ground detection
+  const isOnGround = hy.isPlayerOnGround(playerID);
+
   // Handle jumping
-  if (controls.jump && hy.isPlayerOnGround(playerID)) {
+  if (controls.jump && isOnGround) {
     newVelocity[1] = JUMP_SPEED;
     newAnimationState = "jump_pre";
   }
@@ -62,7 +65,7 @@ export const update: PlayerUpdate = (
   newPosition[2] += newVelocity[2] * DT;
 
   // Simple collision detection with the ground
-  if (newPosition[1] < 1) {
+  if (isOnGround) {
     newPosition[1] = 1; // Make sure we're on the ground
     newVelocity[1] = 0; // Make sure we're no longer falling
   }
