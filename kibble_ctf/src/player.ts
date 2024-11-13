@@ -54,12 +54,10 @@ export const update: PlayerUpdate = (
   if (!isOnGround) {
     newVelocity[1] += GRAVITY * DT;
   } else if (controls.jump) {
-    newVelocity[1] += JUMP_SPEED * DT;
+    newVelocity[1] = JUMP_SPEED;
   } else {
     newVelocity[1] = 0;
   }
-
-  // Apply gravity to vertical velocity
 
   // Update position based on velocity and delta time
   newPosition[0] += newVelocity[0] * DT;

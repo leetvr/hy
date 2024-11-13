@@ -1,11 +1,11 @@
 use {
-    glam::Vec3Swizzles,
     nalgebra::{point, Vector3},
     rapier3d::{
         dynamics::RigidBodyHandle,
+        geometry::{Group, InteractionGroups},
         math::Vector,
         na::vector,
-        parry::{query::ShapeCastOptions, utils::hashmap::HashMap},
+        parry::query::ShapeCastOptions,
         pipeline::QueryFilter,
         prelude::{
             CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DefaultBroadPhase,
@@ -13,7 +13,11 @@ use {
             PhysicsPipeline, QueryPipeline, RigidBodyBuilder, RigidBodySet,
         },
     },
+    std::collections::HashMap,
 };
+
+const TERRAIN_GROUP: Group = Group::GROUP_1;
+const PLAYER_GROUP: Group = Group::GROUP_2;
 
 pub struct PhysicsWorld {
     // Parameters
@@ -128,7 +132,9 @@ impl PhysicsWorld {
             .enabled_translations(false, false, false)
             .user_data(player_id as _)
             .build();
-        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z).build();
+        let collider = ColliderBuilder::cuboid(size.x, size.y, size.z)
+            .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
+            .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
             .insert_with_parent(collider, handle, &mut self.bodies);
@@ -217,7 +223,9 @@ impl PhysicsWorld {
     ) -> PhysicsCollider {
         let vertices: Vec<_> = vertices.map(|v| point![v.x, v.y, v.z]).collect();
         let indices: Vec<_> = indices.collect();
-        let collider = ColliderBuilder::trimesh(vertices, indices).build();
+        let collider = ColliderBuilder::trimesh(vertices, indices)
+            .collision_groups(InteractionGroups::new(TERRAIN_GROUP, Group::all()))
+            .build();
         let handle = self.colliders.insert(collider);
         PhysicsCollider {
             handle,
@@ -271,23 +279,25 @@ impl PhysicsWorld {
 
         // Ground detection
         let down_direction = -Vector3::y_axis();
-        let ground_check_distance = 0.1;
+        let ground_check_distance = 0.3;
         let mut options = ShapeCastOptions::default();
-        options.target_distance = ground_check_distance;
+        options.max_time_of_impact = ground_check_distance;
 
-        if let Some((collided, shape_cast_hit)) = self.query_pipeline.cast_shape(
+        if let Some((collided, _)) = self.query_pipeline.cast_shape(
             &self.bodies,
             &self.colliders,
             &current_position,
             &down_direction,
             shape,
             options,
-            QueryFilter::default(),
+            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
         ) {
-            tracing::debug!("Player is on ground: {collided:?}, {shape_cast_hit:?}");
+            let collided = &self.colliders[collided];
+            let collided_position = collided.position();
+            tracing::trace!("Player is on ground: {current_position:?}, {collided_position:?}");
             true
         } else {
-            tracing::debug!("Player is not on the ground: {current_position:?}");
+            tracing::trace!("Player is not on the ground: {current_position:?}");
             false
         }
     }

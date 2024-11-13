@@ -5,4 +5,4 @@ set -xe
 (cd kibble_ctf && npm install && npx tsc)
 
 # Start the server
-cargo run --bin server kibble_ctf
+RUST_LOG=debug RUST_BACKTRACE=1 cargo run --bin server kibble_ctf
