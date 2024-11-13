@@ -14,11 +14,19 @@ pub struct FlyCamera {
 }
 
 impl FlyCamera {
-    pub fn new(initial_position: Vec3) -> FlyCamera {
+    pub fn new(
+        initial_position: Vec3,
+        initial_yaw_degrees: f32,
+        initial_pitch_degrees: f32,
+    ) -> FlyCamera {
         FlyCamera {
             rig: CameraRig::builder()
                 .with(Position::new(initial_position))
-                .with(YawPitch::new())
+                .with(
+                    YawPitch::new()
+                        .pitch_degrees(initial_pitch_degrees)
+                        .yaw_degrees(initial_yaw_degrees),
+                )
                 .with(Smooth::new_position_rotation(1.0, 1.0))
                 .build(),
             movement_left: 0.,

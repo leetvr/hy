@@ -4,7 +4,7 @@ use {
     entities::{EntityData, EntityTypeRegistry},
     std::{
         collections::HashMap,
-        path::Path,
+        path::{Path, PathBuf},
         sync::{Arc, Mutex},
     },
 };
@@ -43,10 +43,16 @@ impl World {
         })))
     }
 
-    pub fn save(&mut self, storage_dir: impl AsRef<Path>) -> anyhow::Result<()> {
-        let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
+    pub fn save(&mut self, storage_dir: &PathBuf) -> anyhow::Result<()> {
+        // Save blocks
+        let blocks_path = storage_dir.join(BLOCKS_PATH);
         let blocks = serde_json::to_string(&self.blocks)?;
         std::fs::write(blocks_path, blocks)?;
+
+        // Save entities
+        let entities_path = storage_dir.join(ENTITIES_PATH);
+        let entities = serde_json::to_string(&self.entities)?;
+        std::fs::write(entities_path, entities)?;
         Ok(())
     }
 }

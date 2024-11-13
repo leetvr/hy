@@ -53,7 +53,9 @@ impl Engine {
     pub fn ctx_set_editor_block_id(&mut self, block_id: BlockTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
-            selected_block_id, ..
+            selected_block_id,
+            preview_entity,
+            ..
         } = &mut self.state
         else {
             return;
@@ -61,13 +63,14 @@ impl Engine {
 
         // Set the block ID
         *selected_block_id = Some(block_id);
+        *preview_entity = None;
     }
 
     pub fn ctx_set_editor_entity_type_id(&mut self, entity_type_id: EntityTypeID) {
         // Ensure we're in edit mode
         let GameState::Editing {
             selected_block_id,
-            ghost_entity,
+            preview_entity,
             entity_type_registry,
             ..
         } = &mut self.state
@@ -76,7 +79,8 @@ impl Engine {
         };
 
         tracing::info!("Set entity type id to {}", entity_type_id);
-        // Create a Ghost entity
+
+        // Create a preview entity
         *selected_block_id = None;
 
         let Some(entity_type) = entity_type_registry.get(entity_type_id) else {
@@ -85,7 +89,7 @@ impl Engine {
         };
 
         let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
-        *ghost_entity = Some(EntityData {
+        *preview_entity = Some(EntityData {
             id: entity_id,
             name: "We should let you set entity names in the editor".into(),
             entity_type: entity_type_id,
