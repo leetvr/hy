@@ -51,6 +51,8 @@ export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
   getEntities: () => Map<String, EntityData[]>;
+  spawnEntity: (entity: number, position: Vec3) => String;
+  despawnEntity: (entity_id: String) => void;
 }
 
 declare global {

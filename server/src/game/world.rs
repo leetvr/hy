@@ -18,9 +18,34 @@ pub struct World {
     pub block_registry: BlockRegistry,
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
+
+    command_queue: Vec<WorldCommand>,
 }
 
 impl World {
+    pub fn spawn_entity(&mut self, entity_id: String, entity_data: EntityData) {
+        self.command_queue
+            .push(WorldCommand::SpawnEntity(entity_id, entity_data));
+    }
+
+    pub fn despawn_entity(&mut self, entity_id: String) {
+        self.command_queue
+            .push(WorldCommand::DespawnEntity(entity_id));
+    }
+
+    pub fn apply_queued_updates(&mut self) {
+        for command in self.command_queue.drain(..) {
+            match command {
+                WorldCommand::SpawnEntity(entity_id, entity_data) => {
+                    self.entities.insert(entity_id, entity_data);
+                }
+                WorldCommand::DespawnEntity(entity_id) => {
+                    self.entities.remove(&entity_id);
+                }
+            }
+        }
+    }
+
     pub fn load(storage_dir: impl AsRef<Path>) -> Result<Self> {
         let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
         let blocks = serde_json::from_slice(&std::fs::read(blocks_path)?)?;
@@ -39,6 +64,7 @@ impl World {
             block_registry,
             entities,
             entity_type_registry,
+            command_queue: Vec::new(),
         })
     }
 
@@ -54,4 +80,9 @@ impl World {
         std::fs::write(entities_path, entities)?;
         Ok(())
     }
+}
+
+enum WorldCommand {
+    SpawnEntity(String, EntityData),
+    DespawnEntity(String),
 }
