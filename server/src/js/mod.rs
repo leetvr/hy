@@ -150,12 +150,11 @@ impl JSContext {
         let undefined = deno_core::v8::undefined(scope).into();
         let current_state = {
             let world = self.world.lock().expect("Deadlock!");
-            let current_state = &world
-                .entities
-                .get(entity_id)
-                .expect("Entity does not exist")
-                .state;
-            serde_v8::to_v8(scope, &current_state).unwrap()
+            let Some(entity_data) = &world.entities.get(entity_id) else {
+                tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
+                return Ok(());
+            };
+            serde_v8::to_v8(scope, &entity_data.state).unwrap()
         };
 
         let args = [current_state.into()];

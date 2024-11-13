@@ -234,10 +234,10 @@ impl Engine {
                                 block_registry,
                                 entities,
                                 entity_type_registry,
-                                camera: FlyCamera::new(Vec3::ZERO),
+                                camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
                                 target_raycast: None,
                                 selected_block_id: None,
-                                ghost_entity: None,
+                                preview_entity: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
@@ -389,7 +389,7 @@ impl Engine {
                 blocks,
                 target_raycast,
                 selected_block_id,
-                ghost_entity,
+                preview_entity,
                 ..
             } => {
                 // Camera input
@@ -426,7 +426,7 @@ impl Engine {
 
                 *target_raycast = blocks.raycast(position, ray_dir);
 
-                if let Some(ghost_entity) = ghost_entity {
+                if let Some(preview_entity) = preview_entity {
                     let Some(position) = target_raycast.as_ref().and_then(|raycast| {
                         raycast
                             .position
@@ -435,14 +435,14 @@ impl Engine {
                         return;
                     };
 
-                    ghost_entity.state.position = position.into();
+                    preview_entity.state.position = position.into();
                 }
 
                 if self.controls.mouse_left {
                     if selected_block_id.is_some() {
                         tracing::debug!("Placing block at {target_raycast:?}");
                         self.place_block();
-                    } else if ghost_entity.is_some() {
+                    } else if preview_entity.is_some() {
                         tracing::debug!("Placing entity at {target_raycast:?}");
                         self.place_entity();
                     }
@@ -529,24 +529,24 @@ impl Engine {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
             entities,
-            ghost_entity,
+            preview_entity,
             ..
         } = &mut self.state
         else {
             return;
         };
 
-        // First, get the ghost entity
-        let Some(placed_entity) = ghost_entity.take() else {
-            tracing::warn!("Attempted to place entity but there is no ghost entity");
+        // First, get the preview_entity entity
+        let Some(placed_entity) = preview_entity.take() else {
+            tracing::warn!("Attempted to place entity but there is no preview_entity entity");
             return;
         };
 
-        // IMPORTANT: We have to replace the ghost entity with one that has a new ID
+        // IMPORTANT: We have to replace the preview_entity entity with one that has a new ID
         let next_entity_id = nanorand::tls_rng().generate::<u64>().to_string();
-        let mut new_ghost_entity = placed_entity.clone();
-        new_ghost_entity.id = next_entity_id;
-        *ghost_entity = Some(new_ghost_entity);
+        let mut new_preview_entity = placed_entity.clone();
+        new_preview_entity.id = next_entity_id;
+        *preview_entity = Some(new_preview_entity);
 
         // Great. Now, add the placed entity to the world
         let entity_id = placed_entity.id.clone();
@@ -700,14 +700,14 @@ impl Engine {
             }
             // Ghost entity
             GameState::Editing {
-                ghost_entity: Some(ghost_entity),
+                preview_entity: Some(preview_entity),
                 ..
             } => {
-                if let Some(model) = self.entity_models.get(&ghost_entity.model_path) {
+                if let Some(model) = self.entity_models.get(&preview_entity.model_path) {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
-                        Transform::new(ghost_entity.state.position, Quat::IDENTITY),
+                        Transform::new(preview_entity.state.position, Quat::IDENTITY),
                     ));
                 }
             }

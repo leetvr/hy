@@ -27,7 +27,7 @@ pub enum GameState {
         camera: FlyCamera,
         target_raycast: Option<RayHit>,
         selected_block_id: Option<BlockTypeID>,
-        ghost_entity: Option<EntityData>,
+        preview_entity: Option<EntityData>,
     },
 }
 
@@ -46,7 +46,7 @@ impl GameState {
                     camera,
                     target_raycast: None,
                     selected_block_id: None,
-                    ghost_entity: None,
+                    preview_entity: None,
                 }
             }
             // Editing -> Playing
