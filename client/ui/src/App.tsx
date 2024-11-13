@@ -31,7 +31,12 @@ function App({ engine }: { engine: Engine }) {
     <div className={"mode-" + editClass}>
       <TopBar setMode={setMode} />
       {blockRegistry && entityTypeRegistry && (
-        <LeftBar engine={engine} currentMode={currentMode} blockRegistry={blockRegistry} entityTypeRegistry={entityTypeRegistry} />
+        <LeftBar
+          engine={engine}
+          currentMode={currentMode}
+          blockRegistry={blockRegistry}
+          entityTypeRegistry={entityTypeRegistry}
+        />
       )}
       <RightBar selectedEntity={false} />
     </div>
@@ -44,15 +49,6 @@ const getEngineModeText = (mode: EngineMode): string => {
       return "Play";
     case EngineMode.Edit:
       return "Edit";
-  }
-};
-
-const nextEngineMode = (mode: EngineMode): EngineMode => {
-  switch (mode) {
-    case EngineMode.Play:
-      return EngineMode.Edit;
-    case EngineMode.Edit:
-      return EngineMode.Play;
   }
 };
 

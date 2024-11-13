@@ -16,9 +16,9 @@ mod raycast;
 
 pub use raycast::RayHit;
 
-pub type BlockId = u8;
+pub type BlockTypeID = u8;
 
-pub const EMPTY_BLOCK: BlockId = 0;
+pub const EMPTY_BLOCK: BlockTypeID = 0;
 pub const MAX_BLOCK_HEIGHT: u32 = 64;
 
 #[wasm_bindgen]
@@ -109,7 +109,7 @@ impl From<UVec3> for BlockPos {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockGrid {
-    blocks: Vec<BlockId>,
+    blocks: Vec<BlockTypeID>,
     // X, Y, Z
     size: (u32, u32, u32),
 }
@@ -118,20 +118,20 @@ impl BlockGrid {
     /// Create a new block grid with the given dimensions
     pub fn new(size_x: u32, size_y: u32, size_z: u32) -> Self {
         Self {
-            blocks: vec![BlockId::default(); (size_x * size_y * size_z) as usize],
+            blocks: vec![BlockTypeID::default(); (size_x * size_y * size_z) as usize],
             size: (size_x, size_y, size_z),
         }
     }
 
     /// Get the block at the given position
-    pub fn get(&self, pos: BlockPos) -> Option<&BlockId> {
-        self.blocks.get(block_pos_to_array_index(pos, self.size))
+    pub fn get(&self, pos: BlockPos) -> Option<&BlockTypeID> {
+        self.blocks.get(block_pos_to_array_index(pos, self.size)?)
     }
 
     /// Get a mutable reference to the block at the given position
-    pub fn get_mut(&mut self, pos: BlockPos) -> Option<&mut BlockId> {
+    pub fn get_mut(&mut self, pos: BlockPos) -> Option<&mut BlockTypeID> {
         self.blocks
-            .get_mut(block_pos_to_array_index(pos, self.size))
+            .get_mut(block_pos_to_array_index(pos, self.size)?)
     }
 
     /// Get the size of the block grid
@@ -140,7 +140,7 @@ impl BlockGrid {
     }
 
     /// Get an iterator over all non-empty blocks in the grid
-    pub fn iter_non_empty(&self) -> impl Iterator<Item = (BlockPos, BlockId)> + '_ {
+    pub fn iter_non_empty(&self) -> impl Iterator<Item = (BlockPos, BlockTypeID)> + '_ {
         let indices = (0..self.size.0).flat_map(move |x| {
             (0..self.size.1).flat_map(move |y| (0..self.size.2).map(move |z| [x, y, z]))
         });
@@ -162,9 +162,9 @@ impl BlockGrid {
 }
 
 impl Index<BlockPos> for BlockGrid {
-    type Output = BlockId;
+    type Output = BlockTypeID;
 
-    fn index(&self, pos: BlockPos) -> &BlockId {
+    fn index(&self, pos: BlockPos) -> &BlockTypeID {
         self.get(pos)
             .ok_or_else(|| {
                 format!(
@@ -177,7 +177,7 @@ impl Index<BlockPos> for BlockGrid {
 }
 
 impl IndexMut<BlockPos> for BlockGrid {
-    fn index_mut(&mut self, pos: BlockPos) -> &mut BlockId {
+    fn index_mut(&mut self, pos: BlockPos) -> &mut BlockTypeID {
         let size = self.size;
         self.get_mut(pos)
             .ok_or_else(|| {
@@ -190,9 +190,13 @@ impl IndexMut<BlockPos> for BlockGrid {
     }
 }
 
-fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> usize {
+fn block_pos_to_array_index(pos: BlockPos, size: (u32, u32, u32)) -> Option<usize> {
+    if pos.x >= size.0 || pos.y >= size.1 || pos.z >= size.2 {
+        return None;
+    }
+
     let (x, y, z) = (pos.x as usize, pos.y as usize, pos.z as usize);
-    x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize)
+    Some(x + (y * size.0 as usize) + z * (size.0 as usize * size.1 as usize))
 }
 
 #[derive(Tsify, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -220,7 +224,7 @@ impl BlockRegistry {
 }
 
 impl BlockRegistry {
-    pub fn get(&self, block_id: BlockId) -> Option<&BlockType> {
+    pub fn get(&self, block_id: BlockTypeID) -> Option<&BlockType> {
         if block_id == EMPTY_BLOCK {
             return None;
         };
@@ -238,14 +242,14 @@ impl BlockRegistry {
 
     #[cfg(not(target_arch = "wasm32"))]
     // The client should *never* be able to mutate the block registry.
-    pub fn insert(&mut self, block_type: BlockType) -> BlockId {
+    pub fn insert(&mut self, block_type: BlockType) -> BlockTypeID {
         self.block_types.push(block_type);
 
         // note(KMRW):
         // We check the length of `block_types` *after* we insert the block to avoid having to
         // store an empty block.
         // This may be a dumb idea.
-        let block_id = self.block_types.len() as BlockId;
+        let block_id = self.block_types.len() as BlockTypeID;
 
         block_id
     }

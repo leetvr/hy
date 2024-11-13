@@ -4,9 +4,10 @@ const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 const PLAYER_SIZE = [0.5, 1.5, 0.5]; // Player size (x, y, z)
 export const update = (currentState, controls, collisions) => {
-    const { position, velocity } = currentState;
+    const { position, velocity, animationState } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
+    let newAnimationState = animationState;
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];
@@ -38,16 +39,19 @@ export const update = (currentState, controls, collisions) => {
         // Update horizontal velocity
         newVelocity[0] = moveDirX * MOVE_SPEED;
         newVelocity[2] = -moveDirZ * MOVE_SPEED;
+        newAnimationState = "run";
     }
     else {
         // Apply damping to horizontal velocity when no input
-        newVelocity[0] *= 0.9; // Adjust damping factor as needed
-        newVelocity[2] *= 0.9;
+        newVelocity[0] *= 0.7; // Adjust damping factor as needed
+        newVelocity[2] *= 0.7;
+        newAnimationState = "idle";
     }
     // Handle jumping
     if (controls.jump && position[1] <= 1.01) {
         // Simple ground check
         newVelocity[1] = JUMP_SPEED;
+        newAnimationState = "jump_pre";
     }
     // Apply gravity to vertical velocity
     newVelocity[1] += GRAVITY * DT;
@@ -74,6 +78,9 @@ export const update = (currentState, controls, collisions) => {
         if (newVelocity[2] * normal[2] < 0) {
             newVelocity[2] = 0.;
         }
+        if (normal[1] > 0. && newAnimationState == "jump" || newAnimationState == "jump_pre") {
+            newAnimationState = "jump_post_light";
+        }
     }
     // Update position based on velocity and delta time
     newPosition[0] += newVelocity[0] * DT;
@@ -87,6 +94,7 @@ export const update = (currentState, controls, collisions) => {
     return {
         position: newPosition,
         velocity: newVelocity,
+        animationState: newAnimationState,
     };
 };
 function length(v) {

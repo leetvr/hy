@@ -34,18 +34,21 @@ pub enum ClientPacket {
 
 // Packets from the server to the client
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-/// Update a player's position
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Update a player's state
 pub struct UpdatePlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
+    // Included if the animation state has changed
+    pub animation_state: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// Send a new player to the game
 pub struct AddPlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
+    pub animation_state: String,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -58,7 +61,7 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
-    pub entities: HashMap<EntityID, EntityData>,
+    pub entities: HashMap<String, EntityData>,
     pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
@@ -71,7 +74,7 @@ pub struct Reset {
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct SetBlock {
     pub position: BlockPos,
-    pub block_id: blocks::BlockId,
+    pub block_id: blocks::BlockTypeID,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

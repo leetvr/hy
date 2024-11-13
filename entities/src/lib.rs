@@ -4,7 +4,7 @@ use {
     wasm_bindgen::prelude::wasm_bindgen,
 };
 pub type EntityTypeID = u8;
-pub type EntityID = u64;
+pub type EntityID = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EntityData {
@@ -56,8 +56,8 @@ impl EntityTypeRegistry {
 }
 
 impl EntityTypeRegistry {
-    pub fn get(&self, entity_id: EntityID) -> Option<&EntityType> {
-        let index = entity_id as usize - 1;
+    pub fn get(&self, entity_type_id: EntityTypeID) -> Option<&EntityType> {
+        let index = entity_type_id as usize - 1;
         self.entity_types.get(index)
     }
 
@@ -67,14 +67,14 @@ impl EntityTypeRegistry {
 
     #[cfg(not(target_arch = "wasm32"))]
     // The client should *never* be able to mutate the entity registry.
-    pub fn insert(&mut self, entity_type: EntityType) -> EntityID {
+    pub fn insert(&mut self, entity_type: EntityType) -> EntityTypeID {
         self.entity_types.push(entity_type);
 
         // note(KMRW):
         // We check the length of `entity_types` *after* we insert the entity to avoid having to
         // store an empty entity.
         // This may be a dumb idea.
-        let entity_id = self.entity_types.len() as EntityID;
+        let entity_id = self.entity_types.len() as EntityTypeID;
 
         entity_id
     }

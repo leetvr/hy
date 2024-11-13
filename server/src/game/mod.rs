@@ -21,8 +21,9 @@ use {
         path::{Path, PathBuf},
         sync::Arc,
     },
-    world::World,
 };
+
+pub use world::World;
 
 const WORLD_SIZE: i32 = 32;
 
@@ -45,7 +46,7 @@ impl GameServer {
 
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
-        let js_context = JSContext::new(&script_root, &world.entity_type_registry)
+        let js_context = JSContext::new(&script_root, world.clone())
             .await
             .expect("Failed to load JS Context");
 
@@ -212,6 +213,8 @@ struct Player {
 pub struct PlayerState {
     position: glam::Vec3,
     velocity: glam::Vec3,
+    #[serde(rename = "animationState")]
+    animation_state: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

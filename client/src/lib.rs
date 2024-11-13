@@ -1,29 +1,32 @@
-use {net_types::ServerPacket, std::collections::HashMap};
-
 use {
-    crate::{assets::Assets, camera::FlyCamera},
-    blocks::BlockRegistry,
-    dolly::prelude::YawPitch,
-    glam::EulerRot,
-    image::GenericImageView,
-    std::collections::HashSet,
-    web_sys::MouseEvent,
-};
-
-use {
-    crate::{socket::ConnectionState, transform::Transform},
+    crate::{
+        assets::Assets, camera::FlyCamera, gltf::GLTFModel, socket::ConnectionState,
+        transform::Transform,
+    },
     anyhow::Result,
-    glam::{Quat, Vec2, Vec3},
-    std::{cell::RefCell, rc::Rc, slice, time::Duration},
-    web_sys::WebSocket,
+    blocks::BlockTypeID,
+    dolly::prelude::YawPitch,
+    glam::{EulerRot, Quat, Vec2, Vec3},
+    image::GenericImageView,
+    net_types::ServerPacket,
+    std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+        rc::Rc,
+        slice,
+        time::Duration,
+    },
+    web_sys::{MouseEvent, WebSocket},
 };
 
 // Re-exports
 pub use blocks::BlockPos;
 
+use blocks::BlockType;
 use game_state::GameState;
 use glam::UVec2;
 use net_types::ClientPacket;
+use render::{Renderer, Texture};
 use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -65,10 +68,8 @@ pub struct Engine {
     player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
-    // Textures by path
-    // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
-    // and vacant for a texture that is still loading
-    block_textures: Option<Vec<[render::Texture; 6]>>,
+    // Textures by block type ID
+    block_textures: HashMap<BlockTypeID, [render::Texture; 6]>,
 
     // Entity models by path
     entity_models: HashMap<String, LoadedGLTF>,
@@ -120,7 +121,7 @@ impl Engine {
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
-            block_textures: None,
+            block_textures: Default::default(),
             entity_models: Default::default(),
 
             renderer,
@@ -220,21 +221,17 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
-        // Maintain assets, loading pending assets from remote requests
-        self.assets.maintain();
-
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
-                if self.incoming_messages.borrow().is_empty() {
-                    break;
-                }
                 // Incoming messages are stored by their sequence number
-                let packet = self
+                let Some(packet) = self
                     .incoming_messages
                     .borrow_mut()
                     .remove(&self.last_seen_sequence_number)
-                    .expect("Messages are out of order!");
+                else {
+                    break;
+                };
 
                 // Increment our sequence number
                 self.last_seen_sequence_number += 1;
@@ -298,8 +295,12 @@ impl Engine {
                                 .expect("Failed to set block");
                         }
                         ServerPacket::AddPlayer(add_player) => {
-                            packet_handlers::handle_add_player(players, add_player)
-                                .expect("Failed to add player");
+                            packet_handlers::handle_add_player(
+                                players,
+                                &self.player_model.gltf,
+                                add_player,
+                            )
+                            .expect("Failed to add player");
                         }
                         ServerPacket::UpdatePlayer(update_position) => {
                             packet_handlers::handle_update_position(players, update_position);
@@ -338,6 +339,8 @@ impl Engine {
                 }
             }
         }
+
+        self.load_block_textures();
 
         // Check for errors
         match &*self.connection_state.borrow() {
@@ -477,6 +480,12 @@ impl Engine {
             Vec3::new(0.0, 3.0, 10.0),
         ));
 
+        if let GameState::Playing { players, .. } = &mut self.state {
+            for player in players.values_mut() {
+                gltf::animate_model(&mut player.model, self.delta_time);
+            }
+        }
+
         self.update_audio_manager();
 
         self.render();
@@ -523,9 +532,31 @@ impl Engine {
 
         tracing::debug!("Setting block at {position:?} to {block_id}");
 
+        // cheeky: We pretend we received a `set_block` packet
         packet_handlers::handle_set_block(blocks, set_block).expect("place block");
 
         self.send_packet(ClientPacket::SetBlock(set_block));
+    }
+
+    fn load_block_textures(&mut self) {
+        let block_registry = match &self.state {
+            GameState::Loading => return,
+            GameState::Playing { block_registry, .. }
+            | GameState::Editing { block_registry, .. } => block_registry,
+        };
+
+        let block_textures = &mut self.block_textures;
+
+        for (block_type_id, block_type) in block_registry.iter().enumerate() {
+            let block_type_id = block_type_id as BlockTypeID + 1;
+            load_textures_for_block(
+                block_type,
+                block_type_id,
+                &self.assets,
+                &mut self.renderer,
+                block_textures,
+            );
+        }
     }
 
     fn render(&mut self) {
@@ -535,52 +566,44 @@ impl Engine {
         // Gather blocks and entities
         match &self.state {
             GameState::Playing {
-                blocks,
-                block_registry,
-                entities,
-                ..
+                blocks, entities, ..
             }
             | GameState::Editing {
-                blocks,
-                block_registry,
-                entities,
-                ..
+                blocks, entities, ..
             } => {
-                if self.block_textures.is_none() {
-                    // Try to collect textures for all block types. If any are missing, just wait for all of them to arrive.
-                    self.block_textures =
-                        collect_block_textures(block_registry, &self.renderer, &mut self.assets);
-                }
+                // Collect blocks
+                let block_to_remove = match self.state {
+                    GameState::Editing {
+                        target_raycast: Some(ref raycast),
+                        selected_block_id: Some(0),
+                        ..
+                    } => Some(raycast.position),
+                    _ => None,
+                };
 
-                if let Some(block_textures) = &self.block_textures {
-                    let block_to_remove = match self.state {
-                        GameState::Editing {
-                            target_raycast: Some(ref raycast),
-                            selected_block_id: Some(0),
-                            ..
-                        } => Some(raycast.position),
-                        _ => None,
-                    };
-
-                    let blocks_to_render = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
+                let blocks_to_render =
+                    blocks.iter_non_empty().filter_map(|(pos, block_type_id)| {
                         if let Some(ref block_to_remove) = block_to_remove {
                             if *block_to_remove == pos {
                                 return None;
                             }
                         }
 
-                        Some((pos, &block_textures[block_id as usize - 1]))
+                        let textures = self.block_textures.get(&block_type_id)?;
+
+                        Some((pos, textures))
                     });
 
-                    draw_calls.extend(
-                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks_to_render, None)
-                            .into_iter(),
-                    );
+                draw_calls.extend(
+                    render::build_cube_draw_calls(&self.cube_mesh_data, blocks_to_render, None)
+                        .into_iter(),
+                );
 
-                    if let Some(block_to_remove) = block_to_remove {
-                        let block = blocks.get(block_to_remove).copied().unwrap();
-                        if block != 0 {
-                            let blocks = [(block_to_remove, &block_textures[block as usize - 1])];
+                if let Some(block_to_remove) = block_to_remove {
+                    let block_type_id = blocks.get(block_to_remove).copied().unwrap();
+                    if block_type_id != 0 {
+                        if let Some(textures) = self.block_textures.get(&block_type_id) {
+                            let blocks = [(block_to_remove, textures)];
                             draw_calls.extend(
                                 render::build_cube_draw_calls(
                                     &self.cube_mesh_data,
@@ -612,11 +635,18 @@ impl Engine {
         match &self.state {
             // Players
             GameState::Playing { players, .. } => {
+                // HACK: The player model is rotated 90 degrees, also
+                // it rotates the wrong way? I'm just fixing it here but someone
+                // should figure out why it is like this.
+                const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&self.player_model.gltf),
+                        slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new(player.position, Quat::IDENTITY),
+                        Transform::new(
+                            player.position,
+                            Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+                        ),
                     ));
                 }
             }
@@ -626,8 +656,7 @@ impl Engine {
                 selected_block_id: Some(block_id),
                 ..
             } if *block_id != 0 => {
-                if let Some(block_textures) = &self.block_textures {
-                    let textures = &block_textures[*block_id as usize - 1];
+                if let Some(textures) = self.block_textures.get(block_id) {
                     if let Some(block_position) = raycast
                         .position
                         .add_signed(raycast.entrance_face_normal.as_ivec3())
@@ -676,14 +705,14 @@ impl Engine {
             }
 
             // If we don't have the data yet, continue
-            let Some(data) = self.assets.get(model_name) else {
+            let Some(data) = self.assets.get_or_load(model_name) else {
                 continue;
             };
 
             // Load the glTF
             let loaded = {
                 let gltf =
-                    gltf::load(data).unwrap_or_else(|e| panic!("Error loading GLTF: {e:#?}"));
+                    gltf::load(&data).unwrap_or_else(|e| panic!("Error loading GLTF: {e:#?}"));
                 let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
                 LoadedGLTF { gltf, render_model }
             };
@@ -771,6 +800,59 @@ impl Engine {
     }
 }
 
+fn load_textures_for_block(
+    block_type: &BlockType,
+    block_type_id: BlockTypeID,
+    assets: &Assets,
+    renderer: &mut Renderer,
+    block_textures: &mut HashMap<BlockTypeID, [Texture; 6]>,
+) {
+    // If you're loaded already, whatever, trevor.
+    if block_textures.contains_key(&block_type_id) {
+        return;
+    };
+
+    // Collect all the texture data
+    let Some(north) = assets.get(&block_type.north_texture) else {
+        return;
+    };
+
+    let Some(south) = assets.get(&block_type.south_texture) else {
+        return;
+    };
+
+    let Some(east) = assets.get(&block_type.east_texture) else {
+        return;
+    };
+
+    let Some(west) = assets.get(&block_type.west_texture) else {
+        return;
+    };
+
+    let Some(top) = assets.get(&block_type.top_texture) else {
+        return;
+    };
+
+    let Some(bottom) = assets.get(&block_type.bottom_texture) else {
+        return;
+    };
+
+    let textures = [north, south, east, west, top, bottom].map(|image_data| {
+        load_texture_from_image(renderer, &image_data).expect("Failed to load texture")
+    });
+
+    block_textures.insert(block_type_id, textures);
+}
+
+fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow::Result<Texture> {
+    let image = image::load_from_memory(image_data)?;
+    let (width, height) = image.dimensions();
+    let image = image.into_rgba8();
+    let data = image.as_raw();
+
+    Ok(renderer.create_texture_from_image(data, width, height))
+}
+
 #[derive(Clone, Default)]
 struct Controls {
     keyboard_inputs: HashSet<String>,
@@ -787,45 +869,8 @@ struct Controls {
 #[derive(Clone, Debug, Default)]
 struct Player {
     position: Vec3,
-}
-
-fn collect_block_textures(
-    block_registry: &BlockRegistry,
-    renderer: &render::Renderer,
-    assets: &mut Assets,
-) -> Option<Vec<[render::Texture; 6]>> {
-    block_registry
-        .iter()
-        .map(|block_type| {
-            let load_image = |data: &Vec<u8>| match image::load_from_memory(data) {
-                Ok(img) => {
-                    let (width, height) = img.dimensions();
-                    let data = img.as_rgba8()?.as_raw();
-                    tracing::info!(
-                        "Loaded image for block {}: {width}x{height}",
-                        block_type.name
-                    );
-                    Some(renderer.create_texture_from_image(data, width, height))
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load image: {e}");
-                    None
-                }
-            };
-
-            let top = assets.get(&block_type.top_texture).and_then(load_image)?;
-            let bottom = assets
-                .get(&block_type.bottom_texture)
-                .and_then(load_image)?;
-            let east = assets.get(&block_type.east_texture).and_then(load_image)?;
-            let west = assets.get(&block_type.west_texture).and_then(load_image)?;
-            let north = assets.get(&block_type.north_texture).and_then(load_image)?;
-            let south = assets.get(&block_type.south_texture).and_then(load_image)?;
-
-            // TODO(ll): I just threw these in here, I don't know that they are in the right order
-            Some([north, south, east, west, top, bottom])
-        })
-        .collect::<Option<Vec<_>>>()
+    facing_angle: f32, // radians
+    model: GLTFModel,
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;
@@ -852,7 +897,7 @@ fn spawn_debug_sound_on_left_click(engine: &mut Engine, sound_id: &str) {
                         pos.y as f32,
                         pos.z as f32,
                         false,
-                        true,
+                        false,
                     ) {
                         tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
                     }
