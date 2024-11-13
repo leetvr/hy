@@ -35,22 +35,21 @@ export const update = (playerID, currentState, controls, collisions) => {
     }
     // Ground detection
     const isOnGround = hy.isPlayerOnGround(playerID);
-    // Handle jumping
-    if (controls.jump && isOnGround) {
-        newVelocity[1] = JUMP_SPEED;
-        newAnimationState = "jump_pre";
+    // Handle jumping, falling
+    if (!isOnGround) {
+        newVelocity[1] += GRAVITY * DT;
+    }
+    else if (controls.jump) {
+        newVelocity[1] += JUMP_SPEED * DT;
+    }
+    else {
+        newVelocity[1] = 0;
     }
     // Apply gravity to vertical velocity
-    newVelocity[1] += GRAVITY * DT;
     // Update position based on velocity and delta time
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;
     newPosition[2] += newVelocity[2] * DT;
-    // Simple collision detection with the ground
-    if (isOnGround) {
-        newPosition[1] = 1; // Make sure we're on the ground
-        newVelocity[1] = 0; // Make sure we're no longer falling
-    }
     return {
         position: newPosition,
         velocity: newVelocity,

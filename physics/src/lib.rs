@@ -35,7 +35,7 @@ pub struct PhysicsWorld {
     colliders: ColliderSet,
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
-    player_handles: HashMap<u64, RigidBodyHandle>,
+    pub player_handles: HashMap<u64, RigidBodyHandle>,
 }
 
 impl PhysicsWorld {
@@ -275,17 +275,21 @@ impl PhysicsWorld {
         let mut options = ShapeCastOptions::default();
         options.target_distance = ground_check_distance;
 
-        self.query_pipeline
-            .cast_shape(
-                &self.bodies,
-                &self.colliders,
-                &current_position,
-                &down_direction,
-                shape,
-                options,
-                QueryFilter::default(),
-            )
-            .is_some()
+        if let Some((collided, shape_cast_hit)) = self.query_pipeline.cast_shape(
+            &self.bodies,
+            &self.colliders,
+            &current_position,
+            &down_direction,
+            shape,
+            options,
+            QueryFilter::default(),
+        ) {
+            tracing::debug!("Player is on ground: {collided:?}, {shape_cast_hit:?}");
+            true
+        } else {
+            tracing::debug!("Player is not on the ground: {current_position:?}");
+            false
+        }
     }
 }
 

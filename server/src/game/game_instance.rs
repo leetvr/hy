@@ -75,14 +75,18 @@ impl GameInstance {
         let mut game_instance = GameInstance::new(world.clone());
 
         let world = world.lock().expect("DEADLOCK!!");
-        let mut physics_world = physics_world.lock().expect("Deadlock");
 
         {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            // Rebuild the terrain
             bake_terrain_colliders(
                 &mut physics_world,
                 &world.blocks,
                 &mut game_instance.colliders,
             );
+
+            // Remove any old player handles
+            physics_world.player_handles.clear();
         }
 
         // IMPORTANT: We need the client to forget any previous world state
@@ -91,14 +95,17 @@ impl GameInstance {
         // Create a player for the editor client
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
-        game_instance.players.insert(
-            new_player_id,
-            Player::new(
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            game_instance.players.insert(
                 new_player_id,
-                &mut physics_world,
-                game_instance.player_spawn_point,
-            ),
-        );
+                Player::new(
+                    new_player_id,
+                    &mut physics_world,
+                    game_instance.player_spawn_point,
+                ),
+            );
+        }
 
         // Set the player ID on the editor client
         editor_client.player_id = new_player_id;
@@ -117,9 +124,8 @@ impl GameInstance {
             )
             .await;
 
-        // Release the lock on physics_world
-        drop(physics_world);
-
+        // Make sure that the newly created game instance points to the existing physics world
+        game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
