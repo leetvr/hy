@@ -301,7 +301,10 @@ pub struct PhysicsBody {
 impl Drop for PhysicsBody {
     fn drop(&mut self) {
         if !self.removed {
-            tracing::warn!("PhysicsBody dropped without being removed from the physics world");
+            let backtrace = std::backtrace::Backtrace::capture();
+            tracing::warn!(
+                "PhysicsBody dropped without being removed from the physics world: {backtrace}"
+            );
         }
     }
 }

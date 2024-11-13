@@ -31,9 +31,9 @@ pub struct GameInstance {
     pub clients: HashMap<ClientId, Client>,
 
     pub physics_world: Arc<Mutex<PhysicsWorld>>,
-    colliders: Vec<PhysicsCollider>,
+    pub colliders: Vec<PhysicsCollider>,
     next_player_id: u64,
-    players: HashMap<PlayerId, Player>,
+    pub players: HashMap<PlayerId, Player>,
     player_spawn_point: glam::Vec3,
 }
 

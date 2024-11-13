@@ -143,6 +143,21 @@ impl ServerState {
                     *world.lock().expect("Deadlock!") =
                         World::load(storage_dir).expect("couldn't load world");
 
+                    {
+                        let mut physics_world =
+                            game_instance.physics_world.lock().expect("Deadlock!");
+
+                        // Clean up the old player handles
+                        for (_, player) in game_instance.players.drain() {
+                            physics_world.remove_body(player.body);
+                        }
+
+                        // Clean up old colliders
+                        for collider in game_instance.colliders.drain(..) {
+                            physics_world.remove_collider(collider);
+                        }
+                    }
+
                     let editor_instance = EditorInstance::from_transition(
                         world,
                         editor_client,
@@ -168,6 +183,21 @@ impl ServerState {
                     let world = game_instance.world;
                     *world.lock().expect("Deadlock!") =
                         World::load(storage_dir).expect("couldn't load world");
+
+                    {
+                        let mut physics_world =
+                            game_instance.physics_world.lock().expect("Deadlock!");
+
+                        // Clean up the old player handles
+                        for (_, player) in game_instance.players.drain() {
+                            physics_world.remove_body(player.body);
+                        }
+
+                        // Clean up old colliders
+                        for collider in game_instance.colliders.drain(..) {
+                            physics_world.remove_collider(collider);
+                        }
+                    }
 
                     let editor_instance = EditorInstance::from_transition(
                         world,
