@@ -20,6 +20,7 @@ pub struct EntityType {
     id: EntityTypeID,
     name: String,
     script_path: String,
+    default_model_path: String,
 }
 
 impl EntityType {
