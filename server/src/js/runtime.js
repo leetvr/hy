@@ -18,4 +18,10 @@ globalThis.hy = {
   getEntities: () => {
     return core.ops.get_entities();
   },
+  spawnEntity: (entity_type_id, position) => {
+    return core.ops.spawn_entity(entity_type_id, position);
+  },
+  despawnEntity: (entity_id) => {
+    return core.ops.despawn_entity(entity_id);
+  }
 };
