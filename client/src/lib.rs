@@ -507,8 +507,10 @@ impl Engine {
         let GameState::Editing {
             target_raycast: Some(ref target_raycast),
             selected_entity_type_id: Some(entity_type_id),
+            entities,
+            entity_type_registry,
             ..
-        } = self.state
+        } = &mut self.state
         else {
             return;
         };
@@ -532,19 +534,28 @@ impl Engine {
         };
 
         // Idk how to make an entity_id
-        let entity_id = nanorand::tls_rng().generate::<u64>();
+        let entity_type_id = *entity_type_id;
+        let entity_type = entity_type_registry
+            .get(entity_type_id)
+            .expect("Entity type ID does not exist - this should be impossible");
+
+        let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+
+        let entity_data = entities::EntityData {
+            name: "Jeff".into(),
+            entity_type: entity_type_id,
+            model_path: entity_type.default_model_path().to_owned(),
+            state: entities::EntityState {
+                position: position.into(),
+                velocity: Vec3::ZERO,
+            },
+        };
+
+        entities.insert(entity_id.clone(), entity_data.clone());
 
         let add_entity = net_types::AddEntity {
-            entity_id: format!("{entity_id:x}"),
-            entity_data: entities::EntityData {
-                name: "Jeff".into(),
-                entity_type: entity_type_id,
-                model_path: "kibble_ctf/test_entity.gltf".into(),
-                state: entities::EntityState {
-                    position: position.into(),
-                    velocity: Vec3::ZERO,
-                },
-            },
+            entity_id,
+            entity_data,
         };
 
         tracing::debug!("Setting entity at {position:?} to {entity_type_id}");

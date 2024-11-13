@@ -17,7 +17,7 @@ pub struct EntityData {
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Tsify)]
 pub struct EntityType {
-    id: EntityTypeID,
+    pub id: EntityTypeID,
     name: String,
     script_path: String,
     default_model_path: String,
@@ -31,11 +31,13 @@ impl EntityType {
     pub fn name(&self) -> String {
         self.name.clone()
     }
-}
 
-impl EntityType {
     pub fn script_path(&self) -> &str {
         &self.script_path
+    }
+
+    pub fn default_model_path(&self) -> &str {
+        &self.default_model_path
     }
 }
 
@@ -58,8 +60,7 @@ impl EntityTypeRegistry {
 
 impl EntityTypeRegistry {
     pub fn get(&self, entity_type_id: EntityTypeID) -> Option<&EntityType> {
-        let index = entity_type_id as usize - 1;
-        self.entity_types.get(index)
+        self.entity_types.get(entity_type_id as usize)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &EntityType> {
@@ -69,14 +70,9 @@ impl EntityTypeRegistry {
     #[cfg(not(target_arch = "wasm32"))]
     // The client should *never* be able to mutate the entity registry.
     pub fn insert(&mut self, entity_type: EntityType) -> EntityTypeID {
+        let entity_type_id = self.entity_types.len() as EntityTypeID;
         self.entity_types.push(entity_type);
 
-        // note(KMRW):
-        // We check the length of `entity_types` *after* we insert the entity to avoid having to
-        // store an empty entity.
-        // This may be a dumb idea.
-        let entity_id = self.entity_types.len() as EntityTypeID;
-
-        entity_id
+        entity_type_id
     }
 }
