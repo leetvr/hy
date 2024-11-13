@@ -350,8 +350,12 @@ impl Engine {
             _ => {}
         }
 
-        // Debug: Spawn sounds when left click block
-        spawn_debug_sound_on_left_click(self, "pain");
+        if self.is_audio_manager_debug() {
+            // Test: Spawn hurt at position with left click
+            spawn_test_sound_at_pos_on_left_click(self, "pain");
+            // Test: Spawn "kane" at entity with right click
+            spawn_sound_at_kane_face(self, "kane");
+        }
 
         // Send packets
         match &mut self.state {
@@ -736,6 +740,47 @@ impl Engine {
         self.audio_manager.load_sound_from_url(url).await
     }
 
+    /// Plays a sound associated with a specific entity.
+    ///
+    /// ## Parameters:
+    ///
+    /// * `sound_id` - the name of the sound to play
+    /// * `entity_id` - The identifier of the entity to associate the sound with.
+    /// * TODO - remaining params
+    pub fn play_sound_at_entity(
+        &mut self,
+        sound_id: &str,
+        entity_id: entities::EntityID,
+        // is_ambient: bool,
+        is_looping: bool,
+    ) -> Result<(), JsValue> {
+        // Retrieve the entity's current position
+        let position = self
+            .get_entity_sound_pos(entity_id.clone())
+            .ok_or_else(|| {
+                let error_msg = format!("Entity ID {} not found", entity_id);
+                web_sys::console::error_1(&error_msg.clone().into());
+                JsValue::from_str(&error_msg)
+            })?;
+
+        // Play the sound at the entity's position
+        self.audio_manager
+            .spawn_sound(sound_id, Some(entity_id), Some(position), false, is_looping)
+    }
+
+    fn get_entity_sound_pos(&self, entity_id: entities::EntityID) -> Option<audio::SoundPosition> {
+        match &self.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities
+                .get(&entity_id)
+                .map(|entity_data| audio::SoundPosition {
+                    x: entity_data.state.position.x,
+                    y: entity_data.state.position.y,
+                    z: entity_data.state.position.z,
+                }),
+            GameState::Loading => None,
+        }
+    }
+
     pub fn play_sound(
         &mut self,
         sound_id: &str,
@@ -775,7 +820,7 @@ impl Engine {
     }
 
     // TODO delete or rename
-    pub fn update_sound_positions(&mut self, move_panner_opt: Option<f32>) {
+    pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
         self.audio_manager.move_all_panner_nodes(move_panner_opt);
     }
 
@@ -880,29 +925,47 @@ const CAMERA_DISTANCE: f32 = 15.0;
 const CAMERA_HEIGHT: f32 = 2.0;
 
 // Will fail if the sound hasn't been loaded
-fn spawn_debug_sound_on_left_click(engine: &mut Engine, sound_id: &str) {
-    if engine.is_audio_manager_debug() {
-        if let GameState::Editing {
-            // blocks,
-            target_raycast,
-            ..
-        } = &mut engine.state
-        {
-            if engine.controls.mouse_left {
-                if let Some(ray_hit) = target_raycast {
-                    let pos = ray_hit.position;
-                    if let Err(_) = engine.play_sound_at_pos(
-                        sound_id,
-                        pos.x as f32,
-                        pos.y as f32,
-                        pos.z as f32,
-                        false,
-                        false,
-                    ) {
-                        tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
-                    }
+pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str) {
+    if let GameState::Editing { target_raycast, .. } = &mut engine.state {
+        if engine.controls.mouse_left {
+            if let Some(ray_hit) = target_raycast {
+                let pos = ray_hit.position;
+                if let Err(_) = engine.play_sound_at_pos(
+                    sound_id,
+                    pos.x as f32,
+                    pos.y as f32,
+                    pos.z as f32,
+                    false,
+                    false,
+                ) {
+                    tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
                 }
             }
         }
+    }
+}
+
+pub fn spawn_sound_at_kane_face(engine: &mut Engine, sound_id: &str) {
+    // Early exit if the game state is Loading or if debug is off and the right mouse button is not pressed.
+    if matches!(engine.state, GameState::Loading) || !engine.controls.mouse_right {
+        return;
+    }
+
+    let entity_id = "0".to_string();
+    let is_looping = true;
+
+    // Attempt to play the sound at the specified entity; log the result.
+    match engine.play_sound_at_entity(sound_id, entity_id.clone(), is_looping) {
+        Ok(_) => tracing::debug!(
+            "Successfully played sound '{}' at EntityID '{}'",
+            sound_id,
+            entity_id
+        ),
+        Err(e) => tracing::debug!(
+            "Failed to play sound '{}' at EntityID '{}': {:?}",
+            sound_id,
+            entity_id,
+            e
+        ),
     }
 }

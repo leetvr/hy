@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use entities::EntityID;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 #[allow(unused)]
@@ -12,6 +13,7 @@ use web_sys::{js_sys::Uint8Array, DistanceModelType, PanningModelType};
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
 const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
+const KANE_CLOMP: &[u8] = include_bytes!("../../assets/kane.wav");
 
 #[wasm_bindgen]
 pub struct AudioManager {
@@ -44,8 +46,9 @@ impl AudioManager {
 
     // Use this to preload our sounds
     pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
-        // self.load_sound_from_id("footsteps").await?;
         self.load_sound_from_id("pain").await?;
+        self.load_sound_from_id("kane").await?;
+        // self.load_sound_from_id("footsteps").await?;
         // self.load_sound_from_id("step_gravel").await?;
         // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
         //     .await?;
@@ -68,6 +71,7 @@ impl AudioManager {
             "footsteps" => FOOTSTEPS_OGG,
             "pain" => PAIN_WAV,
             "step_gravel" => STEP_GRAVEL_WAV,
+            "kane" => KANE_CLOMP,
             _ => {
                 web_sys::console::error_1(&format!("Unknown sound ID:{}", sound_id).into());
                 return Err(JsValue::from_str(&format!(
@@ -112,16 +116,19 @@ impl AudioManager {
     /// Attempt to create and play a sound
     ///
     /// TODO pass in parameters used to configure SoundInstance: [volume, distortion, panning, is_looping, playback_speed]
+    /// TODO Should we be gracefully handling errors for methods exposed to user?
     ///
-    /// Parameters:
-    ///  - sound_id: the name of the sound to play from `sounds_bank`
-    ///  - maybe_position: Optional position of the sound (Otherwise will default to origin)
-    ///  - entity_id: Optional EntityID of the Hytopia entity used to dynamically update sound position
-    ///  - is_ambient: If set, spatialisation will be disabled so the sound will have constant volume from anywhere
+    /// ## Parameters:
+    ///
+    /// `sound_id` - the name of the sound to play from `sounds_bank`
+    /// `maybe_position` - Optional position of the sound (Otherwise will default to origin)
+    /// `entity_id` - Optional EntityID of the Hytopia entity used to dynamically update sound position
+    /// `is_ambient` - If set, spatialisation will be disabled so the sound will have constant volume from anywhere
+    /// `is_looping` - Loop the track
     pub fn spawn_sound(
         &mut self,
         sound_id: &str,
-        entity_id: Option<u64>,
+        entity_id: Option<EntityID>,
         maybe_position: Option<SoundPosition>,
         is_ambient: bool,
         is_looping: bool,
@@ -143,15 +150,18 @@ impl AudioManager {
             return Err(JsValue::from_str("Unable to create sound_instance"));
         };
 
-        // Generate a unique handle
-        let handle = self.next_sound_handle;
-        self.next_sound_handle += 1;
-
         if let Some(pos) = maybe_position {
             sound_instance.set_position(pos.x, pos.y, pos.z);
         }
 
-        sound_instance.start();
+        if let Err(e) = sound_instance.start() {
+            web_sys::console::error_1(&"Failed to start sound instance".into());
+            return Err(e);
+        }
+
+        // Generate a unique handle
+        let handle = self.next_sound_handle;
+        self.next_sound_handle += 1;
 
         // Insert into active_sounds
         self.active_sounds.insert(handle, sound_instance);
@@ -273,7 +283,7 @@ impl SoundPosition {
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
     panner_node: PannerNode,
-    entity_id: Option<u64>, // Associated entity ID, if any
+    entity_id: Option<EntityID>, // Associated entity ID, if any
 }
 
 impl SoundInstance {
@@ -282,7 +292,7 @@ impl SoundInstance {
         audio_buffer: &AudioBuffer,
         gain_node: &GainNode,
         // TODO: Check if this should be hecs::Entity
-        entity_id: Option<u64>,
+        entity_id: Option<EntityID>,
         is_ambient: bool,
         is_looping: bool,
         // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....

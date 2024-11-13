@@ -66,8 +66,8 @@ export function DebugAudioManager({engine}: {engine: Engine}) {
         <div style={{ color: 'black', marginTop: '8px' }}>
           Pan all sounds along the X axis
         </div>
-        <button onClick={() => engine.update_sound_positions(-5.0)}>Pan Left</button>
-        <button onClick={() => engine.update_sound_positions(5.0)}>Pan Right</button>
+        <button onClick={() => engine.move_all_panner_nodes(-5.0)}>Pan Left</button>
+        <button onClick={() => engine.move_all_panner_nodes(5.0)}>Pan Right</button>
     </div>
     <div>
       <button onClick={handleStopAllSounds}>
