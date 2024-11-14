@@ -354,7 +354,7 @@ impl PhysicsWorld {
         let safe_movement = movement_normalized * adjusted_distance;
 
         // Sliding
-        let slide_plane_normal = *hit.normal1;
+        let slide_plane_normal = -*hit.normal2;
         let remaining_movement = movement - safe_movement;
         let dot_product = remaining_movement.dot(&slide_plane_normal);
         let projection_onto_normal = slide_plane_normal * dot_product;
