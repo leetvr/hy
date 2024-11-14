@@ -20,7 +20,10 @@ use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::{gltf::GLTFPrimitive, transform::Transform};
+use crate::{
+    gltf::{GLTFPrimitive, TransparencyType},
+    transform::Transform,
+};
 
 const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
@@ -33,6 +36,7 @@ pub struct Renderer {
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
     tint_location: Option<glow::UniformLocation>,
+    depth_cutoff_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
     resolution: UVec2,
@@ -59,6 +63,7 @@ impl Renderer {
         let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
         let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
         let tint_location = unsafe { gl.get_uniform_location(program, "tint") };
+        let depth_cutoff_location = unsafe { gl.get_uniform_location(program, "depthCutoff") };
 
         unsafe { gl.uniform_1_i32(texture_location.as_ref(), 0) };
 
@@ -73,6 +78,7 @@ impl Renderer {
             program,
             matrix_location,
             tint_location,
+            depth_cutoff_location,
             camera,
             resolution: UVec2::new(640, 480),
             grid_renderer,
@@ -88,7 +94,8 @@ impl Renderer {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
-            self.gl.enable(glow::BLEND);
+            let mut blend_state = EnableState::new(&self.gl, glow::BLEND, true);
+            self.gl.enable(glow::DEPTH_TEST);
             self.gl.blend_func_separate(
                 glow::SRC_ALPHA,
                 glow::ONE_MINUS_SRC_ALPHA,
@@ -99,7 +106,6 @@ impl Renderer {
             self.gl
                 .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
 
-            self.gl.enable(glow::DEPTH_TEST);
             self.gl.enable(glow::CULL_FACE);
             self.gl.cull_face(glow::BACK);
 
@@ -118,6 +124,10 @@ impl Renderer {
             self.gl.use_program(Some(self.program));
 
             for draw_call in draw_calls {
+                let blending = draw_call.primitive.transparency_type.requires_blending();
+                blend_state.set(&self.gl, blending);
+                self.gl.depth_mask(!blending);
+
                 let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
 
                 // Set matrix
@@ -138,6 +148,11 @@ impl Renderer {
                 let tint = draw_call.tint.unwrap_or(glam::Vec4::ONE);
                 self.gl
                     .uniform_4_f32_slice(self.tint_location.as_ref(), tint.as_ref());
+
+                // Set depth cutoff
+                let depth_cutoff = draw_call.primitive.transparency_type.cutoff_value();
+                self.gl
+                    .uniform_1_f32(self.depth_cutoff_location.as_ref(), depth_cutoff);
 
                 self.gl.bind_vertex_array(Some(draw_call.primitive.vao));
 
@@ -173,6 +188,38 @@ impl Renderer {
             Filtering::Nearest,
             WrapMode::Clamp,
         )
+    }
+}
+
+// CRIME(cw): This isn't really a crime but minecraft has this exact class and I feel nasty.
+struct EnableState {
+    kind: u32,
+    enabled: bool,
+}
+
+impl EnableState {
+    fn new(gl: &glow::Context, kind: u32, enabled: bool) -> Self {
+        unsafe {
+            if enabled {
+                gl.enable(kind);
+            } else {
+                gl.disable(kind);
+            }
+        }
+        Self { kind, enabled }
+    }
+
+    fn set(&mut self, gl: &glow::Context, enabled: bool) {
+        if self.enabled != enabled {
+            unsafe {
+                if enabled {
+                    gl.enable(self.kind);
+                } else {
+                    gl.disable(self.kind);
+                }
+            }
+            self.enabled = enabled;
+        }
     }
 }
 
@@ -235,6 +282,7 @@ fn compile_shaders(
 pub struct RenderPrimitive {
     vao: glow::VertexArray,
     diffuse_texture: Texture,
+    transparency_type: TransparencyType,
     index_start: u32,
     index_count: u32,
 }
@@ -316,6 +364,7 @@ impl RenderPrimitive {
             Self {
                 vao,
                 diffuse_texture,
+                transparency_type: primitive.material.transparency_type,
                 index_start: 0,
                 index_count: primitive.indices.len() as u32,
             }
@@ -526,7 +575,8 @@ impl Texture {
 
 pub fn build_cube_draw_calls<'a>(
     vao: &CubeVao,
-    blocks: impl Iterator<Item = (BlockPos, &'a [Texture; 6])>,
+    blocks: impl IntoIterator<Item = (BlockPos, &'a [Texture; 6])>,
+    transparency_type: TransparencyType,
     tint: Option<glam::Vec4>,
 ) -> Vec<DrawCall> {
     let mut draw_calls = Vec::new();
@@ -541,6 +591,7 @@ pub fn build_cube_draw_calls<'a>(
                 primitive: RenderPrimitive {
                     vao: vao.vao,
                     diffuse_texture: (*texture).clone(),
+                    transparency_type,
                     index_start: base_index as u32,
                     index_count: 6,
                 },
