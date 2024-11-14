@@ -3,6 +3,23 @@ use {
     tsify::Tsify,
     wasm_bindgen::prelude::wasm_bindgen,
 };
+
+// THis is only in the entities crate instead of the net-types crate because I need the PlayerId
+// here and net-types depends on the entities crate. But it is my dream that players will one
+// day also be entities. 🙏
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PlayerId(u64);
+
+impl PlayerId {
+    pub fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
+
 pub type EntityTypeID = u8;
 pub type EntityID = String;
 
@@ -43,9 +60,33 @@ impl EntityType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum EntityPosition {
+    Absolute(glam::Vec3),
+    Anchored {
+        player_id: PlayerId,
+        parent_anchor: String,
+        translation: glam::Vec3,
+        rotation: glam::Quat,
+    },
+}
+
+impl Default for EntityPosition {
+    fn default() -> Self {
+        EntityPosition::Absolute(glam::Vec3::ZERO)
+    }
+}
+
+impl From<glam::Vec3> for EntityPosition {
+    fn from(vec: glam::Vec3) -> Self {
+        EntityPosition::Absolute(vec)
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EntityState {
-    pub position: glam::Vec3,
+    pub position: EntityPosition,
     pub velocity: glam::Vec3,
+    pub interacted: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

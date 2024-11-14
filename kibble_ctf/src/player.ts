@@ -16,6 +16,11 @@ export const update: PlayerUpdate = (
   let newVelocity: Vec3 = [...velocity];
   let newAnimationState: string = animationState;
 
+  if (controls.jump) {
+    let cubeHat = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeHat, playerID, "head_anchor", [0, 1.0, 0], [0, 0, 0]);
+  }
+
   // Handle horizontal movement
   const inputX = controls.move_direction[0];
   const inputZ = controls.move_direction[1];

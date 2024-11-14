@@ -1,15 +1,12 @@
 use {
     crate::gltf::GLTFModel,
-    anyhow::bail,
-    entities::{EntityData, EntityID},
+    anyhow::{bail, Result},
+    blocks::BlockGrid,
+    entities::{EntityData, EntityID, PlayerId},
     glam::Vec3Swizzles,
     net_types::{AddEntity, RemoveEntity, UpdateEntity},
     std::collections::HashMap,
 };
-
-use anyhow::Result;
-use blocks::BlockGrid;
-use net_types::PlayerId;
 
 use crate::Player;
 // Handlers for incoming packets
@@ -102,7 +99,7 @@ pub(crate) fn handle_update_entity(
         bail!("Received update entity for unknown entity {entity_id:?}");
     };
 
-    entity.state.position = position;
+    entity.state.position = position.into();
 
     Ok(())
 }

@@ -1,11 +1,14 @@
-use anyhow::bail;
-use deno_core::{error::AnyError, extension, op2, OpState};
-use entities::{EntityData, EntityID, EntityState};
+use entities::{EntityData, EntityID, EntityState, PlayerId};
 use nanorand::Rng;
 use physics::PhysicsWorld;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+};
+use {anyhow::bail, entities::EntityPosition};
+use {
+    deno_core::{error::AnyError, extension, op2, OpState},
+    glam::EulerRot,
 };
 
 use crate::game::World;
@@ -64,8 +67,8 @@ fn spawn_entity(
         entity_type: entity_type.id,
         model_path: entity_type.default_model_path().into(),
         state: EntityState {
-            position,
-            velocity: Default::default(),
+            position: position.into(),
+            ..Default::default()
         },
     };
 
@@ -80,6 +83,32 @@ fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
     let mut world = shared_state.lock().unwrap();
 
     world.despawn_entity(entity_id);
+}
+
+#[op2]
+#[serde]
+fn anchor_entity(
+    state: &mut OpState,
+    #[string] entity_id: String,
+    #[bigint] player_id: u64,
+    #[string] anchor_name: String,
+    #[serde] offset: glam::Vec3,
+    #[serde] rotation: glam::Vec3,
+) -> Result<(), AnyError> {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+
+    let Some(entity) = world.entities.get_mut(&entity_id) else {
+        bail!("Entity not found");
+    };
+    entity.state.position = EntityPosition::Anchored {
+        player_id: PlayerId::new(player_id),
+        parent_anchor: anchor_name,
+        translation: offset,
+        rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
+    };
+
+    Ok(())
 }
 
 // Exports the extensions as a variable named `hy`

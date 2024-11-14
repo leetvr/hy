@@ -97,6 +97,7 @@ impl Engine {
             state: EntityState {
                 position: Default::default(),
                 velocity: Default::default(),
+                interacted: Default::default(),
             },
         });
     }

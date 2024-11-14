@@ -7,6 +7,10 @@ export const update = (playerID, currentState, controls, collisions) => {
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
+    if (controls.jump) {
+        let cubeHat = hy.spawnEntity(0, [0, 0, 0]);
+        hy.anchorEntity(cubeHat, playerID, "head_anchor", [0, 1.0, 0], [0, 0, 0]);
+    }
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];

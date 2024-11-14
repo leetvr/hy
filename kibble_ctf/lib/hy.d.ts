@@ -65,6 +65,7 @@ interface GlobalHy {
   spawnEntity: (entity: number, position: Vec3) => String;
   despawnEntity: (entity_id: String) => void;
   checkMovementForCollisions: (playerID: number, movement: Vec3) => Vec3 | null;
+  anchorEntity: (entity_id: String, anchor_id: number, anchor_name: String, offset: Vec3, rotation: Vec3) => void;
 }
 
 declare global {

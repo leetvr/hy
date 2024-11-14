@@ -1,6 +1,9 @@
-use std::{
-    mem,
-    sync::{Arc, Mutex},
+use {
+    entities::PlayerId,
+    std::{
+        mem,
+        sync::{Arc, Mutex},
+    },
 };
 
 use {
@@ -12,7 +15,7 @@ use {
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
 use entities::EntityTypeID;
 use glam::Vec3;
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 use physics::{PhysicsCollider, PhysicsWorld};
 use tokio::sync::mpsc;
 
@@ -415,7 +418,7 @@ async fn sync_entities_to_client(
         client
             .awareness
             .entities
-            .insert(entity_id.clone(), entity.state.position);
+            .insert(entity_id.clone(), entity.state.position.clone());
     }
 
     // Remove old entities from this client
@@ -441,12 +444,12 @@ async fn sync_entities_to_client(
                 .send(
                     net_types::UpdateEntity {
                         entity_id: entity_id.clone(),
-                        position: entity.state.position,
+                        position: entity.state.position.clone(),
                     }
                     .into(),
                 )
                 .await;
-            *known_position = entity.state.position;
+            *known_position = entity.state.position.clone();
         }
     }
 }

@@ -6,6 +6,7 @@ use {
     anyhow::Result,
     blocks::BlockTypeID,
     dolly::prelude::YawPitch,
+    entities::EntityPosition,
     glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
     net_types::ServerPacket,
@@ -437,7 +438,7 @@ impl Engine {
                         return;
                     };
 
-                    preview_entity.state.position = position.into();
+                    preview_entity.state.position = glam::Vec3::from(position).into();
                 }
 
                 if self.controls.mouse_left {
@@ -655,7 +656,7 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
-                        Transform::new(entity.state.position, Quat::IDENTITY),
+                        get_transform(&entity.state.position),
                         None,
                     ));
                 }
@@ -718,7 +719,7 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
-                        Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                        get_transform(&preview_entity.state.position),
                         Some([0.0, 0.5, 1.0, 0.5].into()),
                     ));
                 }
@@ -817,6 +818,18 @@ fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow
     let data = image.as_raw();
 
     Ok(renderer.create_texture_from_image(data, width, height))
+}
+
+fn get_transform(entity_position: &EntityPosition) -> Transform {
+    match entity_position {
+        EntityPosition::Absolute(pos) => Transform::new(*pos, Quat::IDENTITY),
+        EntityPosition::Anchored {
+            player_id,
+            parent_anchor,
+            translation,
+            rotation,
+        } => unimplemented!("no"),
+    }
 }
 
 #[derive(Clone, Default)]

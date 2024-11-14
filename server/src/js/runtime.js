@@ -30,4 +30,7 @@ globalThis.hy = {
   checkMovementForCollisions: (playerID, movement) => {
     return core.ops.check_movement_for_collisions(playerID, movement);
   },
+  anchorEntity: (entity_id, anchor_id, anchor_name, offset, rotation) => {
+    return core.ops.anchor_entity(entity_id, anchor_id, anchor_name, offset, rotation);
+  }
 };

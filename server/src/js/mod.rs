@@ -2,7 +2,7 @@ mod extensions;
 
 use entities::{EntityData, EntityState, EntityTypeID};
 use extensions::hy;
-use net_types::{Controls, PlayerId};
+use net_types::Controls;
 use physics::PhysicsWorld;
 use std::{
     path::PathBuf,
@@ -10,14 +10,26 @@ use std::{
     sync::{Arc, Mutex},
 };
 use {
-    crate::game::PlayerCollision,
+    crate::game::{PlayerCollision, PlayerState, World},
     deno_core::{
-        serde_v8,
+        op2, serde_v8,
         v8::{self},
+        OpState,
     },
+    entities::{EntityID, PlayerId},
+    std::collections::HashMap,
 };
 
-use crate::game::{PlayerState, World};
+#[op2]
+#[serde]
+// NOTE(kmrw: serde is apparently slow but who cares)
+fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
+    // tracing::info!("Get entities called");
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let state = shared_state.lock().unwrap();
+
+    state.entities.clone()
+}
 
 pub struct JSContext {
     runtime: deno_core::JsRuntime,
