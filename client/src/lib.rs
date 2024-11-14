@@ -803,13 +803,18 @@ impl Engine {
         reference_distance: Option<f32>,
     ) -> Result<u32, JsValue> {
         // Retrieve the entity's current position
-        let position = self
-            .get_entity_sound_pos(entity_id.clone())
-            .ok_or_else(|| {
-                let error_msg = format!("Entity ID {} not found", entity_id);
-                web_sys::console::error_1(&error_msg.clone().into());
-                JsValue::from_str(&error_msg)
-            })?;
+        let position = match &self.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities
+                .get(&entity_id)
+                .map(|entity_data| entity_data.state.position),
+            GameState::Loading => None,
+        }
+        .ok_or_else(|| {
+            let error_msg = format!("Entity ID {} not found", entity_id);
+            web_sys::console::error_1(&error_msg.clone().into());
+            JsValue::from_str(&error_msg)
+        })?;
+
         // Play the sound at the entity's position
         self.audio_manager.spawn_sound(
             sound_id,
@@ -820,19 +825,6 @@ impl Engine {
             pitch,
             reference_distance,
         )
-    }
-
-    fn get_entity_sound_pos(&self, entity_id: entities::EntityID) -> Option<audio::SoundPosition> {
-        match &self.state {
-            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities
-                .get(&entity_id)
-                .map(|entity_data| audio::SoundPosition {
-                    x: entity_data.state.position.x,
-                    y: entity_data.state.position.y,
-                    z: entity_data.state.position.z,
-                }),
-            GameState::Loading => None,
-        }
     }
 
     // play an ambient sound (spatialisation disabled). Ambient sounds are not played
@@ -868,7 +860,7 @@ impl Engine {
         pitch: Option<f32>,
         reference_distance: Option<f32>,
     ) -> Result<u32, JsValue> {
-        let sound_position = audio::SoundPosition::new(x, y, z);
+        let sound_position = [x, y, z].into();
         self.audio_manager.spawn_sound(
             sound_id,
             None,

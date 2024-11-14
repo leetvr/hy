@@ -132,7 +132,7 @@ impl AudioManager {
         &mut self,
         sound_id: &str,
         entity_id: Option<EntityID>,
-        maybe_position: Option<SoundPosition>,
+        maybe_position: Option<glam::Vec3>,
         is_ambient: bool,
         is_looping: bool,
         pitch: Option<f32>,
@@ -158,7 +158,7 @@ impl AudioManager {
         };
 
         if let Some(pos) = maybe_position {
-            sound_instance.set_position(pos.x, pos.y, pos.z);
+            sound_instance.set_position_from_vec3(pos);
         }
 
         if let Err(e) = sound_instance.start() {
@@ -311,21 +311,6 @@ impl AudioManager {
     }
 }
 
-use serde::{Deserialize, Serialize};
-#[wasm_bindgen]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SoundPosition {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-impl SoundPosition {
-    pub fn new(x: f32, y: f32, z: f32) -> SoundPosition {
-        SoundPosition { x, y, z }
-    }
-}
-
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
     panner_node: PannerNode,
@@ -418,4 +403,74 @@ impl SoundInstance {
     pub fn set_position_from_vec3(&self, glam_vec: glam::Vec3) {
         self.set_position(glam_vec.x, glam_vec.y, glam_vec.z);
     }
+}
+
+// Testing only methods
+impl AudioManager {
+    //     // Have tested:
+    //     // - looping (works both directions)
+    //     // - reference_distance (both directions)
+    //     // - pitch, works, but can make weird popping sounds (and fluctuating volumes if many sounds modified simultaneously)
+
+    //     // TEST: Updates all currently playing sounds based on specified parameters.
+    //     pub fn test_update_all_sounds(&mut self) -> Result<(), JsValue> {
+    //         // First, collect all handles to avoid borrowing conflict
+    //         let handles: Vec<u32> = self.active_sounds.keys().copied().collect();
+
+    //         let new_is_looping = Some(true); // Example: stop looping all sounds
+    //         let p = 1.0f32; // Example: reset pitch to normal
+    //         let new_ref_dist = Some(10.0f32); // Example: set a default reference distance
+    //         let new_rising_pitch = (handles.len() / 10) as f32;
+
+    //         for handle in handles {
+    //             let update_result = self.update_sound_with_handle(
+    //                 handle,
+    //                 // ----------------------------------------------------------------------------------------------------------------------------------
+    //                 None, // looping
+    //                 None, // new_is_looping,
+    //                 None, // Some(p),
+    //                 None,
+    //             );
+
+    //             match update_result {
+    //                 Ok(_) => {
+    //                     web_sys::console::log_1(
+    //                         &format!("Updated sound with handle {}", handle).into(),
+    //                     );
+    //                 }
+    //                 Err(err) => {
+    //                     web_sys::console::error_1(
+    //                         &format!("Failed to update sound with handle {}: {:?}", handle, err).into(),
+    //                     );
+    //                 }
+    //             }
+    //         }
+
+    //         Ok(())
+    //     }
+
+    //     fn toggle_ambient(
+    //         &mut self,
+    //         is_ambient: Option<bool>,
+    //         sound: &mut SoundInstance,
+    //     ) -> Result<(), JsValue> {
+    //         Ok(if let Some(new_is_ambient) = is_ambient {
+    //             if new_is_ambient != sound.is_ambient {
+    //                 // disconnect from panner
+    //                 sound.source_node.disconnect()?;
+    //                 if new_is_ambient {
+    //                     // Connect source directly to gain node
+    //                     sound.source_node.connect_with_audio_node(&self.gain_node)?;
+    //                 } else {
+    //                     // Connect nodes: source -> panner -> gain
+    //                     sound
+    //                         .source_node
+    //                         .connect_with_audio_node(&sound.panner_node)?;
+    //                     // TODO: later remember to factor in own volume later
+    //                     sound.panner_node.connect_with_audio_node(&self.gain_node)?;
+    //                 }
+    //                 sound.is_ambient = new_is_ambient;
+    //             }
+    //         })
+    //     }
 }
