@@ -86,8 +86,9 @@ a:hover {
     background-color: #a9a9a9;
     border: 3px solid #ff7538;
 }
-.block-button-container {
-    /* todo: scroll behaviour here, when we have more blocks */
+.block-button-container, .entity-button-container {
+    overflow: hidden auto;
+    flex: auto;
 }
 
 body {
@@ -128,6 +129,8 @@ button:focus-visible {
     height: 75%;
     width: 15%;
     left: 5%;
+    display: flex;
+    flex-direction: column;
 }
 #propbox {
     position: absolute;
