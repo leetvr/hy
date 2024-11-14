@@ -40,6 +40,7 @@
     background-color: #d9d9d9;
     border-radius: 8px;
     padding: 8px;
+    box-shadow: 0 0 20px #222;
 }
 
 a {
