@@ -1,7 +1,7 @@
 import { Vec3, PlayerUpdate, PlayerControls, PlayerState, PlayerCollision, Vec2 } from "../lib/hy";
 
 const GRAVITY = -20; // Gravity acceleration (m/s^2)
-const MOVE_SPEED = 10.0; // Movement speed (units per second)
+const MOVE_SPEED = 8.0; // Movement speed (units per second)
 const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 
