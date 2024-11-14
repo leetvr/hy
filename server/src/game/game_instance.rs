@@ -30,10 +30,10 @@ pub struct GameInstance {
     next_client_id: ClientId,
     pub clients: HashMap<ClientId, Client>,
 
-    physics_world: PhysicsWorld,
-    _colliders: Vec<PhysicsCollider>,
+    pub physics_world: Arc<Mutex<PhysicsWorld>>,
+    pub colliders: Vec<PhysicsCollider>,
     next_player_id: u64,
-    players: HashMap<PlayerId, Player>,
+    pub players: HashMap<PlayerId, Player>,
     player_spawn_point: glam::Vec3,
 }
 
@@ -51,11 +51,13 @@ impl GameInstance {
             bake_terrain_colliders(&mut physics_world, &world.blocks, &mut colliders);
         }
 
+        let physics_world = Arc::new(Mutex::new(physics_world));
+
         Self {
             world,
             player_spawn_point,
             physics_world,
-            _colliders: colliders,
+            colliders,
             _game_state: Default::default(),
             next_client_id: Default::default(),
             clients: Default::default(),
@@ -68,8 +70,24 @@ impl GameInstance {
         let EditorInstance {
             world,
             mut editor_client,
+            physics_world,
         } = editor_instance;
-        let mut game_instance = GameInstance::new(world);
+        let mut game_instance = GameInstance::new(world.clone());
+
+        let world = world.lock().expect("DEADLOCK!!");
+
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            // Rebuild the terrain
+            bake_terrain_colliders(
+                &mut physics_world,
+                &world.blocks,
+                &mut game_instance.colliders,
+            );
+
+            // Remove any old player handles
+            physics_world.player_handles.clear();
+        }
 
         // IMPORTANT: We need the client to forget any previous world state
         editor_client.awareness = Default::default();
@@ -77,13 +95,17 @@ impl GameInstance {
         // Create a player for the editor client
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
-        game_instance.players.insert(
-            new_player_id,
-            Player::new(
-                &mut game_instance.physics_world,
-                game_instance.player_spawn_point,
-            ),
-        );
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            game_instance.players.insert(
+                new_player_id,
+                Player::new(
+                    new_player_id,
+                    &mut physics_world,
+                    game_instance.player_spawn_point,
+                ),
+            );
+        }
 
         // Set the player ID on the editor client
         editor_client.player_id = new_player_id;
@@ -102,6 +124,8 @@ impl GameInstance {
             )
             .await;
 
+        // Make sure that the newly created game instance points to the existing physics world
+        game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
@@ -119,9 +143,24 @@ impl GameInstance {
             };
 
             player.state = js_context
-                .get_player_next_state(&player.state, &client.last_controls, collisions)
+                .get_player_next_state(
+                    client.player_id,
+                    &player.state,
+                    &client.last_controls,
+                    collisions,
+                )
                 .await
                 .unwrap();
+
+            // Update Rapier
+            {
+                let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+                physics_world.set_velocity_and_position(
+                    &player.body,
+                    player.state.velocity,
+                    player.state.position,
+                );
+            }
         }
 
         // Update entities
@@ -142,7 +181,9 @@ impl GameInstance {
         }
 
         // Step physics
-        self.physics_world.step();
+        {
+            self.physics_world.lock().expect("Deadlock!").step();
+        }
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
@@ -157,10 +198,13 @@ impl GameInstance {
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
-        self.players.insert(
-            player_id,
-            Player::new(&mut self.physics_world, self.player_spawn_point),
-        );
+        {
+            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+            self.players.insert(
+                player_id,
+                Player::new(player_id, &mut physics_world, self.player_spawn_point),
+            );
+        }
 
         let client_id = self.next_client_id;
         self.next_client_id = self.next_client_id + 1;
@@ -200,6 +244,8 @@ impl GameInstance {
         let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
         let world = self.world.lock().expect("Deadlock!");
+        let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+
         let live_entities = world.entities.keys().cloned().collect::<HashSet<_>>();
         'client_loop: for (client_id, client) in self.clients.iter_mut() {
             while let Some(packet) = match client.incoming_rx.try_recv() {
@@ -239,7 +285,7 @@ impl GameInstance {
             if disconnected.contains(client_id) {
                 if let Some(player) = self.players.remove(&client.player_id) {
                     // Make sure to remove the physics body
-                    self.physics_world.remove_body(player.body);
+                    physics_world.remove_body(player.body);
                 }
                 false
             } else {

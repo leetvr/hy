@@ -13,6 +13,10 @@ impl PlayerId {
     pub fn new(id: u64) -> Self {
         Self(id)
     }
+
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
