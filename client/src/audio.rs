@@ -46,7 +46,7 @@ impl AudioManager {
     pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
         self.load_sound_from_id("pain").await?;
         self.load_sound_from_id("kane").await?;
-        // self.load_sound_from_id("footsteps").await?;
+        self.load_sound_from_id("footsteps").await?;
         // self.load_sound_from_id("step_gravel").await?;
         // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
         //     .await?;
@@ -113,7 +113,7 @@ impl AudioManager {
 
     /// Attempt to create and play a sound
     ///
-    /// TODO Pass in remaining parameters used to configure SoundInstance: [volume, distortion and attenuation (rolloff/max/min)]
+    /// TODO Remaining parameters [volume, distortion]
     /// Should we be gracefully handling errors for methods exposed to user in the `play_sound` functions calling `spawn_sound`?
     ///
     /// ## Parameters:
@@ -176,6 +176,29 @@ impl AudioManager {
         return Ok(handle);
     }
 
+    /// Attempt to update the parameters associated with SoundInstance
+    pub fn update_sound_with_handle(
+        &mut self,
+        handle: u32,
+        _is_ambient: Option<bool>,
+        is_looping: Option<bool>,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
+    ) -> Result<(), JsValue> {
+        let sound = self
+            .active_sounds
+            .get_mut(&handle)
+            .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
+
+        // TODO: handle switch ambient status which requires reconfiguring the nodes
+        // TODO: Update panner if position or new entity provided
+
+        is_looping.map(|looping| sound.source_node.set_loop(looping));
+        pitch.map(|p| sound.source_node.playback_rate().set_value(p.max(0.01)));
+        reference_distance.map(|rd| sound.panner_node.set_ref_distance(rd as f64));
+        Ok(())
+    }
+
     /// Stops a sound given its handle.
     pub fn stop_sound(&mut self, handle: u32) -> Result<(), JsValue> {
         if let Some(sound_instance) = self.active_sounds.remove(&handle) {
@@ -219,7 +242,7 @@ impl AudioManager {
         self.gain_node.gain().set_value(volume);
     }
 
-    // // DEBUG: currently just shifting all panners, (Make sure doesn't affect entity)
+    // DEBUG: currently just shifting all panners, (Make sure doesn't affect entity)
     pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
         if let Some(d) = move_panner_opt {
             self.active_sounds.values_mut().for_each(|s| {
@@ -306,7 +329,7 @@ impl SoundPosition {
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
     panner_node: PannerNode,
-    entity_id: Option<EntityID>, // Associated entity ID, if any
+    entity_id: Option<EntityID>,
 }
 
 impl SoundInstance {
@@ -319,21 +342,22 @@ impl SoundInstance {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        // TODO: distortion, volume
         // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....
-        // volume_override:
+        // volume_override: GainNode
     ) -> Result<Self, JsValue> {
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
         let panner_node = context.create_panner()?;
 
+        source_node.set_loop(is_looping);
         if is_ambient {
-            // For ambient sounds, we can connect source directly to gain_node it may
-            // make more sense to make `SoundInstance::panner_node` optional. But a disconnected
-            // panner node should disable spatialistaion, simplify the code and be good enough for now
-            // Note, if we want to toggle `is_ambient` for pre-existing sounds it might make more sense
-            // to configure the panner and then synchronise with the listener each tick.
-            // If we want to also apply `reference_distance` to a positioned ambient sound we'd have to
-            // some other approach to disabling spatialisation while retaining positional attenuation
+            // For ambient sounds, we can connect the source_node directly to gain_node.
+            // Omitting the panner_node from the chain will functionally disable spatialistaion.
+            // Note to self: if converting a pre-existing already-running sound from non-ambient to ambient
+            // then I'll need to connect the PannerNode. It may turn out to be easier to connect the panner_node
+            // for ambient sounds from the outset and disable spatialisation some other way, like synchronising
+            // with the listener transform, rather than reconfiguring an already active sound when updating
             source_node.connect_with_audio_node(&gain_node)?;
             return Ok(SoundInstance {
                 source_node,
@@ -353,8 +377,6 @@ impl SoundInstance {
         // Connect nodes: source -> panner -> gain
         source_node.connect_with_audio_node(&panner_node)?;
         panner_node.connect_with_audio_node(gain_node)?;
-
-        source_node.set_loop(is_looping);
 
         // `playback_rate` is technically the same as `pitch` in minecraft
         // Hytopia may be after altering playback speed without altering pitch

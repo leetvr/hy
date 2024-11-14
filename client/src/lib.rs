@@ -880,6 +880,25 @@ impl Engine {
         )
     }
 
+    // Update a sound instance with the specified handle
+    // TODO: [toggling ambient status, updating fixed position and entity_id]
+    pub fn update_sound_with_handle(
+        &mut self,
+        handle: u32,
+        is_ambient: Option<bool>,
+        is_looping: Option<bool>,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
+    ) -> Result<(), JsValue> {
+        self.audio_manager.update_sound_with_handle(
+            handle,
+            is_ambient,
+            is_looping,
+            pitch,
+            reference_distance,
+        )
+    }
+
     // if `true` then TestStopSounds Component will be rendered
     // and spawn_debug_sound_on_left_click will be enabled
     pub fn is_audio_manager_debug(&mut self) -> bool {
