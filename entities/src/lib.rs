@@ -1,5 +1,5 @@
 use {
-    serde::{Deserialize, Serialize},
+    serde::{Deserialize, Serialize, Serializer},
     tsify::Tsify,
     wasm_bindgen::prelude::wasm_bindgen,
 };
