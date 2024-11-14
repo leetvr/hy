@@ -786,16 +786,22 @@ impl Engine {
     ///
     /// * `sound_id` - the name of the sound to play
     /// * `entity_id` - The identifier of the entity to associate the sound with.
-    /// * TODO - remaining params
+    /// * `is_looping` - Loop the track
+    /// * `pitch` - technically, playbackRate which is corresponds to `pitch` in minecraft
+    /// * `reference_distance` - the distance from listener at which the volume starts attenuating
+    ///
+    /// ## Returns
+    /// `Result<u32, JsValue>`:
+    /// - `Ok(u32)`: Returns the sound's unique handle, which can be used to manage or update the sound later.
+    /// - `Err(JsValue)`: Returns a descriptive error message if the sound could not be played.
     pub fn play_sound_at_entity(
         &mut self,
         sound_id: &str,
         entity_id: entities::EntityID,
-        // is_ambient: bool,
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
-    ) -> Result<(), JsValue> {
+    ) -> Result<u32, JsValue> {
         // Retrieve the entity's current position
         let position = self
             .get_entity_sound_pos(entity_id.clone())
@@ -804,7 +810,6 @@ impl Engine {
                 web_sys::console::error_1(&error_msg.clone().into());
                 JsValue::from_str(&error_msg)
             })?;
-
         // Play the sound at the entity's position
         self.audio_manager.spawn_sound(
             sound_id,
@@ -830,22 +835,25 @@ impl Engine {
         }
     }
 
-    pub fn play_sound(
+    // play an ambient sound (spatialisation disabled). Ambient sounds are not played
+    // at a specific location relative to the listener so a position parameter is not
+    // required. While associating an entity with an ambient sound won't result in
+    // position updates it could be used to tether the lifetime of the sound to the entity
+    pub fn play_ambient_sound(
         &mut self,
         sound_id: &str,
-        is_ambient: bool,
+        maybe_entity_id: Option<entities::EntityID>,
         is_looping: bool,
         pitch: Option<f32>,
-        reference_distance: Option<f32>,
-    ) -> Result<(), JsValue> {
+    ) -> Result<u32, JsValue> {
         self.audio_manager.spawn_sound(
             sound_id,
+            maybe_entity_id,
             None,
-            None,
-            is_ambient,
+            false,
             is_looping,
             pitch,
-            reference_distance,
+            None,
         )
     }
 
@@ -859,7 +867,7 @@ impl Engine {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
-    ) -> Result<(), JsValue> {
+    ) -> Result<u32, JsValue> {
         let sound_position = audio::SoundPosition::new(x, y, z);
         self.audio_manager.spawn_sound(
             sound_id,
@@ -934,7 +942,7 @@ impl Engine {
         self.audio_manager
             .cleanup_entity_sounds(&existing_entity_ids);
 
-        // We also need to cleanup up one shot (non looping) sounds that have finished playing
+        // TODO: cleanup up one shot (non looping) sounds that have finished playing, sounds that are too far away
     }
 }
 
@@ -1023,7 +1031,7 @@ pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str
         if engine.controls.mouse_left {
             if let Some(ray_hit) = target_raycast {
                 let pos = ray_hit.position;
-                if let Err(_) = engine.play_sound_at_pos(
+                match engine.play_sound_at_pos(
                     sound_id,
                     pos.x as f32,
                     pos.y as f32,
@@ -1033,7 +1041,17 @@ pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str
                     None,
                     None,
                 ) {
-                    tracing::debug!("Failed to play_sound_at_pos: {:?}", pos);
+                    Ok(handle) => {
+                        tracing::debug!(
+                            "Successfully played sound '{}' at {:?} with handle '{}'",
+                            sound_id,
+                            pos,
+                            handle
+                        )
+                    }
+                    Err(_) => {
+                        tracing::debug!("Failed to play sound '{}' at position {:?}", sound_id, pos)
+                    }
                 }
             }
         }
@@ -1049,10 +1067,11 @@ pub fn spawn_sound_at_kane_face(engine: &mut Engine, sound_id: &str) {
     let is_looping = true;
 
     match engine.play_sound_at_entity(sound_id, entity_id.clone(), is_looping, Some(0.5), None) {
-        Ok(_) => tracing::debug!(
-            "Successfully played sound '{}' at EntityID '{}'",
+        Ok(handle) => tracing::debug!(
+            "Successfully played sound '{}' at EntityID '{}' with handle '{}'",
             sound_id,
-            entity_id
+            entity_id,
+            handle,
         ),
         Err(e) => tracing::debug!(
             "Failed to play sound '{}' at EntityID '{}': {:?}",

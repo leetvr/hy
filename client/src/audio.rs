@@ -18,7 +18,7 @@ const KANE_CLOMP: &[u8] = include_bytes!("../../assets/kane.wav");
 pub struct AudioManager {
     context: AudioContext,
     gain_node: GainNode,
-    // Mapping of sound IDs to loaded AudioBuffers
+    // Mapping of sound names to loaded AudioBuffers
     sounds_bank: HashMap<String, AudioBuffer>,
     // Active sound instances mapped by a unique handle
     active_sounds: HashMap<u32, SoundInstance>,
@@ -113,18 +113,21 @@ impl AudioManager {
 
     /// Attempt to create and play a sound
     ///
-    /// TODO pass in parameters used to configure SoundInstance: [volume, distortion, is_looping, playback_speed, reference_distance, attenuation max/min?]
-    /// TODO Should we be gracefully handling errors for methods exposed to user in `spawn_sound` or `play_sound`?
+    /// TODO Pass in remaining parameters used to configure SoundInstance: [volume, distortion and attenuation (rolloff/max/min)]
+    /// Should we be gracefully handling errors for methods exposed to user in the `play_sound` functions calling `spawn_sound`?
     ///
     /// ## Parameters:
     ///
     /// `sound_id` - the name of the sound to play from `sounds_bank`
-    /// `maybe_position` - Optional position of the sound (Otherwise will default to origin)
     /// `entity_id` - Optional EntityID of the Hytopia entity used to dynamically update sound position
+    /// `maybe_position` - Optional position of the sound (Otherwise will default to origin)
     /// `is_ambient` - If set, spatialisation will be disabled so the sound will have constant volume from anywhere
     /// `is_looping` - Loop the track
     /// `pitch` - playbackRate which is technically the same as `pitch` in minecraft
     /// `reference_distance` - the distance from listener at which the volume starts attenuating
+    ///
+    /// ## Returns
+    /// Result<u32, JsValue> to return the sound's unique handle which can be used to update the sound
     pub fn spawn_sound(
         &mut self,
         sound_id: &str,
@@ -134,7 +137,7 @@ impl AudioManager {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
-    ) -> Result<(), JsValue> {
+    ) -> Result<u32, JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
             return Err(JsValue::from_str("Sound buffer not loaded"));
@@ -170,7 +173,7 @@ impl AudioManager {
         // Insert into active_sounds
         self.active_sounds.insert(handle, sound_instance);
 
-        return Ok(());
+        return Ok(handle);
     }
 
     /// Stops a sound given its handle.
@@ -325,11 +328,12 @@ impl SoundInstance {
 
         if is_ambient {
             // For ambient sounds, we can connect source directly to gain_node it may
-            // make more sense to make `SoundInstance::panner_node` optional But a disconnected
-            // panner node should be cheap and disable spatialistaion which simplifies the code
-            // and it will make it easier to switch a sound between ambient and spatialised
-            // Note, this will need to be updated if we want to change
-            // convert pre-existing sounds from ambient to spatialised
+            // make more sense to make `SoundInstance::panner_node` optional. But a disconnected
+            // panner node should disable spatialistaion, simplify the code and be good enough for now
+            // Note, if we want to toggle `is_ambient` for pre-existing sounds it might make more sense
+            // to configure the panner and then synchronise with the listener each tick.
+            // If we want to also apply `reference_distance` to a positioned ambient sound we'd have to
+            // some other approach to disabling spatialisation while retaining positional attenuation
             source_node.connect_with_audio_node(&gain_node)?;
             return Ok(SoundInstance {
                 source_node,
@@ -338,9 +342,8 @@ impl SoundInstance {
             });
         }
 
-        // TODO: Connect these parameters to play_sound functions
-        // We'll want to expose them scripts (as per spec)
-        // However, For now, I'm just using the defaults
+        // I've included the following panning configurations as we may want to
+        // expose them to scripts. However, For now, I'm just using the defaults
         panner_node.set_panning_model(PanningModelType::Equalpower); // Also supports Hrtf
         panner_node.set_distance_model(DistanceModelType::Inverse); // Also supports Linear and Exponential
         panner_node.set_ref_distance(reference_distance.unwrap_or(1.) as f64);
