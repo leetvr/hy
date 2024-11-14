@@ -6,7 +6,7 @@ use {
     anyhow::Result,
     blocks::BlockTypeID,
     dolly::prelude::YawPitch,
-    entities::EntityPosition,
+    entities::{EntityPosition, PlayerId},
     glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
     net_types::ServerPacket,
@@ -589,6 +589,11 @@ impl Engine {
         let mut draw_calls = Vec::new();
         self.load_entity_models();
 
+        let players = match &self.state {
+            GameState::Playing { players, .. } => players,
+            _ => &HashMap::new(),
+        };
+
         // Gather blocks and entities
         match &self.state {
             GameState::Playing {
@@ -653,12 +658,14 @@ impl Engine {
                         continue;
                     };
 
-                    draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&model.gltf),
-                        slice::from_ref(&model.render_model),
-                        get_transform(&entity.state.position),
-                        None,
-                    ));
+                    if let Some(transform) = get_transform(players, &entity.state.position) {
+                        draw_calls.extend(render::build_render_plan(
+                            slice::from_ref(&model.gltf),
+                            slice::from_ref(&model.render_model),
+                            transform,
+                            None,
+                        ));
+                    }
                 }
             }
             _ => {}
@@ -671,16 +678,11 @@ impl Engine {
                 // HACK: The player model is rotated 90 degrees, also
                 // it rotates the wrong way? I'm just fixing it here but someone
                 // should figure out why it is like this.
-                const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new_with_scale(
-                            player.position,
-                            Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
-                            glam::Vec3::splat(0.5),
-                        ),
+                        player_transform(player),
                         None,
                     ));
                 }
@@ -716,12 +718,16 @@ impl Engine {
                 ..
             } => {
                 if let Some(model) = self.entity_models.get(&preview_entity.model_path) {
-                    draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&model.gltf),
-                        slice::from_ref(&model.render_model),
-                        get_transform(&preview_entity.state.position),
-                        Some([0.0, 0.5, 1.0, 0.5].into()),
-                    ));
+                    if let Some(transform) =
+                        get_transform(&HashMap::new(), &preview_entity.state.position)
+                    {
+                        draw_calls.extend(render::build_render_plan(
+                            slice::from_ref(&model.gltf),
+                            slice::from_ref(&model.render_model),
+                            transform,
+                            Some([0.0, 0.5, 1.0, 0.5].into()),
+                        ));
+                    }
                 }
             }
             _ => (),
@@ -820,16 +826,73 @@ fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow
     Ok(renderer.create_texture_from_image(data, width, height))
 }
 
-fn get_transform(entity_position: &EntityPosition) -> Transform {
+fn get_transform(
+    players: &HashMap<PlayerId, Player>,
+    entity_position: &EntityPosition,
+) -> Option<Transform> {
     match entity_position {
-        EntityPosition::Absolute(pos) => Transform::new(*pos, Quat::IDENTITY),
+        EntityPosition::Absolute(pos) => Some(Transform::new(*pos, Quat::IDENTITY)),
         EntityPosition::Anchored {
             player_id,
             parent_anchor,
             translation,
             rotation,
-        } => unimplemented!("no"),
+        } => {
+            if let Some(player) = players.get(player_id) {
+                // Recursively search for the anchor node and build its transform along the way
+                // Side note(ll): This is a cute function!
+                fn build_transform(
+                    model: &GLTFModel,
+                    node: usize,
+                    find_node: &String,
+                    parent_transform: Transform,
+                ) -> Option<Transform> {
+                    let node = &model.nodes[node];
+                    if node.name.as_ref() == Some(find_node) {
+                        return Some(parent_transform * node.current_transform);
+                    } else {
+                        for child in &node.children {
+                            if let Some(transform) = build_transform(
+                                model,
+                                *child,
+                                find_node,
+                                parent_transform * node.current_transform,
+                            ) {
+                                return Some(transform);
+                            }
+                        }
+                    }
+                    None
+                }
+
+                if let Some(node_transform) = build_transform(
+                    &player.model,
+                    player.model.root_node_idx,
+                    parent_anchor,
+                    player_transform(player),
+                ) {
+                    let transform = node_transform * Transform::new(*translation, *rotation);
+                    return Some(transform);
+                } else {
+                    tracing::warn!("couldn't find anchor node {parent_anchor}");
+                }
+            } else {
+                tracing::warn!("Entity is anchored to non-existent player");
+            };
+
+            // Fallback for invalidly anchored entity. Probably this
+            None
+        }
     }
+}
+
+fn player_transform(player: &Player) -> Transform {
+    const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
+    Transform::new_with_scale(
+        player.position,
+        Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+        glam::Vec3::splat(0.5),
+    )
 }
 
 #[derive(Clone, Default)]

@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
-    entities::{EntityData, EntityTypeRegistry},
+    entities::{EntityData, EntityPosition, EntityTypeRegistry, PlayerId},
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
@@ -33,6 +33,30 @@ impl World {
             .push(WorldCommand::DespawnEntity(entity_id));
     }
 
+    pub fn anchor_entity(
+        &mut self,
+        entity_id: String,
+        player_id: u64,
+        anchor_name: String,
+        offset: glam::Vec3,
+        rotation: glam::Quat,
+    ) {
+        self.command_queue.push(WorldCommand::AnchorEntity {
+            entity_id,
+            player_id,
+            anchor_name,
+            offset,
+            rotation,
+        });
+    }
+
+    pub fn detach_entity(&mut self, entity_id: String, position: glam::Vec3) {
+        self.command_queue.push(WorldCommand::DetachEntity {
+            entity_id,
+            position,
+        });
+    }
+
     pub fn apply_queued_updates(&mut self) {
         for command in self.command_queue.drain(..) {
             match command {
@@ -41,6 +65,32 @@ impl World {
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
                     self.entities.remove(&entity_id);
+                }
+                WorldCommand::AnchorEntity {
+                    entity_id,
+                    player_id,
+                    anchor_name,
+                    offset,
+                    rotation,
+                } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.position = EntityPosition::Anchored {
+                            player_id: PlayerId::new(player_id),
+                            parent_anchor: anchor_name,
+                            translation: offset,
+                            rotation: rotation,
+                        };
+                    }
+                }
+                WorldCommand::DetachEntity {
+                    entity_id,
+                    position,
+                } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        if let EntityPosition::Anchored { .. } = entity.state.position {
+                            entity.state.position = EntityPosition::Absolute(position);
+                        }
+                    }
                 }
             }
         }
@@ -85,4 +135,16 @@ impl World {
 enum WorldCommand {
     SpawnEntity(String, EntityData),
     DespawnEntity(String),
+    AnchorEntity {
+        entity_id: String,
+        player_id: u64,
+        anchor_name: String,
+        offset: glam::Vec3,
+        rotation: glam::Quat,
+    },
+    DetachEntity {
+        entity_id: String,
+        // When detaching an anchored entity it should also get a new absolute position
+        position: glam::Vec3,
+    },
 }

@@ -18,7 +18,19 @@ export const update: PlayerUpdate = (
 
   if (controls.jump) {
     let cubeHat = hy.spawnEntity(0, [0, 0, 0]);
-    hy.anchorEntity(cubeHat, playerID, "head_anchor", [0, 1.0, 0], [0, 0, 0]);
+    hy.anchorEntity(cubeHat, playerID, "head_anchor", [0, -1., 0], [0, 0, 0]);
+    let cubeHandLeft = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeHandLeft, playerID, "hand_left_anchor", [0, 0, 0], [0, 0, 0]);
+    let cubeHandRight = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeHandRight, playerID, "hand_right_anchor", [0, 0, 0], [0, 0, 0]);
+    let cubeFootLeft = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeFootLeft, playerID, "foot_left_anchor", [0, 0, 0], [0, 0, 0]);
+    let cubeFootRight = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeFootRight, playerID, "foot_right_anchor", [0, 0, 0], [0, 0, 0]);
+    let cubeLegLeft = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeLegLeft, playerID, "leg_left_anchor", [0, -0.5, 0], [0, 0, 0]);
+    let cubeLegRight = hy.spawnEntity(0, [0, 0, 0]);
+    hy.anchorEntity(cubeLegRight, playerID, "leg_right_anchor", [0, -0.5, 0], [0, 0, 0]);
   }
 
   // Handle horizontal movement

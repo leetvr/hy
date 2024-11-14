@@ -138,6 +138,19 @@ impl GameInstance {
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
 
+        // Remove any entities attached to removed players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            world
+                .entities
+                .retain(|_, entity| match entity.state.position {
+                    entities::EntityPosition::Absolute(_) => true,
+                    entities::EntityPosition::Anchored { player_id, .. } => {
+                        self.players.contains_key(&player_id)
+                    }
+                });
+        }
+
         // Update players
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();

@@ -1,17 +1,16 @@
-use entities::{EntityData, EntityID, EntityState, PlayerId};
-use nanorand::Rng;
-use physics::PhysicsWorld;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-use {anyhow::bail, entities::EntityPosition};
 use {
+    crate::game::World,
+    anyhow::bail,
     deno_core::{error::AnyError, extension, op2, OpState},
-    glam::EulerRot,
+    entities::{EntityData, EntityID, EntityState},
+    glam::{EulerRot, Vec3},
+    nanorand::Rng,
+    physics::PhysicsWorld,
+    std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    },
 };
-
-use crate::game::World;
 
 #[op2]
 #[serde]
@@ -86,7 +85,6 @@ fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
 }
 
 #[op2]
-#[serde]
 fn anchor_entity(
     state: &mut OpState,
     #[string] entity_id: String,
@@ -94,27 +92,39 @@ fn anchor_entity(
     #[string] anchor_name: String,
     #[serde] offset: glam::Vec3,
     #[serde] rotation: glam::Vec3,
-) -> Result<(), AnyError> {
+) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    let Some(entity) = world.entities.get_mut(&entity_id) else {
-        bail!("Entity not found");
-    };
-    entity.state.position = EntityPosition::Anchored {
-        player_id: PlayerId::new(player_id),
-        parent_anchor: anchor_name,
-        translation: offset,
-        rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
-    };
+    world.anchor_entity(
+        entity_id,
+        player_id,
+        anchor_name,
+        offset,
+        glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
+    );
+}
 
-    Ok(())
+#[op2]
+fn detach_entity(state: &mut OpState, #[string] entity_id: String, #[serde] position: Vec3) {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+
+    world.detach_entity(entity_id, position);
 }
 
 // Exports the extensions as a variable named `hy`
 extension!(
     hy,
-    ops = [get_entities, is_player_on_ground, check_movement_for_collisions, spawn_entity, despawn_entity],
+    ops = [
+        get_entities,
+        is_player_on_ground,
+        check_movement_for_collisions,
+        spawn_entity,
+        despawn_entity,
+        anchor_entity,
+        detach_entity,
+    ],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],
     options = {

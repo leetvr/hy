@@ -1,8 +1,5 @@
 mod extensions;
 
-use entities::{EntityData, EntityState, EntityTypeID};
-use extensions::hy;
-use net_types::Controls;
 use physics::PhysicsWorld;
 use std::{
     path::PathBuf,
@@ -19,6 +16,12 @@ use {
     entities::{EntityID, PlayerId},
     std::collections::HashMap,
 };
+use {entities::EntityPosition, net_types::Controls};
+use {
+    entities::{EntityData, EntityTypeID},
+    serde::Serialize,
+};
+use {extensions::hy, serde::Deserialize};
 
 #[op2]
 #[serde]
@@ -147,13 +150,30 @@ impl JSContext {
         let entity_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
+
+        #[derive(Serialize, Deserialize)]
+        // CRIMES(ll): I don't want to deal with anchored entity positions in the script right now,
+        // so make this separate struct that only handles Vec3 positions
+        struct ScriptEntityState {
+            position: glam::Vec3,
+            velocity: glam::Vec3,
+        }
+
         let current_state = {
             let world = self.world.lock().expect("Deadlock!");
             let Some(entity_data) = &world.entities.get(entity_id) else {
                 tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
                 return Ok(());
             };
-            serde_v8::to_v8(scope, &entity_data.state).unwrap()
+
+            let script_state = ScriptEntityState {
+                position: match &entity_data.state.position {
+                    EntityPosition::Absolute(pos) => *pos,
+                    EntityPosition::Anchored { .. } => glam::Vec3::ZERO,
+                },
+                velocity: entity_data.state.velocity,
+            };
+            serde_v8::to_v8(scope, &script_state).unwrap()
         };
 
         // Put the args together
@@ -163,12 +183,20 @@ impl JSContext {
         let result = entity_update.call(scope, undefined, &args).unwrap();
 
         // Get the entity's next state
-        let next_state: EntityState = serde_v8::from_v8(scope, result)?;
+        let next_state: ScriptEntityState = serde_v8::from_v8(scope, result)?;
 
         // Update the entity
         {
             let mut world = self.world.lock().expect("Deadlock!");
-            world.entities.get_mut(entity_id).unwrap().state = next_state;
+            let entity = world.entities.get_mut(entity_id).unwrap();
+            entity.state.velocity = next_state.velocity;
+            match &mut entity.state.position {
+                EntityPosition::Absolute(pos) => *pos = next_state.position,
+                EntityPosition::Anchored { .. } => {
+                    // Do nothing
+                    // The script can't change the position of an anchored entity
+                }
+            };
         }
 
         Ok(())

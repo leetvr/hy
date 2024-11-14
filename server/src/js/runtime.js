@@ -32,5 +32,8 @@ globalThis.hy = {
   },
   anchorEntity: (entity_id, anchor_id, anchor_name, offset, rotation) => {
     return core.ops.anchor_entity(entity_id, anchor_id, anchor_name, offset, rotation);
+  },
+  detachEntity: (entity_id, position) => {
+    return core.ops.detach_entity(entity_id, position);
   }
 };
