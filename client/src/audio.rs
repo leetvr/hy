@@ -17,7 +17,7 @@ const KANE_CLOMP: &[u8] = include_bytes!("../../assets/kane.wav");
 
 pub struct AudioManager {
     context: AudioContext,
-    gain_node: GainNode,
+    master_gain_node: GainNode,
     // Mapping of sound names to loaded AudioBuffers
     sounds_bank: HashMap<String, AudioBuffer>,
     // Active sound instances mapped by a unique handle
@@ -35,7 +35,7 @@ impl AudioManager {
 
         Ok(AudioManager {
             context,
-            gain_node,
+            master_gain_node: gain_node,
             sounds_bank: HashMap::new(),
             active_sounds: HashMap::new(),
             next_sound_handle: 0,
@@ -137,6 +137,7 @@ impl AudioManager {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<u32, JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
@@ -146,12 +147,13 @@ impl AudioManager {
         let Ok(sound_instance) = SoundInstance::new(
             &self.context,
             audio_buffer,
-            &self.gain_node,
+            &self.master_gain_node,
             entity_id,
             is_ambient,
             is_looping,
             pitch,
             reference_distance,
+            volume,
         ) else {
             web_sys::console::error_1(&"Unable to create sound_instance".into());
             return Err(JsValue::from_str("Unable to create sound_instance"));
@@ -184,6 +186,7 @@ impl AudioManager {
         is_looping: Option<bool>,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<(), JsValue> {
         let sound = self
             .active_sounds
@@ -196,6 +199,12 @@ impl AudioManager {
         is_looping.map(|looping| sound.source_node.set_loop(looping));
         pitch.map(|p| sound.source_node.playback_rate().set_value(p.max(0.01)));
         reference_distance.map(|rd| sound.panner_node.set_ref_distance(rd as f64));
+        volume.map(|v| {
+            // Clamp volume between 0.0 and 1.0 for safety
+            let clamped_volume = v.clamp(0.0, 1.0);
+            sound.sound_gain_node.gain().set_value(clamped_volume);
+        });
+
         Ok(())
     }
 
@@ -210,8 +219,28 @@ impl AudioManager {
         }
     }
 
-    pub fn _set_master_volume(&self, volume: f32) {
-        self.gain_node.gain().set_value(volume);
+    /// Sets the volume for a specific sound instance
+    pub fn set_sound_volume(&mut self, handle: u32, volume: f32) -> Result<(), JsValue> {
+        let sound = self
+            .active_sounds
+            .get_mut(&handle)
+            .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
+
+        // Clamp the volume between 0.0 and 1.0
+        let clamped_volume = volume.clamp(0.0, 1.0);
+        sound.sound_gain_node.gain().set_value(clamped_volume);
+
+        Ok(())
+    }
+
+    /// Sets the master volume for all sounds.
+    ///
+    /// ## Parameters:
+    ///
+    /// * `volume` - The new master volume level (0.0 to 1.0).
+    pub fn set_master_volume(&self, volume: f32) {
+        let clamped_volume = volume.clamp(0.0, 1.0);
+        self.master_gain_node.gain().set_value(clamped_volume);
     }
 
     /// Stops all currently playing sounds and clears the active_sounds map.
@@ -303,6 +332,7 @@ impl AudioManager {
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
     panner_node: PannerNode,
+    sound_gain_node: GainNode,
     entity_id: Option<EntityID>,
 }
 
@@ -310,32 +340,41 @@ impl SoundInstance {
     fn new(
         context: &AudioContext,
         audio_buffer: &AudioBuffer,
-        gain_node: &GainNode,
+        master_gain_node: &GainNode,
         entity_id: Option<EntityID>,
         is_ambient: bool,
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
-        // TODO: distortion, volume
+        volume: Option<f32>,
+        // TODO: distortion
         // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....
-        // volume_override: GainNode
     ) -> Result<Self, JsValue> {
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
         let panner_node = context.create_panner()?;
 
         source_node.set_loop(is_looping);
+
+        let sound_gain_node = context.create_gain()?; // Create the per-sound GainNode
+        let clamped_volume = volume.unwrap_or(1.0).clamp(0.0, 1.0); // Ensure volume is between 0.0 and 1.0
+        sound_gain_node.gain().set_value(clamped_volume); // Set clamped individual volume
+
         if is_ambient {
+            // Ambient: Connect source -> sound_gain_node -> master_gain_node
+            source_node.connect_with_audio_node(&sound_gain_node)?;
+            sound_gain_node.connect_with_audio_node(master_gain_node)?;
+
             // For ambient sounds, we can connect the source_node directly to gain_node.
             // Omitting the panner_node from the chain will functionally disable spatialistaion.
             // Note to self: if converting a pre-existing already-running sound from non-ambient to ambient
             // then I'll need to connect the PannerNode. It may turn out to be easier to connect the panner_node
             // for ambient sounds from the outset and disable spatialisation some other way, like synchronising
             // with the listener transform, rather than reconfiguring an already active sound when updating
-            source_node.connect_with_audio_node(&gain_node)?;
             return Ok(SoundInstance {
                 source_node,
                 panner_node: panner_node,
+                sound_gain_node,
                 entity_id,
             });
         }
@@ -348,9 +387,10 @@ impl SoundInstance {
         panner_node.set_max_distance(10000.);
         panner_node.set_rolloff_factor(1.);
 
-        // Connect nodes: source -> panner -> gain
-        source_node.connect_with_audio_node(&panner_node)?;
-        panner_node.connect_with_audio_node(gain_node)?;
+        // Connect nodes: source -> sound_gain_node -> panner_node -> master_gain_node
+        source_node.connect_with_audio_node(&sound_gain_node)?;
+        sound_gain_node.connect_with_audio_node(&panner_node)?;
+        panner_node.connect_with_audio_node(master_gain_node)?;
 
         // `playback_rate` is technically the same as `pitch` in minecraft
         // Hytopia may be after altering playback speed without altering pitch
@@ -363,6 +403,7 @@ impl SoundInstance {
         Ok(SoundInstance {
             source_node,
             panner_node,
+            sound_gain_node,
             entity_id,
         })
     }

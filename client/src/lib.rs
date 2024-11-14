@@ -801,6 +801,7 @@ impl Engine {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<u32, JsValue> {
         // Retrieve the entity's current position
         let position = match &self.state {
@@ -824,6 +825,7 @@ impl Engine {
             is_looping,
             pitch,
             reference_distance,
+            volume,
         )
     }
 
@@ -837,6 +839,7 @@ impl Engine {
         maybe_entity_id: Option<entities::EntityID>,
         is_looping: bool,
         pitch: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<u32, JsValue> {
         self.audio_manager.spawn_sound(
             sound_id,
@@ -846,6 +849,7 @@ impl Engine {
             is_looping,
             pitch,
             None,
+            volume,
         )
     }
 
@@ -859,6 +863,7 @@ impl Engine {
         is_looping: bool,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<u32, JsValue> {
         let sound_position = [x, y, z].into();
         self.audio_manager.spawn_sound(
@@ -869,6 +874,7 @@ impl Engine {
             is_looping,
             pitch,
             reference_distance,
+            volume,
         )
     }
 
@@ -881,6 +887,7 @@ impl Engine {
         is_looping: Option<bool>,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
+        volume: Option<f32>,
     ) -> Result<(), JsValue> {
         self.audio_manager.update_sound_with_handle(
             handle,
@@ -888,6 +895,7 @@ impl Engine {
             is_looping,
             pitch,
             reference_distance,
+            volume,
         )
     }
 
@@ -1046,6 +1054,7 @@ pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str
                     false,
                     None,
                     None,
+                    Some(10.),
                 ) {
                     Ok(handle) => {
                         tracing::debug!(
@@ -1072,7 +1081,14 @@ pub fn spawn_sound_at_kane_face(engine: &mut Engine, sound_id: &str) {
     let entity_id = "0".to_string();
     let is_looping = true;
 
-    match engine.play_sound_at_entity(sound_id, entity_id.clone(), is_looping, Some(0.5), None) {
+    match engine.play_sound_at_entity(
+        sound_id,
+        entity_id.clone(),
+        is_looping,
+        Some(0.5),
+        None,
+        Some(10.0),
+    ) {
         Ok(handle) => tracing::debug!(
             "Successfully played sound '{}' at EntityID '{}' with handle '{}'",
             sound_id,
