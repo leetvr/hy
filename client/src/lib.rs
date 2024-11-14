@@ -620,8 +620,13 @@ impl Engine {
                     });
 
                 draw_calls.extend(
-                    render::build_cube_draw_calls(&self.cube_mesh_data, blocks_to_render, None)
-                        .into_iter(),
+                    render::build_cube_draw_calls(
+                        &self.cube_mesh_data,
+                        blocks_to_render,
+                        gltf::TransparencyType::Opaque,
+                        None,
+                    )
+                    .into_iter(),
                 );
 
                 if let Some(block_to_remove) = block_to_remove {
@@ -632,7 +637,8 @@ impl Engine {
                             draw_calls.extend(
                                 render::build_cube_draw_calls(
                                     &self.cube_mesh_data,
-                                    blocks.into_iter(),
+                                    blocks,
+                                    gltf::TransparencyType::Blend,
                                     Some([1.0, 0.0, 0., 0.5].into()),
                                 )
                                 .into_iter(),
@@ -694,6 +700,7 @@ impl Engine {
                             render::build_cube_draw_calls(
                                 &self.cube_mesh_data,
                                 blocks.into_iter(),
+                                gltf::TransparencyType::Blend,
                                 Some([0., 1.0, 0., 0.5].into()),
                             )
                             .into_iter(),

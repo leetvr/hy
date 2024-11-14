@@ -139,6 +139,7 @@ pub struct GLTFMaterial {
     pub _normal_texture: Option<GLTFTexture>,
     pub _metallic_roughness_ao_texture: Option<GLTFTexture>,
     pub _emissive_texture: Option<GLTFTexture>,
+    pub transparency_type: TransparencyType,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -163,6 +164,37 @@ impl std::fmt::Debug for GLTFTexture {
             .field("dimensions", &self.dimensions)
             .field("data", &self.data.len())
             .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TransparencyType {
+    Opaque,
+    Cutout(f32),
+    Blend,
+}
+
+impl TransparencyType {
+    pub fn requires_blending(&self) -> bool {
+        matches!(self, TransparencyType::Blend)
+    }
+
+    pub fn cutoff_value(&self) -> f32 {
+        match *self {
+            TransparencyType::Cutout(value) => value,
+            _ => 0.0,
+        }
+    }
+
+    fn from_material(material: &gltf::Material) -> Self {
+        match material.alpha_mode() {
+            gltf::material::AlphaMode::Blend => TransparencyType::Blend,
+            gltf::material::AlphaMode::Mask => {
+                let alpha_cutoff = material.alpha_cutoff().unwrap_or(1.0);
+                TransparencyType::Cutout(alpha_cutoff)
+            }
+            gltf::material::AlphaMode::Opaque => TransparencyType::Opaque,
+        }
     }
 }
 
@@ -399,6 +431,8 @@ fn load_material(
         .map_err(|e| tracing::info!("Unable to import emissive texture: {e}"))
         .ok();
 
+    let transparency_type = TransparencyType::from_material(&material);
+
     Ok(GLTFMaterial {
         base_colour_texture,
         base_colour_factor,
@@ -407,6 +441,7 @@ fn load_material(
         _normal_texture: normal_texture,
         _metallic_roughness_ao_texture: metallic_roughness_ao_texture,
         _emissive_texture: emissive_texture,
+        transparency_type,
     })
 }
 
