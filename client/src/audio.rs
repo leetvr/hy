@@ -200,7 +200,7 @@ impl AudioManager {
     }
 
     /// Stops a sound given its handle.
-    pub fn stop_sound(&mut self, handle: u32) -> Result<(), JsValue> {
+    pub fn _stop_sound_with_handle(&mut self, handle: u32) -> Result<(), JsValue> {
         if let Some(sound_instance) = self.active_sounds.remove(&handle) {
             sound_instance.stop()?;
             Ok(())
@@ -208,6 +208,10 @@ impl AudioManager {
             web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
             Err(JsValue::from_str("Sound handle not found"))
         }
+    }
+
+    pub fn _set_master_volume(&self, volume: f32) {
+        self.gain_node.gain().set_value(volume);
     }
 
     /// Stops all currently playing sounds and clears the active_sounds map.
@@ -236,21 +240,6 @@ impl AudioManager {
         self.sounds_bank.clear();
         web_sys::console::log_1(&"Sounds bank cleared.".into());
         Ok(())
-    }
-
-    pub fn set_master_volume(&self, volume: f32) {
-        self.gain_node.gain().set_value(volume);
-    }
-
-    // DEBUG: currently just shifting all panners, (Make sure doesn't affect entity)
-    pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
-        if let Some(d) = move_panner_opt {
-            self.active_sounds.values_mut().for_each(|s| {
-                s.panner_node
-                    .position_x()
-                    .set_value(s.panner_node.position_x().value() + d)
-            });
-        }
     }
 
     pub fn set_listener_position(&self, x: f32, y: f32, z: f32) {
@@ -386,7 +375,7 @@ impl SoundInstance {
 
     /// Stops playback and disconnects nodes to free resources.
     pub fn stop(&self) -> Result<(), JsValue> {
-        // TODO: use non deprecated
+        // TODO: use non deprecated and make sure extra cleanup isn't required
         self.source_node.stop()?;
         self.source_node.disconnect()?;
         self.panner_node.disconnect()?;
@@ -403,74 +392,4 @@ impl SoundInstance {
     pub fn set_position_from_vec3(&self, glam_vec: glam::Vec3) {
         self.set_position(glam_vec.x, glam_vec.y, glam_vec.z);
     }
-}
-
-// Testing only methods
-impl AudioManager {
-    //     // Have tested:
-    //     // - looping (works both directions)
-    //     // - reference_distance (both directions)
-    //     // - pitch, works, but can make weird popping sounds (and fluctuating volumes if many sounds modified simultaneously)
-
-    //     // TEST: Updates all currently playing sounds based on specified parameters.
-    //     pub fn test_update_all_sounds(&mut self) -> Result<(), JsValue> {
-    //         // First, collect all handles to avoid borrowing conflict
-    //         let handles: Vec<u32> = self.active_sounds.keys().copied().collect();
-
-    //         let new_is_looping = Some(true); // Example: stop looping all sounds
-    //         let p = 1.0f32; // Example: reset pitch to normal
-    //         let new_ref_dist = Some(10.0f32); // Example: set a default reference distance
-    //         let new_rising_pitch = (handles.len() / 10) as f32;
-
-    //         for handle in handles {
-    //             let update_result = self.update_sound_with_handle(
-    //                 handle,
-    //                 // ----------------------------------------------------------------------------------------------------------------------------------
-    //                 None, // looping
-    //                 None, // new_is_looping,
-    //                 None, // Some(p),
-    //                 None,
-    //             );
-
-    //             match update_result {
-    //                 Ok(_) => {
-    //                     web_sys::console::log_1(
-    //                         &format!("Updated sound with handle {}", handle).into(),
-    //                     );
-    //                 }
-    //                 Err(err) => {
-    //                     web_sys::console::error_1(
-    //                         &format!("Failed to update sound with handle {}: {:?}", handle, err).into(),
-    //                     );
-    //                 }
-    //             }
-    //         }
-
-    //         Ok(())
-    //     }
-
-    //     fn toggle_ambient(
-    //         &mut self,
-    //         is_ambient: Option<bool>,
-    //         sound: &mut SoundInstance,
-    //     ) -> Result<(), JsValue> {
-    //         Ok(if let Some(new_is_ambient) = is_ambient {
-    //             if new_is_ambient != sound.is_ambient {
-    //                 // disconnect from panner
-    //                 sound.source_node.disconnect()?;
-    //                 if new_is_ambient {
-    //                     // Connect source directly to gain node
-    //                     sound.source_node.connect_with_audio_node(&self.gain_node)?;
-    //                 } else {
-    //                     // Connect nodes: source -> panner -> gain
-    //                     sound
-    //                         .source_node
-    //                         .connect_with_audio_node(&sound.panner_node)?;
-    //                     // TODO: later remember to factor in own volume later
-    //                     sound.panner_node.connect_with_audio_node(&self.gain_node)?;
-    //                 }
-    //                 sound.is_ambient = new_is_ambient;
-    //             }
-    //         })
-    //     }
 }

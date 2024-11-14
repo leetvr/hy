@@ -905,11 +905,6 @@ impl Engine {
         self.audio_manager.stop_all_sounds()
     }
 
-    // TODO delete or rename
-    pub fn move_all_panner_nodes(&mut self, move_panner_opt: Option<f32>) {
-        self.audio_manager.move_all_panner_nodes(move_panner_opt);
-    }
-
     fn update_audio_manager(&mut self) {
         // Get the camera's position and rotation based on the current game state
         let (position, rotation) = match &self.state {
