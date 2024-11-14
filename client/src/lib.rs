@@ -1,30 +1,35 @@
 use {
-    crate::{assets::Assets, camera::FlyCamera},
-    blocks::BlockRegistry,
-    dolly::prelude::YawPitch,
-    glam::EulerRot,
-    image::GenericImageView,
-    std::collections::HashSet,
-    web_sys::MouseEvent,
-};
-
-use {
-    crate::{socket::ConnectionState, transform::Transform},
+    crate::{
+        assets::Assets, camera::FlyCamera, gltf::GLTFModel, socket::ConnectionState,
+        transform::Transform,
+    },
     anyhow::Result,
-    blocks::BlockGrid,
-    glam::{Quat, Vec2, Vec3},
-    net_types::PlayerId,
-    std::{cell::RefCell, collections::HashMap, rc::Rc, slice, time::Duration},
-    web_sys::WebSocket,
+    blocks::BlockTypeID,
+    dolly::prelude::YawPitch,
+    glam::{EulerRot, Quat, Vec2, Vec3},
+    image::GenericImageView,
+    net_types::ServerPacket,
+    std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+        rc::Rc,
+        slice,
+        time::Duration,
+    },
+    web_sys::{MouseEvent, WebSocket},
 };
 
-use blocks::BlockId;
 // Re-exports
 pub use blocks::BlockPos;
 
-use context::EngineMode;
+use blocks::BlockType;
+use game_state::GameState;
 use glam::UVec2;
+use nanorand::Rng;
 use net_types::ClientPacket;
+use net_types::ClientShouldSwitchMode;
+use render::{Renderer, Texture};
+use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -34,12 +39,14 @@ use web_sys::{HtmlCanvasElement, KeyboardEvent};
 mod assets;
 mod camera;
 mod context;
+mod game_state;
 mod gltf;
+mod packet_handlers;
 mod render;
 mod socket;
 mod transform;
 
-struct TestGltf {
+struct LoadedGLTF {
     gltf: gltf::GLTFModel,
     render_model: render::RenderModel,
 }
@@ -51,20 +58,23 @@ pub struct Engine {
 
     elapsed_time: Duration,
     delta_time: Duration,
-    test: Option<TestGltf>,
 
     ws: WebSocket,
     connection_state: Rc<RefCell<ConnectionState>>,
-    incoming_messages: Rc<RefCell<Vec<Vec<u8>>>>,
+    incoming_messages: IncomingMessages,
+    last_seen_sequence_number: u64,
 
     controls: Controls,
-    player_model: TestGltf,
+    player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
-    // Textures by path
-    // Value is Some(texture) for a loaded texture, None for a texture that errored on loading
-    // and vacant for a texture that is still loading
-    block_textures: Option<Vec<[render::Texture; 6]>>,
+    // Textures by block type ID
+    block_textures: HashMap<BlockTypeID, [render::Texture; 6]>,
+
+    // Entity models by path
+    entity_models: HashMap<String, LoadedGLTF>,
+
+    debug_lines: Vec<render::DebugLine>,
 
     assets: assets::Assets,
     state: GameState,
@@ -89,7 +99,7 @@ impl Engine {
         let renderer = render::Renderer::new(canvas.clone())?;
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
-        let incoming_messages = Rc::new(RefCell::new(Vec::new()));
+        let incoming_messages = IncomingMessages::default();
         let ws = socket::connect_to_server(
             "ws://127.0.0.1:8889",
             connection_state.clone(),
@@ -101,25 +111,28 @@ impl Engine {
             let gltf = gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
                 .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
             let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
-            TestGltf { gltf, render_model }
+            LoadedGLTF { gltf, render_model }
         };
 
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
-            block_textures: None,
+            block_textures: Default::default(),
+            entity_models: Default::default(),
 
             renderer,
             delta_time: Duration::ZERO,
             elapsed_time: Duration::ZERO,
-            test: None,
 
             ws,
             connection_state,
             incoming_messages,
+            last_seen_sequence_number: 0,
 
             controls: Default::default(),
             player_model,
+
+            debug_lines: Vec::new(),
 
             assets: Assets::new(),
             state: Default::default(),
@@ -127,37 +140,6 @@ impl Engine {
     }
 
     pub fn key_down(&mut self, event: KeyboardEvent) {
-        if event.code() == "KeyR" {
-            let gltf = match gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
-            {
-                Ok(g) => g,
-                Err(e) => {
-                    tracing::info!("Error loading GLTF: {e:#?}");
-                    return;
-                }
-            };
-
-            let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
-
-            self.test = Some(TestGltf { gltf, render_model });
-        }
-
-        if event.code() == "KeyT" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("idle", 0.5);
-            }
-        }
-        if event.code() == "KeyY" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.play_animation("walk", 0.5);
-            }
-        }
-        if event.code() == "KeyG" {
-            if let Some(ref mut test) = self.test {
-                test.gltf.stop_animation(0.5);
-            }
-        }
-
         self.controls
             .keyboard_inputs
             .insert(event.code().as_str().to_string());
@@ -202,104 +184,138 @@ impl Engine {
         self.delta_time = current_time - self.elapsed_time;
         self.elapsed_time = current_time;
 
-        // Maintain assets, loading pending assets from remote requests
-        self.assets.maintain();
-
         // Receive packets
         if *self.connection_state.borrow() == ConnectionState::Connected {
             loop {
-                if self.incoming_messages.borrow().is_empty() {
-                    break;
-                }
-                // Incoming messages are pushed to the back of the queue, so we process them from
-                // the front
-                let message = self.incoming_messages.borrow_mut().remove(0);
+                let mut mode_switch: Option<ClientShouldSwitchMode> = None;
 
-                let packet: net_types::ServerPacket =
-                    bincode::deserialize(&message).expect("Failed to deserialize position update");
+                // Incoming messages are stored by their sequence number
+                let Some(packet) = self
+                    .incoming_messages
+                    .borrow_mut()
+                    .remove(&self.last_seen_sequence_number)
+                else {
+                    break;
+                };
+
+                // Increment our sequence number
+                self.last_seen_sequence_number += 1;
 
                 match &mut self.state {
                     GameState::Loading => match packet {
-                        net_types::ServerPacket::Init(net_types::Init {
+                        ServerPacket::Init(net_types::Init {
                             blocks,
                             block_registry,
+                            entities,
+                            entity_type_registry,
                             ..
                         }) => {
+                            tracing::info!("Init received:");
                             tracing::info!("Loaded level of size {:?}", blocks.size());
                             tracing::info!("Block registry: {:#?}", block_registry);
 
-                            // Start fetching textures
-                            for block_type in block_registry.iter() {
-                                self.assets.get(&block_type.top_texture);
-                                self.assets.get(&block_type.bottom_texture);
-                                self.assets.get(&block_type.east_texture);
-                                self.assets.get(&block_type.west_texture);
-                                self.assets.get(&block_type.north_texture);
-                                self.assets.get(&block_type.south_texture);
-                            }
+                            // Start fetching assets
+                            self.assets.load_block_textures(&block_registry);
+                            self.assets.load_entity_models(entities.values());
 
                             // Tell the React frontend
                             if let Some(on_init) = self.context.on_init_callback.take() {
-                                let data = serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let block_registry =
+                                    serde_wasm_bindgen::to_value(&block_registry).unwrap();
+                                let entity_type_registry =
+                                    serde_wasm_bindgen::to_value(&entity_type_registry).unwrap();
                                 on_init
-                                    .call1(&JsValue::NULL, &data)
+                                    .call2(&JsValue::NULL, &block_registry, &entity_type_registry)
                                     .expect("Unable to call on_init!");
                             }
 
                             self.state = GameState::Editing {
                                 blocks,
                                 block_registry,
-                                camera: FlyCamera::new(Vec3::ZERO),
-                                target_block: None,
+                                entities,
+                                entity_type_registry,
+                                camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
+                                target_raycast: None,
                                 selected_block_id: None,
+                                preview_entity: None,
                             };
 
                             // When we've connected, tell the server we want to switch to edit mode.
                             self.send_packet(net_types::ClientPacket::Edit);
                         }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("LOADING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
                     GameState::Playing {
                         players,
+                        entities,
                         blocks,
-                        client_player,
                         ..
                     } => match packet {
-                        net_types::ServerPacket::SetBlock(set_block) => {
-                            handle_set_block(blocks, set_block).expect("Failed to set block");
+                        ServerPacket::SetBlock(set_block) => {
+                            packet_handlers::handle_set_block(blocks, set_block)
+                                .expect("Failed to set block");
                         }
-                        net_types::ServerPacket::AddPlayer(add_player) => {
-                            handle_add_player(players, add_player).expect("Failed to add player");
+                        ServerPacket::AddPlayer(add_player) => {
+                            packet_handlers::handle_add_player(
+                                players,
+                                &self.player_model.gltf,
+                                add_player,
+                            )
+                            .expect("Failed to add player");
                         }
-                        net_types::ServerPacket::UpdatePosition(update_position) => {
-                            handle_update_position(players, update_position);
+                        ServerPacket::UpdatePlayer(update_position) => {
+                            packet_handlers::handle_update_position(players, update_position);
                         }
-                        net_types::ServerPacket::RemovePlayer(remove_player) => {
-                            handle_remove_player(players, remove_player)
+                        ServerPacket::RemovePlayer(remove_player) => {
+                            packet_handlers::handle_remove_player(players, remove_player)
                                 .expect("Failed to remove player");
                         }
-                        // Sent by the server when we leave edit mode
-                        net_types::ServerPacket::Reset(net_types::Reset {
-                            new_client_player,
-                            ..
-                        }) => {
-                            players.clear();
-                            *client_player = new_client_player;
+                        ServerPacket::AddEntity(add_entity) => {
+                            packet_handlers::handle_add_entity(entities, add_entity);
+                        }
+                        ServerPacket::UpdateEntity(update_entity) => {
+                            if let Err(e) =
+                                packet_handlers::handle_update_entity(entities, update_entity)
+                            {
+                                tracing::error!("Error when handling UpdateEntity: {e:#}");
+                            }
+                        }
+                        ServerPacket::RemoveEntity(remove_entity) => {
+                            packet_handlers::handle_remove_entity(entities, remove_entity);
+                        }
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("PLAYING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
-                            self.ws.close().unwrap();
-                            break;
                         }
                     },
-                    GameState::Editing { .. } => {}
+                    GameState::Editing { .. } => match packet {
+                        ServerPacket::ClientShouldSwitchMode(new_mode) => {
+                            tracing::debug!("EDITING: Server wants us to switch modes");
+                            mode_switch = Some(new_mode)
+                        }
+                        p => {
+                            tracing::error!("Received unexpected packet: {:#?}", p);
+                        }
+                    },
+                }
+
+                // If the server wanted us to switch modes, let's do that now.
+                if let Some(mode_switch) = mode_switch {
+                    self.state.switch_mode(mode_switch);
                 }
             }
         }
+
+        self.load_block_textures();
 
         // Check for errors
         match &*self.connection_state.borrow() {
@@ -362,8 +378,7 @@ impl Engine {
                 if self.controls.keyboard_inputs.contains("KeyD") {
                     move_dir.x += 1.0;
                 }
-                move_dir =
-                    Vec2::from_angle(move_dir.to_angle() + self.controls.yaw) * move_dir.length();
+                move_dir = move_dir.normalize_or_zero();
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),
@@ -374,8 +389,9 @@ impl Engine {
             GameState::Editing {
                 camera,
                 blocks,
-                target_block,
+                target_raycast,
                 selected_block_id,
+                preview_entity,
                 ..
             } => {
                 // Camera input
@@ -410,19 +426,28 @@ impl Engine {
                 let inv_view_matrix = self.renderer.camera.view_matrix().inverse();
                 let ray_dir = inv_view_matrix.transform_vector3(-Vec3::Z).normalize();
 
-                // If we're *placing* blocks, ie. not removing them, we actually want to place a
-                // block *above* the raycast target.
-                let mode = match selected_block_id {
-                    None | Some(0) => blocks::RaycastMode::Selecting,
-                    _ => blocks::RaycastMode::Placing,
-                };
-                *target_block = blocks
-                    .raycast(position, ray_dir, mode)
-                    .map(|hit| hit.position);
+                *target_raycast = blocks.raycast(position, ray_dir);
+
+                if let Some(preview_entity) = preview_entity {
+                    let Some(position) = target_raycast.as_ref().and_then(|raycast| {
+                        raycast
+                            .position
+                            .add_signed(raycast.entrance_face_normal.as_ivec3())
+                    }) else {
+                        return;
+                    };
+
+                    preview_entity.state.position = position.into();
+                }
 
                 if self.controls.mouse_left {
-                    tracing::debug!("Placing block at {target_block:?}");
-                    self.place_block();
+                    if selected_block_id.is_some() {
+                        tracing::debug!("Placing block at {target_raycast:?}");
+                        self.place_block();
+                    } else if preview_entity.is_some() {
+                        tracing::debug!("Placing entity at {target_raycast:?}");
+                        self.place_entity();
+                    }
                 }
 
                 // Send empty player input
@@ -441,6 +466,17 @@ impl Engine {
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
 
+        self.debug_lines.push(render::DebugLine::new(
+            Vec3::new(0.0, 3.0, 0.0),
+            Vec3::new(0.0, 3.0, 10.0),
+        ));
+
+        if let GameState::Playing { players, .. } = &mut self.state {
+            for player in players.values_mut() {
+                gltf::animate_model(&mut player.model, self.delta_time);
+            }
+        }
+
         self.render();
     }
 
@@ -454,57 +490,174 @@ impl Engine {
     fn place_block(&mut self) {
         // Ensure we're in the editing state and we have a selected block ID
         let GameState::Editing {
-            blocks,
-            target_block: Some(target_block),
+            ref mut blocks,
+            target_raycast: Some(ref target_raycast),
             selected_block_id: Some(block_id),
+            ..
+        } = self.state
+        else {
+            return;
+        };
+
+        let is_deleting = block_id == 0;
+        let position = match is_deleting {
+            // When deleting a block, we place it at the position of the raycast.
+            true => target_raycast.position,
+            false => {
+                // When we place a block, we place it at the position of the raycast, but offset by
+                // the entrance face normal, as we're placing it "on" the face the ray entered.
+                let Some(position) = target_raycast
+                    .position
+                    .add_signed(target_raycast.entrance_face_normal.as_ivec3())
+                else {
+                    return;
+                };
+
+                position
+            }
+        };
+
+        let set_block = net_types::SetBlock { position, block_id };
+
+        tracing::debug!("Setting block at {position:?} to {block_id}");
+
+        // cheeky: We pretend we received a `set_block` packet
+        packet_handlers::handle_set_block(blocks, set_block).expect("place block");
+
+        self.send_packet(ClientPacket::SetBlock(set_block));
+    }
+
+    fn place_entity(&mut self) {
+        // Ensure we're in the editing state and we have a selected block ID
+        let GameState::Editing {
+            entities,
+            preview_entity,
             ..
         } = &mut self.state
         else {
             return;
         };
 
-        let block_id = *block_id;
-        let position = *target_block;
-        let set_block = net_types::SetBlock { position, block_id };
+        // First, get the preview_entity entity
+        let Some(placed_entity) = preview_entity.take() else {
+            tracing::warn!("Attempted to place entity but there is no preview_entity entity");
+            return;
+        };
 
-        tracing::debug!("Setting block at {position:?} to {block_id}");
+        // IMPORTANT: We have to replace the preview_entity entity with one that has a new ID
+        let next_entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+        let mut new_preview_entity = placed_entity.clone();
+        new_preview_entity.id = next_entity_id;
+        *preview_entity = Some(new_preview_entity);
 
-        handle_set_block(blocks, set_block).expect("place block");
+        // Great. Now, add the placed entity to the world
+        let entity_id = placed_entity.id.clone();
+        entities.insert(entity_id.clone(), placed_entity.clone());
 
-        self.send_packet(ClientPacket::SetBlock(set_block));
+        // Finally, tell the server that we done added an entity
+        let add_entity = net_types::AddEntity {
+            entity_id,
+            entity_data: placed_entity,
+        };
+
+        self.send_packet(ClientPacket::AddEntity(add_entity));
+    }
+
+    fn load_block_textures(&mut self) {
+        let block_registry = match &self.state {
+            GameState::Loading => return,
+            GameState::Playing { block_registry, .. }
+            | GameState::Editing { block_registry, .. } => block_registry,
+        };
+
+        let block_textures = &mut self.block_textures;
+
+        for (block_type_id, block_type) in block_registry.iter().enumerate() {
+            let block_type_id = block_type_id as BlockTypeID + 1;
+            load_textures_for_block(
+                block_type,
+                block_type_id,
+                &self.assets,
+                &mut self.renderer,
+                block_textures,
+            );
+        }
     }
 
     fn render(&mut self) {
         let mut draw_calls = Vec::new();
+        self.load_entity_models();
 
-        // Gather blocks
+        // Gather blocks and entities
         match &self.state {
             GameState::Playing {
-                blocks,
-                block_registry,
-                ..
+                blocks, entities, ..
             }
             | GameState::Editing {
-                blocks,
-                block_registry,
-                ..
+                blocks, entities, ..
             } => {
-                if self.block_textures.is_none() {
-                    // Try to collect textures for all block types. If any are missing, just wait for all of them to arrive.
-                    self.block_textures =
-                        collect_block_textures(block_registry, &self.renderer, &mut self.assets);
-                }
+                // Collect blocks
+                let block_to_remove = match self.state {
+                    GameState::Editing {
+                        target_raycast: Some(ref raycast),
+                        selected_block_id: Some(0),
+                        ..
+                    } => Some(raycast.position),
+                    _ => None,
+                };
 
-                if let Some(block_textures) = &self.block_textures {
-                    let blocks = blocks.iter_non_empty().filter_map(|(pos, block_id)| {
-                        Some((pos, &block_textures[block_id as usize - 1]))
+                let blocks_to_render =
+                    blocks.iter_non_empty().filter_map(|(pos, block_type_id)| {
+                        if let Some(ref block_to_remove) = block_to_remove {
+                            if *block_to_remove == pos {
+                                return None;
+                            }
+                        }
+
+                        let textures = self.block_textures.get(&block_type_id)?;
+
+                        Some((pos, textures))
                     });
 
-                    // TODO: If we're trying to *remove* a block, we need to not render a block at that position.
-                    draw_calls.extend(
-                        render::build_cube_draw_calls(&self.cube_mesh_data, blocks, None)
-                            .into_iter(),
-                    );
+                draw_calls.extend(
+                    render::build_cube_draw_calls(
+                        &self.cube_mesh_data,
+                        blocks_to_render,
+                        gltf::TransparencyType::Opaque,
+                        None,
+                    )
+                    .into_iter(),
+                );
+
+                if let Some(block_to_remove) = block_to_remove {
+                    let block_type_id = blocks.get(block_to_remove).copied().unwrap();
+                    if block_type_id != 0 {
+                        if let Some(textures) = self.block_textures.get(&block_type_id) {
+                            let blocks = [(block_to_remove, textures)];
+                            draw_calls.extend(
+                                render::build_cube_draw_calls(
+                                    &self.cube_mesh_data,
+                                    blocks,
+                                    gltf::TransparencyType::Blend,
+                                    Some([1.0, 0.0, 0., 0.5].into()),
+                                )
+                                .into_iter(),
+                            );
+                        }
+                    }
+                }
+
+                for entity in entities.values() {
+                    let Some(model) = self.entity_models.get(&entity.model_path) else {
+                        continue;
+                    };
+
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(entity.state.position, Quat::IDENTITY),
+                        None,
+                    ));
                 }
             }
             _ => {}
@@ -514,49 +667,151 @@ impl Engine {
         match &self.state {
             // Players
             GameState::Playing { players, .. } => {
+                // HACK: The player model is rotated 90 degrees, also
+                // it rotates the wrong way? I'm just fixing it here but someone
+                // should figure out why it is like this.
+                const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&self.player_model.gltf),
+                        slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new(player.position, Quat::IDENTITY),
+                        Transform::new(
+                            player.position,
+                            Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+                        ),
+                        None,
                     ));
                 }
             }
             // Ghost block
             GameState::Editing {
-                target_block: Some(block_pos),
+                target_raycast: Some(raycast),
                 selected_block_id: Some(block_id),
                 ..
             } if *block_id != 0 => {
-                if let Some(block_textures) = &self.block_textures {
-                    let textures = &block_textures[*block_id as usize - 1];
-                    let blocks = [(*block_pos, textures)];
+                if let Some(textures) = self.block_textures.get(block_id) {
+                    if let Some(block_position) = raycast
+                        .position
+                        .add_signed(raycast.entrance_face_normal.as_ivec3())
+                    {
+                        let blocks = [(block_position, textures)];
 
-                    draw_calls.extend(
-                        render::build_cube_draw_calls(
-                            &self.cube_mesh_data,
-                            blocks.into_iter(),
-                            Some([0., 1.0, 0., 1.0].into()),
-                        )
-                        .into_iter(),
-                    );
+                        draw_calls.extend(
+                            render::build_cube_draw_calls(
+                                &self.cube_mesh_data,
+                                blocks.into_iter(),
+                                gltf::TransparencyType::Blend,
+                                Some([0., 1.0, 0., 0.5].into()),
+                            )
+                            .into_iter(),
+                        );
+                    }
+                }
+            }
+            // Ghost entity
+            GameState::Editing {
+                preview_entity: Some(preview_entity),
+                ..
+            } => {
+                if let Some(model) = self.entity_models.get(&preview_entity.model_path) {
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                        Some([0.0, 0.5, 1.0, 0.5].into()),
+                    ));
                 }
             }
             _ => (),
         }
 
-        if let Some(ref mut test) = self.test {
-            gltf::animate_model(&mut test.gltf, self.delta_time);
+        self.renderer.render(&draw_calls, &self.debug_lines);
 
-            draw_calls.extend(render::build_render_plan(
-                slice::from_ref(&test.gltf),
-                slice::from_ref(&test.render_model),
-                Transform::IDENTITY,
-            ));
-        }
-
-        self.renderer.render(&draw_calls);
+        self.debug_lines.clear();
     }
+
+    fn load_entity_models(&mut self) {
+        let entities = match &self.state {
+            GameState::Editing { entities, .. } | GameState::Playing { entities, .. } => entities,
+            _ => return,
+        };
+
+        for model_name in entities.values().map(|e| &e.model_path) {
+            // If we've already loaded this model, continue
+            if self.entity_models.contains_key(model_name) {
+                continue;
+            }
+
+            // If we don't have the data yet, continue
+            let Some(data) = self.assets.get_or_load(model_name) else {
+                continue;
+            };
+
+            // Load the glTF
+            let loaded = {
+                let gltf =
+                    gltf::load(&data).unwrap_or_else(|e| panic!("Error loading GLTF: {e:#?}"));
+                let render_model = render::RenderModel::from_gltf(&self.renderer, &gltf);
+                LoadedGLTF { gltf, render_model }
+            };
+
+            // Stash it in our map
+            self.entity_models.insert(model_name.into(), loaded);
+        }
+    }
+}
+
+fn load_textures_for_block(
+    block_type: &BlockType,
+    block_type_id: BlockTypeID,
+    assets: &Assets,
+    renderer: &mut Renderer,
+    block_textures: &mut HashMap<BlockTypeID, [Texture; 6]>,
+) {
+    // If you're loaded already, whatever, trevor.
+    if block_textures.contains_key(&block_type_id) {
+        return;
+    };
+
+    // Collect all the texture data
+    let Some(north) = assets.get(&block_type.north_texture) else {
+        return;
+    };
+
+    let Some(south) = assets.get(&block_type.south_texture) else {
+        return;
+    };
+
+    let Some(east) = assets.get(&block_type.east_texture) else {
+        return;
+    };
+
+    let Some(west) = assets.get(&block_type.west_texture) else {
+        return;
+    };
+
+    let Some(top) = assets.get(&block_type.top_texture) else {
+        return;
+    };
+
+    let Some(bottom) = assets.get(&block_type.bottom_texture) else {
+        return;
+    };
+
+    let textures = [north, south, east, west, top, bottom].map(|image_data| {
+        load_texture_from_image(renderer, &image_data).expect("Failed to load texture")
+    });
+
+    block_textures.insert(block_type_id, textures);
+}
+
+fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow::Result<Texture> {
+    let image = image::load_from_memory(image_data)?;
+    let (width, height) = image.dimensions();
+    let image = image.into_rgba8();
+    let data = image.as_raw();
+
+    Ok(renderer.create_texture_from_image(data, width, height))
 }
 
 #[derive(Clone, Default)]
@@ -575,151 +830,8 @@ struct Controls {
 #[derive(Clone, Debug, Default)]
 struct Player {
     position: Vec3,
-}
-
-#[derive(Debug, Default)]
-enum GameState {
-    #[default]
-    Loading,
-    Playing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        client_player: PlayerId,
-        camera: FlyCamera,
-        players: HashMap<PlayerId, Player>,
-    },
-    Editing {
-        blocks: BlockGrid,
-        block_registry: BlockRegistry,
-        camera: FlyCamera,
-        target_block: Option<BlockPos>,
-        selected_block_id: Option<BlockId>,
-    },
-}
-
-impl GameState {
-    pub fn transition(&mut self, next_state: EngineMode) {
-        let current_state = std::mem::replace(self, GameState::Loading);
-        match (current_state, next_state) {
-            // Playing -> Editing
-            (
-                GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Edit,
-            ) => {
-                *self = GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    target_block: None,
-                    selected_block_id: None,
-                }
-            }
-            // Editing -> Playing
-            (
-                GameState::Editing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    ..
-                },
-                EngineMode::Play,
-            ) => {
-                *self = GameState::Playing {
-                    blocks,
-                    block_registry,
-                    camera,
-                    client_player: PlayerId::new(0), // note(KMRW): This will be replaced by the server
-                    players: Default::default(),
-                }
-            }
-            _ => {}
-        };
-    }
-}
-
-// Handlers for incoming packets
-
-/// Handle a `SetBlock` packet
-fn handle_set_block(
-    blocks: &mut BlockGrid,
-    net_types::SetBlock { position, block_id }: net_types::SetBlock,
-) -> Result<()> {
-    blocks[position] = block_id;
-    Ok(())
-}
-
-/// Handle an `AddPlayer` packet
-fn handle_add_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::AddPlayer { id, position }: net_types::AddPlayer,
-) -> Result<()> {
-    players.insert(id, Player { position });
-    Ok(())
-}
-
-/// Handle a `RemovePlayer` packet
-fn handle_remove_player(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::RemovePlayer { id }: net_types::RemovePlayer,
-) -> Result<()> {
-    players.remove(&id);
-    Ok(())
-}
-
-/// Handle an `UpdatePosition` packet
-fn handle_update_position(
-    players: &mut HashMap<PlayerId, Player>,
-    net_types::UpdatePosition { id, position }: net_types::UpdatePosition,
-) {
-    let Some(player) = players.get_mut(&id) else {
-        tracing::warn!("Received update position for unknown player {id:?}");
-        return;
-    };
-    player.position = position;
-}
-
-fn collect_block_textures(
-    block_registry: &BlockRegistry,
-    renderer: &render::Renderer,
-    assets: &mut Assets,
-) -> Option<Vec<[render::Texture; 6]>> {
-    block_registry
-        .iter()
-        .map(|block_type| {
-            let load_image = |data: &Vec<u8>| match image::load_from_memory(data) {
-                Ok(img) => {
-                    let (width, height) = img.dimensions();
-                    let data = img.as_rgba8()?.as_raw();
-                    tracing::info!(
-                        "Loaded image for block {}: {width}x{height}",
-                        block_type.name
-                    );
-                    Some(renderer.create_texture_from_image(data, width, height))
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load image: {e}");
-                    None
-                }
-            };
-
-            let top = assets.get(&block_type.top_texture).and_then(load_image)?;
-            let bottom = assets
-                .get(&block_type.bottom_texture)
-                .and_then(load_image)?;
-            let east = assets.get(&block_type.east_texture).and_then(load_image)?;
-            let west = assets.get(&block_type.west_texture).and_then(load_image)?;
-            let north = assets.get(&block_type.north_texture).and_then(load_image)?;
-            let south = assets.get(&block_type.south_texture).and_then(load_image)?;
-
-            // TODO(ll): I just threw these in here, I don't know that they are in the right order
-            Some([north, south, east, west, top, bottom])
-        })
-        .collect::<Option<Vec<_>>>()
+    facing_angle: f32, // radians
+    model: GLTFModel,
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;

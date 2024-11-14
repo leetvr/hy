@@ -48,14 +48,7 @@ impl GridRenderer {
 
     pub fn render(&self, gl: &glow::Context, clip_from_world: glam::Mat4, grid_size: UVec2) {
         unsafe {
-            gl.enable(glow::BLEND);
             gl.disable(glow::CULL_FACE);
-            gl.blend_func_separate(
-                glow::SRC_ALPHA,
-                glow::ONE_MINUS_SRC_ALPHA,
-                glow::ONE,
-                glow::ZERO,
-            );
 
             gl.use_program(Some(self.program));
 
@@ -72,7 +65,6 @@ impl GridRenderer {
             gl.draw_arrays(glow::TRIANGLES, 0, 6);
 
             gl.disable(glow::BLEND);
-            gl.enable(glow::CULL_FACE);
         }
     }
 }

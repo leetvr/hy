@@ -1,7 +1,9 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
+    entities::{EntityData, EntityID, EntityTypeRegistry},
     serde::{Deserialize, Serialize},
+    std::collections::HashMap,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -21,29 +23,33 @@ pub struct Controls {
     pub camera_yaw: f32, // radians
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientPacket {
     Controls(Controls),
     Start,
     Pause,
     Edit,
-    SetBlock(SetBlock), // used by editor
+    SetBlock(SetBlock),   // used by editor
+    AddEntity(AddEntity), // used by editor
 }
 
 // Packets from the server to the client
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-/// Update a player's position
-pub struct UpdatePosition {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Update a player's state
+pub struct UpdatePlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
+    // Included if the animation state has changed
+    pub animation_state: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// Send a new player to the game
 pub struct AddPlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
+    pub animation_state: String,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -56,26 +62,50 @@ pub struct RemovePlayer {
 pub struct Init {
     pub blocks: BlockGrid,
     pub block_registry: BlockRegistry,
+    pub entities: HashMap<String, EntityData>,
+    pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Reset {
-    pub new_client_player: PlayerId,
+pub enum ClientShouldSwitchMode {
+    Play { new_player_id: PlayerId },
+    Pause { new_player_id: PlayerId },
+    Edit { world: Init },
 }
 
 #[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct SetBlock {
     pub position: BlockPos,
-    pub block_id: blocks::BlockId,
+    pub block_id: blocks::BlockTypeID,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddEntity {
+    pub entity_id: EntityID,
+    pub entity_data: EntityData,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RemoveEntity {
+    pub entity_id: EntityID,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateEntity {
+    pub entity_id: EntityID,
+    pub position: glam::Vec3,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
-    Reset(Reset),
+    ClientShouldSwitchMode(ClientShouldSwitchMode),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
-    UpdatePosition(UpdatePosition),
+    UpdatePlayer(UpdatePlayer),
     RemovePlayer(RemovePlayer),
+    AddEntity(AddEntity),
+    UpdateEntity(UpdateEntity),
+    RemoveEntity(RemoveEntity),
 }

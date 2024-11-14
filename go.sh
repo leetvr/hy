@@ -1,12 +1,21 @@
 #!/bin/bash
+# Clear out old assets
+
 set -xe
+
+rm -f assets/client_bg*.wasm
+rm -f assets/index-*.css
+rm -f assets/index-*.js
+rm -f assets/index.html
+
+# We want to know if any of these steps fail
 
 # Build the client
 (cd client && wasm-pack build --dev --target web)
 (cd client/ui && npm install && npx vite build --minify false)
 
 # Build the scripts
-(cd kibble_ctf && npx tsc)
+(cd kibble_ctf && npm install && npx tsc)
 
 # Copy the resulting files to the assets directory
 cp client/ui/dist/assets/* assets/

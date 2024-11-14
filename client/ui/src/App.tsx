@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import init, { Engine, EngineMode, BlockRegistry } from "../../pkg/client.js";
+import init, { Engine, EngineMode, BlockRegistry, EntityTypeRegistry } from "../../pkg/client.js";
 import TopBar from "./TopBar.tsx";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
@@ -10,30 +10,37 @@ function App({ engine }: { engine: Engine }) {
   const [currentMode, setModeState] = useState(initialEngineMode);
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
   const [selectedEntity, setSelectedEntity] = useState(false);
+  const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
   useEffect(() => {
-    engine.ctx_on_init(setBlockRegistry);
+    engine.ctx_on_init((blockRegistry: BlockRegistry, entityTypeRegistry: EntityTypeRegistry) => {
+      setBlockRegistry(blockRegistry);
+      setEntityTypeRegistry(entityTypeRegistry);
+    });
   }, [engine]);
 
   const setMode = (newMode: EngineMode) => {
-    if(newMode != currentMode) {
-        setModeState(newMode);
-        engine.ctx_set_engine_mode(newMode);
+    if (newMode != currentMode) {
+      setModeState(newMode);
+      engine.ctx_set_engine_mode(newMode);
     }
   };
 
   const editClass = getEngineModeText(currentMode);
 
   return (
-    <div className={"mode-"+editClass}>
-        <TopBar setMode={setMode} />
+    <div className={"mode-" + editClass}>
+      <TopBar setMode={setMode} />
+      {blockRegistry && entityTypeRegistry && (
         <LeftBar
-            engine={engine}
-            currentMode={currentMode}
-            blockRegistry={blockRegistry}
-            setSelectedEntity={setSelectedEntity}
-            />
-        <RightBar selectedEntity={selectedEntity} />
+          engine={engine}
+          currentMode={currentMode}
+          blockRegistry={blockRegistry}
+          entityTypeRegistry={entityTypeRegistry}
+          setSelectedEntity={setSelectedEntity}
+        />
+      )}
+      <RightBar selectedEntity={selectedEntity} />
     </div>
   );
 }
@@ -44,15 +51,6 @@ const getEngineModeText = (mode: EngineMode): string => {
       return "Play";
     case EngineMode.Edit:
       return "Edit";
-  }
-};
-
-const nextEngineMode = (mode: EngineMode): EngineMode => {
-  switch (mode) {
-    case EngineMode.Play:
-      return EngineMode.Edit;
-    case EngineMode.Edit:
-      return EngineMode.Play;
   }
 };
 

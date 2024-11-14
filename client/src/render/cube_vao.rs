@@ -19,133 +19,38 @@ impl CubeVao {
                 .expect("Failed to create vertex array");
             gl.bind_vertex_array(Some(vao));
 
+            #[rustfmt::skip]
             let vertices: [Vertex; 24] = [
                 // North face (z = 1.0, normal (0, 0, 1))
-                Vertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [0.0, 0.0, 1.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [0.0, 0.0, 1.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 1.0], },
+                Vertex { position: [1.0, 0.0, 1.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 1.0], },
+                Vertex { position: [1.0, 1.0, 1.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 0.0], },
+                Vertex { position: [0.0, 1.0, 1.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0], },
                 // South face (z = 0.0, normal (0, 0, -1))
-                Vertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [0.0, 0.0, -1.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 1.0], },
+                Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 1.0], },
+                Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 0.0, -1.0], uv: [1.0, 0.0], },
+                Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 0.0, -1.0], uv: [0.0, 0.0], },
                 // East face (x = 0.0, normal (-1, 0, 0))
-                Vertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [-1.0, 0.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [0.0, 0.0, 0.0], normal: [-1.0, 0.0, 0.0], uv: [0.0, 1.0], },
+                Vertex { position: [0.0, 0.0, 1.0], normal: [-1.0, 0.0, 0.0], uv: [1.0, 1.0], },
+                Vertex { position: [0.0, 1.0, 1.0], normal: [-1.0, 0.0, 0.0], uv: [1.0, 0.0], },
+                Vertex { position: [0.0, 1.0, 0.0], normal: [-1.0, 0.0, 0.0], uv: [0.0, 0.0], },
                 // West face (x = 1.0, normal (1, 0, 0))
-                Vertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [1.0, 0.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [1.0, 0.0, 1.0], normal: [1.0, 0.0, 0.0], uv: [0.0, 1.0], },
+                Vertex { position: [1.0, 0.0, 0.0], normal: [1.0, 0.0, 0.0], uv: [1.0, 1.0], },
+                Vertex { position: [1.0, 1.0, 0.0], normal: [1.0, 0.0, 0.0], uv: [1.0, 0.0], },
+                Vertex { position: [1.0, 1.0, 1.0], normal: [1.0, 0.0, 0.0], uv: [0.0, 0.0], },
                 // Top face (y = 1.0, normal (0, 1, 0))
-                Vertex {
-                    position: [0.0, 1.0, 1.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 1.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 1.0, 0.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [0.0, 1.0, 0.0],
-                    normal: [0.0, 1.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [0.0, 1.0, 1.0], normal: [0.0, 1.0, 0.0], uv: [0.0, 1.0], },
+                Vertex { position: [1.0, 1.0, 1.0], normal: [0.0, 1.0, 0.0], uv: [1.0, 1.0], },
+                Vertex { position: [1.0, 1.0, 0.0], normal: [0.0, 1.0, 0.0], uv: [1.0, 0.0], },
+                Vertex { position: [0.0, 1.0, 0.0], normal: [0.0, 1.0, 0.0], uv: [0.0, 0.0], },
                 // Bottom face (y = 0.0, normal (0, -1, 0))
-                Vertex {
-                    position: [0.0, 0.0, 0.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [0.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 0.0, 0.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [1.0, 0.0, 1.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [0.0, 0.0, 1.0],
-                    normal: [0.0, -1.0, 0.0],
-                    uv: [0.0, 1.0],
-                },
+                Vertex { position: [0.0, 0.0, 0.0], normal: [0.0, -1.0, 0.0], uv: [0.0, 1.0], },
+                Vertex { position: [1.0, 0.0, 0.0], normal: [0.0, -1.0, 0.0], uv: [1.0, 1.0], },
+                Vertex { position: [1.0, 0.0, 1.0], normal: [0.0, -1.0, 0.0], uv: [1.0, 0.0], },
+                Vertex { position: [0.0, 0.0, 1.0], normal: [0.0, -1.0, 0.0], uv: [0.0, 0.0], },
             ];
 
             // Now stash some vertices into it

@@ -1,0 +1,10 @@
+{
+  "entity_types": [
+    {
+      "id": 0,
+      "name": "Test Entity Type",
+      "script_path": "test_entity.js",
+      "default_model_path": "kibble_ctf/test_entity.gltf"
+    }
+  ]
+}

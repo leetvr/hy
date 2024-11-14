@@ -1,5 +1,13 @@
 [workspace]
-members = ["blocks", "cli", "client", "entities", "net-types", "physics", "server"]
+members = [
+    "blocks",
+    "cli",
+    "client",
+    "entities",
+    "net-types",
+    "physics",
+    "server",
+]
 resolver = "2"
 
 [workspace.dependencies]
@@ -32,6 +40,7 @@ tokio = { version = "1.4.1" }
 tokio-tungstenite = "0.24.0"
 anyhow = "1.0"
 deno_core = "0.317.0"
+nanorand = { version = "0.7", features = ["getrandom"] }
 tracing = "0.1.40"
 tracing-wasm = "0.2.1"
 console_error_panic_hook = "0.1.7"
@@ -48,11 +57,13 @@ nalgebra = "0.33.2"
 dolly = "0.6.0"
 thiserror = "2.0.0"
 tsify = { version = "0.4.5", features = ["js"] }
+gloo-net = { version = "0.6", features = ["http"] }
 
 
 net-types.path = "net-types"
 blocks.path = "blocks"
 physics.path = "physics"
+entities.path = "entities"
 
 [profile.release]
 debug = "line-tables-only"

@@ -1,11 +1,13 @@
-const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
+const GRAVITY = -20; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 10.0; // Movement speed (units per second)
-const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
+const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
-export const update = (currentState, controls) => {
-    const { position, velocity } = currentState;
+const PLAYER_SIZE = [0.5, 1.5, 0.5]; // Player size (x, y, z)
+export const update = (currentState, controls, collisions) => {
+    const { position, velocity, animationState } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
+    let newAnimationState = animationState;
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];
@@ -20,28 +22,70 @@ export const update = (currentState, controls) => {
         // Compute movement direction in world space
         const moveDirX = normalizedInput[0] * cosYaw - normalizedInput[1] * sinYaw;
         const moveDirZ = normalizedInput[0] * sinYaw + normalizedInput[1] * cosYaw;
-        console.log("Yaw", yaw, "normalizedInput", normalizedInput, "moveDirX", moveDirX, "moveDirZ", moveDirZ);
+        // console.log(
+        //   "Yaw",
+        //   yaw,
+        //   "sinYaw",
+        //   sinYaw,
+        //   "cosYaw",
+        //   cosYaw,
+        //   "normalizedInput",
+        //   normalizedInput,
+        //   "moveDirX",
+        //   moveDirX,
+        //   "moveDirZ",
+        //   moveDirZ,
+        // );
         // Update horizontal velocity
         newVelocity[0] = moveDirX * MOVE_SPEED;
         newVelocity[2] = -moveDirZ * MOVE_SPEED;
+        newAnimationState = "run";
     }
     else {
         // Apply damping to horizontal velocity when no input
-        newVelocity[0] *= 0.9; // Adjust damping factor as needed
-        newVelocity[2] *= 0.9;
+        newVelocity[0] *= 0.7; // Adjust damping factor as needed
+        newVelocity[2] *= 0.7;
+        newAnimationState = "idle";
     }
     // Handle jumping
     if (controls.jump && position[1] <= 1.01) {
         // Simple ground check
         newVelocity[1] = JUMP_SPEED;
+        newAnimationState = "jump_pre";
     }
     // Apply gravity to vertical velocity
     newVelocity[1] += GRAVITY * DT;
+    // Simple collision resolution
+    collisions = collisions.filter((collision) => {
+        return length(collision.resolution) < 0.5;
+    });
+    collisions.sort((a, b) => length(a.resolution) - length(b.resolution));
+    if (collisions.length > 0) {
+        const { block, resolution, normal } = collisions[0];
+        // Move player out of block
+        newPosition = [
+            newPosition[0] + resolution[0],
+            newPosition[1] + resolution[1],
+            newPosition[2] + resolution[2],
+        ];
+        // Cancel velocity along the normal
+        if (newVelocity[0] * normal[0] < 0) {
+            newVelocity[0] = 0.;
+        }
+        if (newVelocity[1] * normal[1] < 0) {
+            newVelocity[1] = 0.;
+        }
+        if (newVelocity[2] * normal[2] < 0) {
+            newVelocity[2] = 0.;
+        }
+        if (normal[1] > 0. && newAnimationState == "jump" || newAnimationState == "jump_pre") {
+            newAnimationState = "jump_post_light";
+        }
+    }
     // Update position based on velocity and delta time
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;
     newPosition[2] += newVelocity[2] * DT;
-    console.log("newPosition", newPosition, "newVelocity", newVelocity);
     // Simple collision detection with the ground
     if (newPosition[1] < 1) {
         newPosition[1] = 1; // Make sure we're on the ground
@@ -50,5 +94,9 @@ export const update = (currentState, controls) => {
     return {
         position: newPosition,
         velocity: newVelocity,
+        animationState: newAnimationState,
     };
 };
+function length(v) {
+    return Math.hypot(v[0], v[1], v[2]);
+}

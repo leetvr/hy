@@ -15,6 +15,7 @@ glam.workspace = true
 web-sys.workspace = true
 gltf.workspace = true
 bytemuck.workspace = true
+nanorand.workspace = true
 image.workspace = true
 tracing.workspace = true
 tracing-wasm.workspace = true
@@ -22,9 +23,10 @@ console_error_panic_hook.workspace = true
 bincode.workspace = true
 wasm-bindgen-futures.workspace = true
 dolly.workspace = true
-tokio = { workspace = true, features = ["sync"] }
 serde.workspace = true
 serde-wasm-bindgen.workspace = true
+gloo-net.workspace = true
 
 net-types.workspace = true
 blocks.workspace = true
+entities.workspace = true
