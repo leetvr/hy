@@ -2,26 +2,18 @@
 
 precision highp float;
 precision highp int;
-precision highp sampler2D;
-precision highp sampler2DShadow;
 
 in vec2 uvInterpolant;
-in vec3 shadowSpaceCoords;
 
 layout(location = 0) out vec4 fragColor;
 
 uniform sampler2D tex;
-uniform sampler2DShadow shadowMap; 
 uniform vec4 tint;
 
 uniform float depthCutoff;
 
 void main() {
-    fragColor = texture(tex, uvInterpolant) * tint;
-    
-    float shadow = texture(shadowMap, shadowSpaceCoords);
-
-    fragColor.rgb *= shadow;
+    fragColor = texture(tex, uvInterpolant);
 
     if (depthCutoff == 0.0) {
         return;

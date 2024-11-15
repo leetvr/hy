@@ -15,7 +15,7 @@ use {
 };
 
 use bytemuck::offset_of;
-use glam::{Mat4, UVec2, Vec3};
+use glam::{Mat4, UVec2, UVec3, Vec3, Vec3Swizzles};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
@@ -29,14 +29,16 @@ const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
 const UV_ATTRIBUTE: u32 = 2;
 
+const SHADOW_SIZE: UVec2 = UVec2::splat(1024);
+
 pub struct Renderer {
     gl: glow::Context,
     canvas: HtmlCanvasElement,
 
-    program: glow::Program,
-    matrix_location: Option<glow::UniformLocation>,
-    tint_location: Option<glow::UniformLocation>,
-    depth_cutoff_location: Option<glow::UniformLocation>,
+    forward_program: PrimaryProgram,
+    shadow_program: PrimaryProgram,
+
+    shadow_target: ShadowTarget,
 
     pub camera: Camera,
     resolution: UVec2,
@@ -59,28 +61,35 @@ impl Renderer {
         let vertex_shader_source = include_str!("shaders/tri.vert");
         let fragment_shader_source = include_str!("shaders/tri.frag");
 
-        let program = compile_shaders(&gl, vertex_shader_source, fragment_shader_source);
-        let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
-        let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
-        let tint_location = unsafe { gl.get_uniform_location(program, "tint") };
-        let depth_cutoff_location = unsafe { gl.get_uniform_location(program, "depthCutoff") };
+        let forward_program = PrimaryProgram::new(
+            &gl,
+            include_str!("shaders/tri.vert"),
+            include_str!("shaders/tri.frag"),
+        );
 
-        unsafe { gl.uniform_1_i32(texture_location.as_ref(), 0) };
+        let shadow_program = PrimaryProgram::new(
+            &gl,
+            include_str!("shaders/shadow_tri.vert"),
+            include_str!("shaders/shadow_tri.frag"),
+        );
+
+        let shadow_target = ShadowTarget::new(&gl, SHADOW_SIZE);
 
         let camera = Camera::default();
 
         let grid_renderer = grid_renderer::GridRenderer::new(&gl);
         let debug_renderer = debug_renderer::DebugRenderer::new(&gl);
 
+        let resolution = UVec2::new(canvas.width(), canvas.height());
+
         Ok(Self {
             gl,
             canvas,
-            program,
-            matrix_location,
-            tint_location,
-            depth_cutoff_location,
+            forward_program,
+            shadow_program,
+            shadow_target,
             camera,
-            resolution: UVec2::new(640, 480),
+            resolution,
             grid_renderer,
             debug_renderer,
         })
@@ -90,11 +99,11 @@ impl Renderer {
         self.resolution = dimension;
     }
 
-    pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine]) {
+    pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine], grid_size: UVec3) {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
-            let mut blend_state = EnableState::new(&self.gl, glow::BLEND, true);
+            let mut blend_state = EnableState::new(&self.gl, glow::BLEND, false);
             self.gl.enable(glow::DEPTH_TEST);
             self.gl.blend_func_separate(
                 glow::SRC_ALPHA,
@@ -111,6 +120,34 @@ impl Renderer {
 
             self.gl.depth_func(glow::LEQUAL);
 
+            // -------------------
+            // --- Shadow Pass ---
+            // -------------------
+
+            self.gl
+                .bind_framebuffer(glow::FRAMEBUFFER, Some(self.shadow_target.framebuffer));
+            self.gl
+                .viewport(0, 0, SHADOW_SIZE.x as i32, SHADOW_SIZE.y as i32);
+            self.gl.cull_face(glow::FRONT);
+
+            self.gl.clear_depth_f32(1.0);
+            self.gl.clear(glow::DEPTH_BUFFER_BIT);
+
+            let shadow_matrix = compute_shadow_bounding_box(Vec3::new(1.0, -1.0, -1.0), grid_size);
+
+            blend_state.set(&self.gl, false);
+
+            self.render_pass(&self.shadow_program, draw_calls, None, shadow_matrix, None);
+
+            // --------------------
+            // --- Forward Pass ---
+            // --------------------
+
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            self.gl
+                .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
+            self.gl.cull_face(glow::BACK);
+
             // Set the clear color
             self.gl.clear_color(0.1, 0.1, 0.1, 1.0);
             self.gl
@@ -121,21 +158,65 @@ impl Renderer {
 
             let view_matrix = self.camera.view_matrix();
 
-            self.gl.use_program(Some(self.program));
+            self.render_pass(
+                &self.forward_program,
+                draw_calls,
+                Some(&mut blend_state),
+                projection_matrix * view_matrix,
+                Some(shadow_matrix),
+            );
+
+            let clip_from_world = projection_matrix * view_matrix;
+            self.grid_renderer
+                .render(&self.gl, clip_from_world, UVec2::new(64, 64));
+
+            self.debug_renderer
+                .render(&self.gl, clip_from_world, debug_lines);
+
+            self.gl.flush();
+        }
+    }
+
+    fn render_pass(
+        &self,
+        program: &PrimaryProgram,
+        draw_calls: &[DrawCall],
+        blend_state: Option<&mut EnableState>,
+        clip_from_world: Mat4,
+        shadow_from_world: Option<Mat4>,
+    ) {
+        unsafe {
+            self.gl.use_program(Some(program.program));
 
             for draw_call in draw_calls {
                 let blending = draw_call.primitive.transparency_type.requires_blending();
-                blend_state.set(&self.gl, blending);
+
+                if let Some(&mut ref mut blend_state) = blend_state {
+                    blend_state.set(&self.gl, blending);
+                } else if blending {
+                    // Skip this draw call if blending is required but we don't have a blend state
+                    // as this means we are rendering to a target that doesn't support blending.
+                    continue;
+                }
+
                 self.gl.depth_mask(!blending);
 
-                let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
+                let mvp_matrix = clip_from_world * draw_call.transform;
 
                 // Set matrix
                 self.gl.uniform_matrix_4_f32_slice(
-                    self.matrix_location.as_ref(),
+                    program.matrix_location.as_ref(),
                     false,
                     bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
                 );
+                if let Some(shadow_from_world) = shadow_from_world {
+                    let shadow_matrix = shadow_from_world * draw_call.transform;
+                    self.gl.uniform_matrix_4_f32_slice(
+                        program.shadow_matrix_location.as_ref(),
+                        false,
+                        bytemuck::cast_slice(slice::from_ref(&shadow_matrix)),
+                    );
+                }
 
                 // Set tex
                 self.gl.active_texture(glow::TEXTURE0);
@@ -144,15 +225,22 @@ impl Renderer {
                     Some(draw_call.primitive.diffuse_texture.id),
                 );
 
+                // Set shadow map
+                if let Some(shadow_map_location) = program.shadow_map_location.as_ref() {
+                    self.gl.active_texture(glow::TEXTURE1);
+                    self.gl
+                        .bind_texture(glow::TEXTURE_2D, Some(self.shadow_target.depth_texture));
+                }
+
                 // Set tint
                 let tint = draw_call.tint.unwrap_or(glam::Vec4::ONE);
                 self.gl
-                    .uniform_4_f32_slice(self.tint_location.as_ref(), tint.as_ref());
+                    .uniform_4_f32_slice(program.tint_location.as_ref(), tint.as_ref());
 
                 // Set depth cutoff
                 let depth_cutoff = draw_call.primitive.transparency_type.cutoff_value();
                 self.gl
-                    .uniform_1_f32(self.depth_cutoff_location.as_ref(), depth_cutoff);
+                    .uniform_1_f32(program.depth_cutoff_location.as_ref(), depth_cutoff);
 
                 self.gl.bind_vertex_array(Some(draw_call.primitive.vao));
 
@@ -163,15 +251,6 @@ impl Renderer {
                     draw_call.primitive.index_start as i32 * mem::size_of::<u32>() as i32,
                 );
             }
-
-            let clip_from_world = projection_matrix * view_matrix;
-            self.grid_renderer
-                .render(&self.gl, clip_from_world, UVec2::new(64, 64));
-
-            self.debug_renderer
-                .render(&self.gl, clip_from_world, debug_lines);
-
-            self.gl.flush();
         }
     }
 
@@ -191,6 +270,133 @@ impl Renderer {
     }
 }
 
+struct PrimaryProgram {
+    program: glow::Program,
+    matrix_location: Option<glow::UniformLocation>,
+    shadow_matrix_location: Option<glow::UniformLocation>,
+    texture_location: Option<glow::UniformLocation>,
+    tint_location: Option<glow::UniformLocation>,
+    depth_cutoff_location: Option<glow::UniformLocation>,
+    shadow_map_location: Option<glow::UniformLocation>,
+}
+
+impl PrimaryProgram {
+    fn new(gl: &glow::Context, vert_shader: &str, frag_shader: &str) -> Self {
+        unsafe {
+            let program = compile_shaders(gl, vert_shader, frag_shader);
+
+            let matrix_location = gl.get_uniform_location(program, "matrix");
+            let shadow_matrix_location = gl.get_uniform_location(program, "shadowMatrix");
+            let texture_location = gl.get_uniform_location(program, "tex");
+            let tint_location = gl.get_uniform_location(program, "tint");
+            let depth_cutoff_location = gl.get_uniform_location(program, "depthCutoff");
+            let shadow_map_location = gl.get_uniform_location(program, "shadowMap");
+
+            gl.use_program(Some(program));
+
+            gl.uniform_1_i32(texture_location.as_ref(), 0);
+            gl.uniform_1_i32(shadow_map_location.as_ref(), 1);
+
+            Self {
+                program,
+                matrix_location,
+                shadow_matrix_location,
+                texture_location,
+                tint_location,
+                depth_cutoff_location,
+                shadow_map_location,
+            }
+        }
+    }
+}
+
+struct ShadowTarget {
+    framebuffer: glow::Framebuffer,
+    depth_texture: glow::Texture,
+}
+
+impl ShadowTarget {
+    fn new(gl: &glow::Context, size: UVec2) -> Self {
+        let depth_texture = unsafe {
+            let depth_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(depth_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::DEPTH_COMPONENT32F as i32,
+                size.x as i32,
+                size.y as i32,
+                0,
+                glow::DEPTH_COMPONENT,
+                glow::FLOAT,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_COMPARE_MODE,
+                glow::COMPARE_REF_TO_TEXTURE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_COMPARE_FUNC,
+                glow::LEQUAL as i32,
+            );
+            depth_texture
+        };
+
+        let framebuffer = unsafe {
+            let framebuffer = gl
+                .create_framebuffer()
+                .expect("Failed to create framebuffer");
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::DEPTH_ATTACHMENT,
+                glow::TEXTURE_2D,
+                Some(depth_texture),
+                0,
+            );
+            gl.draw_buffers(&[glow::NONE]);
+            gl.read_buffer(glow::NONE);
+            tracing::error!("{:X?}", gl.check_framebuffer_status(glow::FRAMEBUFFER));
+
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            framebuffer
+        };
+
+        Self {
+            framebuffer,
+            depth_texture,
+        }
+    }
+
+    fn dispose(&mut self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_framebuffer(self.framebuffer);
+            gl.delete_texture(self.depth_texture);
+        }
+    }
+}
 // CRIME(cw): This isn't really a crime but minecraft has this exact class and I feel nasty.
 struct EnableState {
     kind: u32,
@@ -254,7 +460,6 @@ fn compile_shaders(
         if !gl.get_shader_compile_status(fragment_shader) {
             let log = gl.get_shader_info_log(fragment_shader);
             tracing::info!("Fragment shader compilation failed: {}", log);
-            // return Err(JsValue::from_str(&log));
             panic!("Fragment shader compilation failed: {}", log);
         }
 
@@ -268,7 +473,6 @@ fn compile_shaders(
         if !gl.get_program_link_status(program) {
             let log = gl.get_program_info_log(program);
             tracing::info!("Program linking failed: {}", log);
-            // return Err(JsValue::from_str(&log));
             panic!("Program linking failed: {}", log);
         }
 
@@ -604,4 +808,47 @@ pub fn build_cube_draw_calls<'a>(
     }
 
     draw_calls
+}
+
+pub fn compute_shadow_bounding_box(direction: Vec3, grid_size: UVec3) -> Mat4 {
+    // All 8 corners of the grid
+    let corners = [
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(grid_size.x as f32, 0.0, 0.0),
+        Vec3::new(0.0, grid_size.y as f32, 0.0),
+        Vec3::new(grid_size.x as f32, grid_size.y as f32, 0.0),
+        Vec3::new(0.0, 0.0, grid_size.z as f32),
+        Vec3::new(grid_size.x as f32, 0.0, grid_size.z as f32),
+        Vec3::new(0.0, grid_size.y as f32, grid_size.z as f32),
+        Vec3::new(grid_size.x as f32, grid_size.y as f32, grid_size.z as f32),
+    ];
+
+    // Project those corners in the direction of the light
+    let zero_view_matrix = Mat4::look_at_rh(-direction, Vec3::ZERO, Vec3::Y);
+
+    let mut min = Vec3::INFINITY;
+    let mut max = Vec3::NEG_INFINITY;
+
+    for corner in corners {
+        let projected = zero_view_matrix.transform_point3(corner);
+
+        min = min.min(projected);
+        max = max.max(projected);
+    }
+
+    let center = (min + max) / 2.0;
+    let size = max - min;
+
+    let projection_matrix = Mat4::orthographic_rh_gl(
+        -size.x / 2.0,
+        size.x / 2.0,
+        -size.y / 2.0,
+        size.y / 2.0,
+        -size.z / 2.0,
+        size.z / 2.0,
+    );
+
+    let view_matrix = Mat4::look_at_rh(center - direction, center, Vec3::Y);
+
+    projection_matrix * view_matrix
 }
