@@ -11,6 +11,7 @@ use {
 pub struct Controls {
     pub move_direction: glam::Vec2,
     pub jump: bool,
+    pub fire: bool,
     pub camera_yaw: f32, // radians
 }
 

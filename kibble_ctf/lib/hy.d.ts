@@ -19,6 +19,7 @@ export interface PlayerState {
 export interface PlayerControls {
   move_direction: Vec2;
   jump: boolean;
+  fire: boolean;
   camera_yaw: number; // radians
 }
 
