@@ -950,7 +950,10 @@ impl Engine {
         let mut positions = HashMap::new();
 
         for (entity_id, entity_data) in entities.iter() {
-            if self.audio_manager.has_active_sound(entity_id.clone()) {
+            if self
+                .audio_manager
+                .has_active_sound_with_entity_id(&entity_id.clone())
+            {
                 positions.insert(entity_id.clone(), entity_data.state.position);
             }
         }
