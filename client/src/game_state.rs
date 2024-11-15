@@ -32,6 +32,13 @@ pub enum GameState {
 }
 
 impl GameState {
+    pub fn block_grid(&self) -> Option<&BlockGrid> {
+        match self {
+            GameState::Playing { blocks, .. } | GameState::Editing { blocks, .. } => Some(blocks),
+            _ => None,
+        }
+    }
+
     pub fn switch_mode(&mut self, mode_switch: ClientShouldSwitchMode) {
         let current_state = std::mem::replace(self, GameState::Loading);
         match (current_state, mode_switch) {
