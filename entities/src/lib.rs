@@ -6,6 +6,23 @@ use {
     tsify::Tsify,
     wasm_bindgen::prelude::wasm_bindgen,
 };
+
+// THis is only in the entities crate instead of the net-types crate because I need the PlayerId
+// here and net-types depends on the entities crate. But it is my dream that players will one
+// day also be entities. 🙏
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PlayerId(u64);
+
+impl PlayerId {
+    pub fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
+
 pub type EntityTypeID = u8;
 pub type EntityID = String;
 
@@ -46,9 +63,26 @@ impl EntityType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Anchor {
+    pub player_id: PlayerId,
+    pub parent_anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Interaction {
+    pub player_id: PlayerId,
+    pub position: glam::Vec3,
+    #[serde(rename = "facingAngle")]
+    pub facing_angle: f32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EntityState {
     pub position: glam::Vec3,
+    pub rotation: glam::Quat,
     pub velocity: glam::Vec3,
+    pub anchor: Option<Anchor>,
+    pub interactions: Vec<Interaction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

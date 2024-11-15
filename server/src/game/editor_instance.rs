@@ -1,28 +1,68 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+use {
+    crate::game::{network::Client, world::World, NextServerState},
+    entities::PlayerId,
+    net_types::{ClientShouldSwitchMode, ServerPacket, SetBlock},
+    physics::PhysicsWorld,
+    std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    },
+    tokio::sync::mpsc,
 };
 
-use net_types::{ClientShouldSwitchMode, PlayerId, ServerPacket, SetBlock};
-use tokio::sync::mpsc;
+use crate::js::JSContext;
 
-use super::{network::Client, world::World, NextServerState};
+use super::game_instance::GameInstance;
 
 pub struct EditorInstance {
     pub world: Arc<Mutex<World>>,
     pub editor_client: Client,
+    pub physics_world: Arc<Mutex<PhysicsWorld>>,
 }
 
 impl EditorInstance {
-    pub fn new(world: Arc<Mutex<World>>, editor_client: Client) -> Self {
-        Self {
+    pub async fn from_transition(
+        game_instance: GameInstance,
+        editor_client: Client,
+        storage_dir: &PathBuf,
+        js_context: &mut JSContext,
+    ) -> Self {
+        // Reload the world from storage
+        let GameInstance {
             world,
-            editor_client,
-        }
-    }
+            physics_world,
+            mut colliders,
+            mut players,
+            ..
+        } = game_instance;
 
-    pub async fn from_transition(world: Arc<Mutex<World>>, editor_client: Client) -> Self {
-        // The most important thing to do here is tell the client to switch to edit mode.
+        // Reload the world from storage
+        *world.lock().expect("Deadlock!") = World::load(storage_dir).expect("couldn't load world");
+
+        // Respawn all the entities
+        {
+            let mut world = world.lock().expect("Deadlock!");
+            for entity_data in world.entities.values_mut() {
+                js_context.spawn_entity(entity_data);
+            }
+        }
+
+        // Clean up the old game instance
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock!");
+
+            // Clean up the old player handles
+            for (_, player) in players.drain() {
+                physics_world.remove_body(player.body);
+            }
+
+            // Clean up old colliders
+            for collider in colliders.drain(..) {
+                physics_world.remove_collider(collider);
+            }
+        }
+
+        // IMPORTANT: Send the client a packet to confirm the mode switch
         {
             let world = world.lock().expect("Deadlock!");
             editor_client
@@ -47,6 +87,7 @@ impl EditorInstance {
         Self {
             world,
             editor_client,
+            physics_world,
         }
     }
 
@@ -92,7 +133,7 @@ impl EditorInstance {
 
     fn add_entity(&mut self, entity: net_types::AddEntity, storage_dir: &PathBuf) {
         let id = entity.entity_id;
-        let position = entity.entity_data.state.position;
+        let position = entity.entity_data.state.position.clone();
         let entity_type_id = entity.entity_data.entity_type;
         tracing::info!("Adding entity {id:?} at {position:?} of type {entity_type_id}");
 

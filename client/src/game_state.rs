@@ -1,8 +1,11 @@
-use {entities::EntityID, std::collections::HashMap};
+use {
+    entities::{EntityID, PlayerId},
+    std::collections::HashMap,
+};
 
 use blocks::{BlockGrid, BlockRegistry, BlockTypeID, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 
 use crate::{camera::FlyCamera, Player};
 
@@ -32,6 +35,13 @@ pub enum GameState {
 }
 
 impl GameState {
+    pub fn block_grid(&self) -> Option<&BlockGrid> {
+        match self {
+            GameState::Playing { blocks, .. } | GameState::Editing { blocks, .. } => Some(blocks),
+            _ => None,
+        }
+    }
+
     pub fn switch_mode(&mut self, mode_switch: ClientShouldSwitchMode) {
         let current_state = std::mem::replace(self, GameState::Loading);
         match (current_state, mode_switch) {

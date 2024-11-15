@@ -12,13 +12,14 @@ use {
     blocks::BlockPos,
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
+    entities::PlayerId,
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
     serde::{Deserialize, Serialize},
     std::{
         fmt::Display,
-        path::{Path, PathBuf},
+        path::PathBuf,
         sync::{Arc, Mutex},
     },
 };
@@ -46,14 +47,22 @@ impl GameServer {
             World::load(&storage_dir).expect("Failed to load world"),
         ));
 
+        let game_instance = GameInstance::new(world.clone());
+
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
-        let js_context = JSContext::new(&script_root, world.clone())
-            .await
-            .expect("Failed to load JS Context");
+        let mut js_context = JSContext::new(
+            &script_root,
+            world.clone(),
+            game_instance.physics_world.clone(),
+        )
+        .await
+        .expect("Failed to load JS Context");
+
+        game_instance.spawn_entities(&mut js_context).await;
 
         // Set the initial state
-        let initial_state = ServerState::Paused(GameInstance::new(world));
+        let initial_state = ServerState::Paused(game_instance);
 
         tracing::info!("Done!");
 
@@ -88,7 +97,9 @@ impl GameServer {
         // Do we need to transition to a different state?
         let Some(next_state) = next_state else { return };
 
-        self.state.transition(&self.storage_dir, next_state).await;
+        self.state
+            .transition(&self.storage_dir, next_state, &mut self.js_context)
+            .await;
     }
 }
 
@@ -117,7 +128,12 @@ impl Display for ServerState {
 
 impl ServerState {
     // state machines, my beloved
-    async fn transition(&mut self, storage_dir: impl AsRef<Path>, next_state: NextServerState) {
+    async fn transition(
+        &mut self,
+        storage_dir: &PathBuf,
+        next_state: NextServerState,
+        js_context: &mut JSContext,
+    ) {
         // Take the current state so we can move it
         let current_state = std::mem::replace(self, ServerState::Transitioning);
 
@@ -131,13 +147,13 @@ impl ServerState {
             // Playing -> Editing
             (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    // Reload world when switching to editing
-                    let world = game_instance.world;
-                    *world.lock().expect("Deadlock!") =
-                        World::load(storage_dir).expect("couldn't load world");
-
-                    let editor_instance =
-                        EditorInstance::from_transition(world, editor_client).await;
+                    let editor_instance = EditorInstance::from_transition(
+                        game_instance,
+                        editor_client,
+                        storage_dir,
+                        js_context,
+                    )
+                    .await;
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
@@ -153,13 +169,13 @@ impl ServerState {
             // Paused -> Editing
             (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
-                    // Reload world when switching to editing
-                    let world = game_instance.world;
-                    *world.lock().expect("Deadlock!") =
-                        World::load(storage_dir).expect("couldn't load world");
-
-                    let editor_instance =
-                        EditorInstance::from_transition(world, editor_client).await;
+                    let editor_instance = EditorInstance::from_transition(
+                        game_instance,
+                        editor_client,
+                        storage_dir,
+                        js_context,
+                    )
+                    .await;
                     *self = ServerState::Editing(editor_instance);
                 } else {
                     tracing::warn!(
@@ -236,8 +252,9 @@ pub struct PlayerCollision {
 }
 
 impl Player {
-    pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
-        let physics_body = physics_world.add_player_body(position, glam::Vec3::new(0.5, 1.5, 0.5));
+    pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
+        let physics_body =
+            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 2.0, 0.5));
         Self {
             state: PlayerState {
                 position,
