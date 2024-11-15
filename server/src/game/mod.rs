@@ -13,13 +13,14 @@ use {
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
     game_instance::GameInstance,
+    net_types::PlayerId,
     network::ClientId,
     physics::PhysicsWorld,
     serde::{Deserialize, Serialize},
     std::{
         fmt::Display,
         path::{Path, PathBuf},
-        sync::Arc,
+        sync::{Arc, Mutex},
     },
 };
 
@@ -42,16 +43,24 @@ impl GameServer {
 
         // Load the world
         let storage_dir: PathBuf = storage_dir.into();
-        let world = World::load(&storage_dir).expect("Failed to load world");
+        let world = Arc::new(Mutex::new(
+            World::load(&storage_dir).expect("Failed to load world"),
+        ));
+
+        let game_instance = GameInstance::new(world.clone());
 
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
-        let js_context = JSContext::new(&script_root, world.clone())
-            .await
-            .expect("Failed to load JS Context");
+        let js_context = JSContext::new(
+            &script_root,
+            world.clone(),
+            game_instance.physics_world.clone(),
+        )
+        .await
+        .expect("Failed to load JS Context");
 
         // Set the initial state
-        let initial_state = ServerState::Paused(GameInstance::new(world));
+        let initial_state = ServerState::Paused(game_instance);
 
         tracing::info!("Done!");
 
@@ -129,9 +138,30 @@ impl ServerState {
             // Playing -> Editing
             (ServerState::Playing(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    // Reload world when switching to editing
+                    let world = game_instance.world;
+                    *world.lock().expect("Deadlock!") =
+                        World::load(storage_dir).expect("couldn't load world");
+
+                    {
+                        let mut physics_world =
+                            game_instance.physics_world.lock().expect("Deadlock!");
+
+                        // Clean up the old player handles
+                        for (_, player) in game_instance.players.drain() {
+                            physics_world.remove_body(player.body);
+                        }
+
+                        // Clean up old colliders
+                        for collider in game_instance.colliders.drain(..) {
+                            physics_world.remove_collider(collider);
+                        }
+                    }
+
                     let editor_instance = EditorInstance::from_transition(
-                        World::load(storage_dir).expect("Couldn't load world"),
+                        world,
                         editor_client,
+                        game_instance.physics_world,
                     )
                     .await;
                     *self = ServerState::Editing(editor_instance);
@@ -149,9 +179,30 @@ impl ServerState {
             // Paused -> Editing
             (ServerState::Paused(mut game_instance), NextServerState::Editing(client_id)) => {
                 if let Some(editor_client) = game_instance.clients.remove(&client_id) {
+                    // Reload world when switching to editing
+                    let world = game_instance.world;
+                    *world.lock().expect("Deadlock!") =
+                        World::load(storage_dir).expect("couldn't load world");
+
+                    {
+                        let mut physics_world =
+                            game_instance.physics_world.lock().expect("Deadlock!");
+
+                        // Clean up the old player handles
+                        for (_, player) in game_instance.players.drain() {
+                            physics_world.remove_body(player.body);
+                        }
+
+                        // Clean up old colliders
+                        for collider in game_instance.colliders.drain(..) {
+                            physics_world.remove_collider(collider);
+                        }
+                    }
+
                     let editor_instance = EditorInstance::from_transition(
-                        World::load(storage_dir).expect("Couldn't load world"),
+                        world,
                         editor_client,
+                        game_instance.physics_world,
                     )
                     .await;
                     *self = ServerState::Editing(editor_instance);
@@ -230,8 +281,9 @@ pub struct PlayerCollision {
 }
 
 impl Player {
-    pub fn new(physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
-        let physics_body = physics_world.add_player_body(position, glam::Vec3::new(0.5, 1.5, 0.5));
+    pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
+        let physics_body =
+            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 2.0, 0.5));
         Self {
             state: PlayerState {
                 position,

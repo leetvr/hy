@@ -5,7 +5,6 @@ use {
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
-        sync::{Arc, Mutex},
     },
 };
 
@@ -19,10 +18,35 @@ pub struct World {
     pub block_registry: BlockRegistry,
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
+
+    command_queue: Vec<WorldCommand>,
 }
 
 impl World {
-    pub fn load(storage_dir: impl AsRef<Path>) -> Result<Arc<Mutex<Self>>> {
+    pub fn spawn_entity(&mut self, entity_id: String, entity_data: EntityData) {
+        self.command_queue
+            .push(WorldCommand::SpawnEntity(entity_id, entity_data));
+    }
+
+    pub fn despawn_entity(&mut self, entity_id: String) {
+        self.command_queue
+            .push(WorldCommand::DespawnEntity(entity_id));
+    }
+
+    pub fn apply_queued_updates(&mut self) {
+        for command in self.command_queue.drain(..) {
+            match command {
+                WorldCommand::SpawnEntity(entity_id, entity_data) => {
+                    self.entities.insert(entity_id, entity_data);
+                }
+                WorldCommand::DespawnEntity(entity_id) => {
+                    self.entities.remove(&entity_id);
+                }
+            }
+        }
+    }
+
+    pub fn load(storage_dir: impl AsRef<Path>) -> Result<Self> {
         let blocks_path = storage_dir.as_ref().join(BLOCKS_PATH);
         let blocks = serde_json::from_slice(&std::fs::read(blocks_path)?)?;
 
@@ -35,12 +59,13 @@ impl World {
         let entity_types_path = storage_dir.as_ref().join(ENTITY_TYPES_PATH);
         let entity_type_registry = serde_json::from_slice(&std::fs::read(entity_types_path)?)?;
 
-        Ok(Arc::new(Mutex::new(Self {
+        Ok(Self {
             blocks,
             block_registry,
             entities,
             entity_type_registry,
-        })))
+            command_queue: Vec::new(),
+        })
     }
 
     pub fn save(&mut self, storage_dir: &PathBuf) -> anyhow::Result<()> {
@@ -55,4 +80,9 @@ impl World {
         std::fs::write(entities_path, entities)?;
         Ok(())
     }
+}
+
+enum WorldCommand {
+    SpawnEntity(String, EntityData),
+    DespawnEntity(String),
 }

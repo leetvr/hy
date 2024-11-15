@@ -635,8 +635,13 @@ impl Engine {
                     });
 
                 draw_calls.extend(
-                    render::build_cube_draw_calls(&self.cube_mesh_data, blocks_to_render, None)
-                        .into_iter(),
+                    render::build_cube_draw_calls(
+                        &self.cube_mesh_data,
+                        blocks_to_render,
+                        gltf::TransparencyType::Opaque,
+                        None,
+                    )
+                    .into_iter(),
                 );
 
                 if let Some(block_to_remove) = block_to_remove {
@@ -647,8 +652,9 @@ impl Engine {
                             draw_calls.extend(
                                 render::build_cube_draw_calls(
                                     &self.cube_mesh_data,
-                                    blocks.into_iter(),
-                                    Some([1.0, 0.0, 0., 1.0].into()),
+                                    blocks,
+                                    gltf::TransparencyType::Blend,
+                                    Some([1.0, 0.0, 0., 0.5].into()),
                                 )
                                 .into_iter(),
                             );
@@ -665,6 +671,7 @@ impl Engine {
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
                         Transform::new(entity.state.position, Quat::IDENTITY),
+                        None,
                     ));
                 }
             }
@@ -683,10 +690,12 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new(
+                        Transform::new_with_scale(
                             player.position,
                             Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+                            glam::Vec3::splat(0.5),
                         ),
+                        None,
                     ));
                 }
             }
@@ -703,12 +712,12 @@ impl Engine {
                     {
                         let blocks = [(block_position, textures)];
 
-                        // TODO(kmrw): Why isn't this working? I blame OpenGL.
                         draw_calls.extend(
                             render::build_cube_draw_calls(
                                 &self.cube_mesh_data,
                                 blocks.into_iter(),
-                                Some([0., 1.0, 0., 1.0].into()),
+                                gltf::TransparencyType::Blend,
+                                Some([0., 1.0, 0., 0.5].into()),
                             )
                             .into_iter(),
                         );
@@ -725,6 +734,7 @@ impl Engine {
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
                         Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                        Some([0.0, 0.5, 1.0, 0.5].into()),
                     ));
                 }
             }
@@ -1044,7 +1054,7 @@ struct Player {
 const MOUSE_SENSITIVITY_X: f32 = 0.005;
 const MOUSE_SENSITIVITY_Y: f32 = 0.005;
 
-const CAMERA_DISTANCE: f32 = 15.0;
+const CAMERA_DISTANCE: f32 = 8.0;
 const CAMERA_HEIGHT: f32 = 2.0;
 
 // Will fail if the sound hasn't been loaded

@@ -20,7 +20,10 @@ use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
-use crate::{gltf::GLTFPrimitive, transform::Transform};
+use crate::{
+    gltf::{GLTFPrimitive, TransparencyType},
+    transform::Transform,
+};
 
 const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
@@ -33,6 +36,7 @@ pub struct Renderer {
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
     tint_location: Option<glow::UniformLocation>,
+    depth_cutoff_location: Option<glow::UniformLocation>,
 
     pub camera: Camera,
     resolution: UVec2,
@@ -59,6 +63,7 @@ impl Renderer {
         let matrix_location = unsafe { gl.get_uniform_location(program, "matrix") };
         let texture_location = unsafe { gl.get_uniform_location(program, "tex") };
         let tint_location = unsafe { gl.get_uniform_location(program, "tint") };
+        let depth_cutoff_location = unsafe { gl.get_uniform_location(program, "depthCutoff") };
 
         unsafe { gl.uniform_1_i32(texture_location.as_ref(), 0) };
 
@@ -73,6 +78,7 @@ impl Renderer {
             program,
             matrix_location,
             tint_location,
+            depth_cutoff_location,
             camera,
             resolution: UVec2::new(640, 480),
             grid_renderer,
@@ -85,54 +91,72 @@ impl Renderer {
     }
 
     pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine]) {
-        let gl = &self.gl;
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
 
         unsafe {
+            let mut blend_state = EnableState::new(&self.gl, glow::BLEND, true);
+            self.gl.enable(glow::DEPTH_TEST);
+            self.gl.blend_func_separate(
+                glow::SRC_ALPHA,
+                glow::ONE_MINUS_SRC_ALPHA,
+                glow::ONE,
+                glow::ZERO,
+            );
+
             self.gl
                 .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
 
-            gl.enable(glow::DEPTH_TEST);
-            gl.enable(glow::CULL_FACE);
-            gl.cull_face(glow::BACK);
+            self.gl.enable(glow::CULL_FACE);
+            self.gl.cull_face(glow::BACK);
 
-            gl.depth_func(glow::LEQUAL);
+            self.gl.depth_func(glow::LEQUAL);
 
             // Set the clear color
-            gl.clear_color(0.1, 0.1, 0.1, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+            self.gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            self.gl
+                .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
             let projection_matrix =
                 Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
             let view_matrix = self.camera.view_matrix();
 
-            gl.use_program(Some(self.program));
+            self.gl.use_program(Some(self.program));
 
             for draw_call in draw_calls {
+                let blending = draw_call.primitive.transparency_type.requires_blending();
+                blend_state.set(&self.gl, blending);
+                self.gl.depth_mask(!blending);
+
                 let mvp_matrix = projection_matrix * view_matrix * draw_call.transform;
 
                 // Set matrix
-                gl.uniform_matrix_4_f32_slice(
+                self.gl.uniform_matrix_4_f32_slice(
                     self.matrix_location.as_ref(),
                     false,
                     bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
                 );
 
                 // Set tex
-                gl.active_texture(glow::TEXTURE0);
-                gl.bind_texture(
+                self.gl.active_texture(glow::TEXTURE0);
+                self.gl.bind_texture(
                     glow::TEXTURE_2D,
                     Some(draw_call.primitive.diffuse_texture.id),
                 );
 
                 // Set tint
                 let tint = draw_call.tint.unwrap_or(glam::Vec4::ONE);
-                gl.uniform_4_f32_slice(self.tint_location.as_ref(), tint.as_ref());
+                self.gl
+                    .uniform_4_f32_slice(self.tint_location.as_ref(), tint.as_ref());
 
-                gl.bind_vertex_array(Some(draw_call.primitive.vao));
+                // Set depth cutoff
+                let depth_cutoff = draw_call.primitive.transparency_type.cutoff_value();
+                self.gl
+                    .uniform_1_f32(self.depth_cutoff_location.as_ref(), depth_cutoff);
 
-                gl.draw_elements(
+                self.gl.bind_vertex_array(Some(draw_call.primitive.vao));
+
+                self.gl.draw_elements(
                     glow::TRIANGLES,
                     draw_call.primitive.index_count as i32,
                     glow::UNSIGNED_INT,
@@ -144,9 +168,10 @@ impl Renderer {
             self.grid_renderer
                 .render(&self.gl, clip_from_world, UVec2::new(64, 64));
 
-            self.debug_renderer.render(gl, clip_from_world, debug_lines);
+            self.debug_renderer
+                .render(&self.gl, clip_from_world, debug_lines);
 
-            gl.flush();
+            self.gl.flush();
         }
     }
 
@@ -163,6 +188,38 @@ impl Renderer {
             Filtering::Nearest,
             WrapMode::Clamp,
         )
+    }
+}
+
+// CRIME(cw): This isn't really a crime but minecraft has this exact class and I feel nasty.
+struct EnableState {
+    kind: u32,
+    enabled: bool,
+}
+
+impl EnableState {
+    fn new(gl: &glow::Context, kind: u32, enabled: bool) -> Self {
+        unsafe {
+            if enabled {
+                gl.enable(kind);
+            } else {
+                gl.disable(kind);
+            }
+        }
+        Self { kind, enabled }
+    }
+
+    fn set(&mut self, gl: &glow::Context, enabled: bool) {
+        if self.enabled != enabled {
+            unsafe {
+                if enabled {
+                    gl.enable(self.kind);
+                } else {
+                    gl.disable(self.kind);
+                }
+            }
+            self.enabled = enabled;
+        }
     }
 }
 
@@ -225,6 +282,7 @@ fn compile_shaders(
 pub struct RenderPrimitive {
     vao: glow::VertexArray,
     diffuse_texture: Texture,
+    transparency_type: TransparencyType,
     index_start: u32,
     index_count: u32,
 }
@@ -306,6 +364,7 @@ impl RenderPrimitive {
             Self {
                 vao,
                 diffuse_texture,
+                transparency_type: primitive.material.transparency_type,
                 index_start: 0,
                 index_count: primitive.indices.len() as u32,
             }
@@ -351,6 +410,7 @@ pub fn build_render_plan(
     models: &[crate::gltf::GLTFModel],
     render_model: &[RenderModel],
     transform: Transform,
+    tint: Option<glam::Vec4>,
 ) -> Vec<DrawCall> {
     let mut render_objects = Vec::new();
 
@@ -361,6 +421,7 @@ pub fn build_render_plan(
             &render_model[idx],
             model.root_node_idx,
             transform,
+            tint,
         );
     }
 
@@ -373,6 +434,7 @@ fn build_render_plan_recursive(
     render_model: &RenderModel,
     current_node: usize,
     parent_transform: Transform,
+    tint: Option<glam::Vec4>,
 ) {
     let node = &gltf.nodes[current_node];
 
@@ -384,13 +446,13 @@ fn build_render_plan_recursive(
             draw_calls.push(DrawCall {
                 primitive: primitive.clone(),
                 transform: transform.as_affine().into(),
-                tint: None,
+                tint,
             });
         }
     }
 
     for &child in &node.children {
-        build_render_plan_recursive(draw_calls, gltf, render_model, child, transform);
+        build_render_plan_recursive(draw_calls, gltf, render_model, child, transform, tint);
     }
 }
 
@@ -513,7 +575,8 @@ impl Texture {
 
 pub fn build_cube_draw_calls<'a>(
     vao: &CubeVao,
-    blocks: impl Iterator<Item = (BlockPos, &'a [Texture; 6])>,
+    blocks: impl IntoIterator<Item = (BlockPos, &'a [Texture; 6])>,
+    transparency_type: TransparencyType,
     tint: Option<glam::Vec4>,
 ) -> Vec<DrawCall> {
     let mut draw_calls = Vec::new();
@@ -528,6 +591,7 @@ pub fn build_cube_draw_calls<'a>(
                 primitive: RenderPrimitive {
                     vao: vao.vao,
                     diffuse_texture: (*texture).clone(),
+                    transparency_type,
                     index_start: base_index as u32,
                     index_count: 6,
                 },
