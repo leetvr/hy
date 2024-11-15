@@ -85,7 +85,3 @@ export const update: PlayerUpdate = (
     };
   }
 };
-
-function length(v: Vec3): number {
-  return Math.hypot(v[0], v[1], v[2]);
-}

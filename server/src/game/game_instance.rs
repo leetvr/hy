@@ -10,6 +10,7 @@ use {
 };
 
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
+use entities::EntityTypeID;
 use glam::Vec3;
 use net_types::{ClientShouldSwitchMode, PlayerId};
 use physics::{PhysicsCollider, PhysicsWorld};
@@ -164,14 +165,7 @@ impl GameInstance {
         }
 
         // Update entities
-        let entity_data = {
-            let world = self.world.lock().expect("Deadlock!");
-            world
-                .entities
-                .iter()
-                .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
-                .collect::<Vec<_>>()
-        };
+        let entity_data = self.get_entities_in_world();
 
         for (entity_id, entity_type_id) in entity_data {
             js_context
@@ -295,6 +289,22 @@ impl GameInstance {
 
         // If we need to transition to a new state, return that
         maybe_next_state
+    }
+
+    pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
+        let mut world = self.world.lock().expect("Deadlock!");
+        for entity_data in world.entities.values_mut() {
+            js_context.spawn_entity(entity_data);
+        }
+    }
+
+    fn get_entities_in_world(&self) -> Vec<(EntityID, EntityTypeID)> {
+        let world = self.world.lock().expect("Deadlock!");
+        world
+            .entities
+            .iter()
+            .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
+            .collect::<Vec<_>>()
     }
 }
 

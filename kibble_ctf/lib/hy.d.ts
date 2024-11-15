@@ -47,6 +47,15 @@ type PlayerUpdate = (
   collisions: PlayerCollision[],
 ) => PlayerState;
 type EntityUpdate = (currentState: EntityState) => EntityState;
+/**
+ * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
+ *
+ * @param entityData - The initial data for this entity.
+ * @returns The state of this entity when it's first spawned.
+ * @remarks
+ * Changes to the `entity_type` field will be ignored.
+ */
+type OnEntitySpawn = (entityData: EntityData) => EntityData;
 
 export const DT = 0.01666667; // 60HZ
 
