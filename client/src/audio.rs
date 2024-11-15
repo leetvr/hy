@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use entities::EntityID;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
+use web_sys::WaveShaperNode;
 #[allow(unused)]
 use web_sys::{
     js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
@@ -30,12 +31,13 @@ impl AudioManager {
     /// Create a new AudioManager and initialize its AudioContext and GainNode
     pub fn new() -> Result<AudioManager, JsValue> {
         let context = AudioContext::new()?;
-        let gain_node = context.create_gain()?;
-        gain_node.connect_with_audio_node(&context.destination())?;
+        let master_gain_node = context.create_gain()?;
+        master_gain_node.gain().set_value(1.0);
+        master_gain_node.connect_with_audio_node(&context.destination())?;
 
         Ok(AudioManager {
             context,
-            master_gain_node: gain_node,
+            master_gain_node,
             sounds_bank: HashMap::new(),
             active_sounds: HashMap::new(),
             next_sound_handle: 0,
@@ -138,6 +140,7 @@ impl AudioManager {
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
+        enable_distortion: bool,
     ) -> Result<u32, JsValue> {
         let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
             web_sys::console::error_1(&"Sound buffer not loaded".into());
@@ -154,6 +157,7 @@ impl AudioManager {
             pitch,
             reference_distance,
             volume,
+            enable_distortion,
         ) else {
             web_sys::console::error_1(&"Unable to create sound_instance".into());
             return Err(JsValue::from_str("Unable to create sound_instance"));
@@ -187,14 +191,18 @@ impl AudioManager {
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
+        is_distortion: Option<bool>,
     ) -> Result<(), JsValue> {
         let sound = self
             .active_sounds
             .get_mut(&handle)
             .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
 
-        // TODO: handle switch ambient status which requires reconfiguring the nodes
+        // @Kane: we could handle switching between ambient and non ambient although I'm
+        // it might be annoying and not sure that it's specified in the User Stories
+
         // TODO: Update panner if position or new entity provided
+        // TODO: Toggle distortion
 
         is_looping.map(|looping| sound.source_node.set_loop(looping));
         pitch.map(|p| sound.source_node.playback_rate().set_value(p.max(0.01)));
@@ -209,9 +217,9 @@ impl AudioManager {
     }
 
     /// Stops a sound given its handle.
-    pub fn _stop_sound_with_handle(&mut self, handle: u32) -> Result<(), JsValue> {
+    pub fn stop_sound_with_handle(&mut self, handle: u32) -> Result<(), JsValue> {
         if let Some(sound_instance) = self.active_sounds.remove(&handle) {
-            sound_instance.stop()?;
+            sound_instance.cleanup_sound_instance()?;
             Ok(())
         } else {
             web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
@@ -246,7 +254,7 @@ impl AudioManager {
     /// Stops all currently playing sounds and clears the active_sounds map.
     pub fn stop_all_sounds(&mut self) -> Result<(), JsValue> {
         for (&handle, sound_instance) in self.active_sounds.iter() {
-            match sound_instance.stop() {
+            match sound_instance.cleanup_sound_instance() {
                 Ok(_) => {
                     web_sys::console::log_1(
                         &format!("Stopped sound with handle {}", handle).into(),
@@ -329,14 +337,20 @@ impl AudioManager {
     }
 }
 
+/// Represents an instance of a sound being played, managing its audio nodes and properties.
 struct SoundInstance {
     source_node: AudioBufferSourceNode,
-    panner_node: PannerNode,
     sound_gain_node: GainNode,
+    panner_node: PannerNode,
+    distortion_node: Option<WaveShaperNode>,
     entity_id: Option<EntityID>,
 }
 
 impl SoundInstance {
+    /// Creates a new `SoundInstance`.
+    ///
+    /// Initializes the audio nodes, sets up the distortion if enabled, and connects the nodes
+    /// based on whether the sound is ambient or not.
     fn new(
         context: &AudioContext,
         audio_buffer: &AudioBuffer,
@@ -347,80 +361,100 @@ impl SoundInstance {
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
-        // TODO: distortion
-        // distortion_node: distortion_node: Option<web_sys::WaveShaperNode>....
+        enable_distortion: bool,
     ) -> Result<Self, JsValue> {
+        // Create the source node and set its buffer
         let source_node = context.create_buffer_source()?;
         source_node.set_buffer(Some(audio_buffer));
-        let panner_node = context.create_panner()?;
-
         source_node.set_loop(is_looping);
 
-        let sound_gain_node = context.create_gain()?; // Create the per-sound GainNode
-        let clamped_volume = volume.unwrap_or(1.0).clamp(0.0, 1.0); // Ensure volume is between 0.0 and 1.0
-        sound_gain_node.gain().set_value(clamped_volume); // Set clamped individual volume
-
-        if is_ambient {
-            // Ambient: Connect source -> sound_gain_node -> master_gain_node
-            source_node.connect_with_audio_node(&sound_gain_node)?;
-            sound_gain_node.connect_with_audio_node(master_gain_node)?;
-
-            // For ambient sounds, we can connect the source_node directly to gain_node.
-            // Omitting the panner_node from the chain will functionally disable spatialistaion.
-            // Note to self: if converting a pre-existing already-running sound from non-ambient to ambient
-            // then I'll need to connect the PannerNode. It may turn out to be easier to connect the panner_node
-            // for ambient sounds from the outset and disable spatialisation some other way, like synchronising
-            // with the listener transform, rather than reconfiguring an already active sound when updating
-            return Ok(SoundInstance {
-                source_node,
-                panner_node: panner_node,
-                sound_gain_node,
-                entity_id,
-            });
-        }
-
-        // I've included the following panning configurations as we may want to
-        // expose them to scripts. However, For now, I'm just using the defaults
+        // Create and configure the PannerNode
+        let panner_node = context.create_panner()?;
+        panner_node.set_ref_distance(reference_distance.unwrap_or(1.) as f64);
+        // We may want to expose the following (currently just using default values)
         panner_node.set_panning_model(PanningModelType::Equalpower); // Also supports Hrtf
         panner_node.set_distance_model(DistanceModelType::Inverse); // Also supports Linear and Exponential
-        panner_node.set_ref_distance(reference_distance.unwrap_or(1.) as f64);
         panner_node.set_max_distance(10000.);
         panner_node.set_rolloff_factor(1.);
 
-        // Connect nodes: source -> sound_gain_node -> panner_node -> master_gain_node
-        source_node.connect_with_audio_node(&sound_gain_node)?;
-        sound_gain_node.connect_with_audio_node(&panner_node)?;
-        panner_node.connect_with_audio_node(master_gain_node)?;
+        // Create the per-sound GainNode and ensure volume is between 0.0 and 1.0
+        let sound_gain_node = context.create_gain()?;
+        let clamped_volume = volume.unwrap_or(1.0).clamp(0.0, 1.0);
+        sound_gain_node.gain().set_value(clamped_volume);
 
-        // `playback_rate` is technically the same as `pitch` in minecraft
-        // Hytopia may be after altering playback speed without altering pitch
-        // which is a more advanced effect that could be done manually or
-        // possibly more easily with `Tone.js`
+        // Initialize the distortion node if enabled
+        let maybe_distortion_node = if enable_distortion {
+            let wave_shaper = create_wave_shaper(context, false)?;
+            Some(wave_shaper)
+        } else {
+            None
+        };
+
+        // Connect the nodes based on whether the sound is ambient and if distortion is enabled
+        // 1. Ambient with distortion:        source -> distortion -> gain -> master
+        // 2. Ambient without distortion:     source -> gain -> master
+        // 3. Non-ambient with distortion:    source -> distortion -> gain -> panner -> master
+        // 4. Non-ambient without distortion: source -> gain -> panner -> master
+        // Note that I'm not connecting the panner_node for ambient sounds (to disable spatialisation) but I'm
+        // including it with the SoundInstance to make it easier to toggle is_ambient status on a pre-existent sound
+        if is_ambient {
+            if let Some(ref wave_shaper) = maybe_distortion_node {
+                source_node.connect_with_audio_node(wave_shaper)?;
+                wave_shaper.connect_with_audio_node(&sound_gain_node)?;
+            } else {
+                source_node.connect_with_audio_node(&sound_gain_node)?;
+            }
+            // Connect gain to master
+            sound_gain_node.connect_with_audio_node(master_gain_node)?;
+        } else {
+            if let Some(ref wave_shaper) = maybe_distortion_node {
+                source_node.connect_with_audio_node(wave_shaper)?;
+                wave_shaper.connect_with_audio_node(&sound_gain_node)?;
+            } else {
+                source_node.connect_with_audio_node(&sound_gain_node)?;
+            }
+            // Connect gain to panner and panner to master
+            sound_gain_node.connect_with_audio_node(&panner_node)?;
+            panner_node.connect_with_audio_node(master_gain_node)?;
+        }
+
+        // Set the playback rate (pitch)
         source_node
             .playback_rate()
             .set_value(pitch.unwrap_or(1.0).max(0.01));
 
         Ok(SoundInstance {
             source_node,
-            panner_node,
             sound_gain_node,
+            panner_node,
+            distortion_node: maybe_distortion_node,
             entity_id,
         })
     }
 
+    /// Begins the audio buffer source, initiating sound playback.
     fn start(&self) -> Result<(), JsValue> {
-        // It may make sense to call this in SoundInstance.new(), Will need to check any difference between start/resume
-        // Also, it may depend on whether we decide to clean up any sounds not attached to an entity that are no longer playing
         self.source_node.start()
     }
 
-    /// Stops playback and disconnects nodes to free resources.
-    pub fn stop(&self) -> Result<(), JsValue> {
-        // TODO: use non deprecated and make sure extra cleanup isn't required
+    /// Stops playback and disconnects nodes which should allow them to be garbage collected
+    pub fn cleanup_sound_instance(&self) -> Result<(), JsValue> {
+        #[allow(deprecated)]
         self.source_node.stop()?;
         self.source_node.disconnect()?;
         self.panner_node.disconnect()?;
+        self.sound_gain_node.disconnect()?;
+        // If distortion is enabled, disconnect it as well
+        if let Some(ref wave_shaper) = self.distortion_node {
+            wave_shaper.disconnect()?;
+        }
+
         Ok(())
+    }
+
+    /// Sets the spatial position of the sound in 3D space.
+    pub fn set_position_from_vec3(&self, glam_vec: glam::Vec3) {
+        self.set_position(glam_vec.x, glam_vec.y, glam_vec.z);
     }
 
     pub fn set_position(&self, x: f32, y: f32, z: f32) {
@@ -428,9 +462,46 @@ impl SoundInstance {
         self.panner_node.position_y().set_value(y);
         self.panner_node.position_z().set_value(z);
     }
+}
 
-    // Alternatively, you can add a method that accepts `glam::Vec3` directly
-    pub fn set_position_from_vec3(&self, glam_vec: glam::Vec3) {
-        self.set_position(glam_vec.x, glam_vec.y, glam_vec.z);
+/// Creates and configures a `WaveShaperNode` for distortion effects.
+///
+/// Parameters:
+/// - `context`: The `AudioContext` to create the node.
+/// - `use_oversampling`: Determines whether to apply oversampling (`N4x`) for smoother distortion.
+fn create_wave_shaper(
+    context: &AudioContext,
+    use_oversampling: bool,
+) -> Result<WaveShaperNode, JsValue> {
+    let wave_shaper = context.create_wave_shaper()?;
+
+    let mut curve = create_distortion_curve(10.);
+
+    // Get a mutable slice of the curve
+    let curve_slice: &mut [f32] = &mut curve[..];
+
+    #[allow(deprecated)]
+    // Directly set the curve to the WaveShaperNode
+    wave_shaper.set_curve(Some(curve_slice));
+    if use_oversampling {
+        wave_shaper.set_oversample(web_sys::OverSampleType::N4x)
+    } else {
+        wave_shaper.set_oversample(web_sys::OverSampleType::None)
+    };
+
+    Ok(wave_shaper)
+}
+
+/// Generates a distortion curve using the hyperbolic tangent function.
+///
+/// Parameters:
+/// * `scaling_factor`: control the intensity of the distortion
+fn create_distortion_curve(scaling_factor: f32) -> Vec<f32> {
+    let n_samples = 44100;
+    let mut curve = Vec::with_capacity(n_samples);
+    for i in 0..n_samples {
+        let x = i as f32 * 2.0 / n_samples as f32 - 1.0;
+        curve.push((x * scaling_factor).tanh());
     }
+    curve
 }
