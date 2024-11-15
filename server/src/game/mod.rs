@@ -51,13 +51,15 @@ impl GameServer {
 
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
-        let js_context = JSContext::new(
+        let mut js_context = JSContext::new(
             &script_root,
             world.clone(),
             game_instance.physics_world.clone(),
         )
         .await
         .expect("Failed to load JS Context");
+
+        game_instance.spawn_entities(&mut js_context).await;
 
         // Set the initial state
         let initial_state = ServerState::Paused(game_instance);

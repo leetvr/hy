@@ -16,18 +16,6 @@ pub struct EditorInstance {
 }
 
 impl EditorInstance {
-    pub fn new(
-        world: Arc<Mutex<World>>,
-        editor_client: Client,
-        physics_world: Arc<Mutex<PhysicsWorld>>,
-    ) -> Self {
-        Self {
-            world,
-            editor_client,
-            physics_world,
-        }
-    }
-
     pub async fn from_transition(
         world: Arc<Mutex<World>>,
         editor_client: Client,

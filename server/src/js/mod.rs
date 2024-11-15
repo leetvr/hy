@@ -1,6 +1,6 @@
 mod extensions;
 
-use entities::{EntityState, EntityTypeID};
+use entities::{EntityData, EntityState, EntityTypeID};
 use extensions::hy;
 use net_types::{Controls, PlayerId};
 use physics::PhysicsWorld;
@@ -122,6 +122,7 @@ impl JSContext {
         let module_namespace = &self.entity_module_namespaces[entity_type_id as usize];
         let module_namespace = module_namespace.open(scope);
 
+        // Get the update function
         let function_name = v8::String::new(scope, "update").unwrap();
         let Some(update_fn) = module_namespace.get(scope, function_name.into()) else {
             anyhow::bail!("ERROR: Module has no function named update!");
@@ -143,8 +144,10 @@ impl JSContext {
             serde_v8::to_v8(scope, &entity_data.state).unwrap()
         };
 
+        // Put the args together
         let args = [current_state.into()];
 
+        // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();
 
         // Get the entity's next state
@@ -157,6 +160,49 @@ impl JSContext {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn spawn_entity(&mut self, entity_data: &mut EntityData) {
+        // Load the module for this entity type
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = &self.entity_module_namespaces[entity_data.entity_type as usize];
+        let module_namespace = module_namespace.open(scope);
+
+        // Check whether this entity type has an onSpawn function
+        let function_name = v8::String::new(scope, "onSpawn").unwrap();
+        let Some(on_spawn) = module_namespace.get(scope, function_name.into()) else {
+            return;
+        };
+
+        // Since onSpawn is optional, if there's no function then just return
+        if !on_spawn.is_function() {
+            return;
+        }
+
+        // Get the actual function
+        let on_spawn = v8::Local::<v8::Function>::try_from(on_spawn).unwrap(); // we know it's a function
+
+        // Put the args together
+        let undefined = deno_core::v8::undefined(scope).into();
+        let initial_state = serde_v8::to_v8(scope, &entity_data).unwrap();
+
+        let args = [initial_state.into()];
+
+        // Call the function
+        let result = on_spawn.call(scope, undefined, &args).unwrap();
+
+        // Get the entity's initial state
+        let EntityData {
+            name,
+            model_path,
+            state,
+            ..
+        } = serde_v8::from_v8(scope, result).unwrap();
+
+        // Update the entity
+        entity_data.name = name;
+        entity_data.model_path = model_path;
+        entity_data.state = state;
     }
 }
 
