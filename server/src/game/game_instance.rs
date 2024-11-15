@@ -25,6 +25,8 @@ use super::{
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
+const DEBUG_LINES: bool = true;
+
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
     _game_state: GameState,
@@ -176,7 +178,20 @@ impl GameInstance {
 
         // Step physics
         {
-            self.physics_world.lock().expect("Deadlock!").step();
+            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+            physics_world.step();
+            if DEBUG_LINES {
+                let tick = std::time::Instant::now();
+                let debug_lines = physics_world.get_debug_lines();
+                for (_, client) in self.clients.iter() {
+                    let _ = client
+                        .outgoing_tx
+                        .send(net_types::ServerPacket::SetDebugLines(debug_lines.clone()))
+                        .await;
+                }
+                let elapsed = tick.elapsed().as_secs_f32();
+                tracing::trace!("Debug lines took {elapsed:.4}s")
+            }
         }
 
         // Run world commands queued from the scripts

@@ -41,6 +41,14 @@ impl Engine {
         self.send_packet(packet);
     }
 
+    pub fn ctx_get_engine_mode(&mut self) -> EngineMode {
+        match self.state {
+            GameState::Loading => EngineMode::Play,
+            GameState::Playing { .. } => EngineMode::Play,
+            GameState::Editing { .. } => EngineMode::Edit,
+        }
+    }
+
     pub fn ctx_get_canvas(&self) -> web_sys::HtmlCanvasElement {
         self.context.canvas.clone()
     }

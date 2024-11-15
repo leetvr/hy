@@ -33,6 +33,7 @@ pub struct GameServer {
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
     storage_dir: PathBuf,
     js_context: JSContext,
+    timer: util::FrameTimer,
 }
 
 impl GameServer {
@@ -71,10 +72,14 @@ impl GameServer {
             state: initial_state,
             storage_dir,
             js_context,
+            timer: Default::default(),
         }
     }
 
     pub async fn tick(&mut self) {
+        self.timer.stop();
+        self.timer.start();
+
         // Handle new connections
         while let Some(channels) = self.incoming_connections.pop() {
             match &mut self.state {

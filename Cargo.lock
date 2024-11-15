@@ -1482,6 +1482,7 @@ version = "0.1.0"
 dependencies = [
  "glam 0.29.1",
  "nalgebra",
+ "net-types",
  "rapier3d",
  "tracing",
 ]
@@ -1918,6 +1919,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tsify",
+ "util",
  "wasm-bindgen",
  "webbrowser",
 ]
@@ -2359,6 +2361,13 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
+name = "util"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "uuid"

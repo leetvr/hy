@@ -8,3 +8,4 @@ rapier3d.workspace = true
 nalgebra.workspace = true
 glam.workspace = true
 tracing.workspace = true
+net-types.workspace = true

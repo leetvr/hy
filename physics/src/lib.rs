@@ -3,14 +3,15 @@ use {
     rapier3d::{
         dynamics::RigidBodyHandle,
         geometry::{Group, InteractionGroups},
-        math::Vector,
+        math::{Point, Vector},
         na::vector,
         parry::query::ShapeCastOptions,
         pipeline::QueryFilter,
         prelude::{
-            CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DefaultBroadPhase,
+            CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
+            DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
             ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-            PhysicsPipeline, QueryPipeline, RigidBodyBuilder, RigidBodySet,
+            PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
         },
     },
     std::collections::HashMap,
@@ -40,6 +41,7 @@ pub struct PhysicsWorld {
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
     pub player_handles: HashMap<u64, RigidBodyHandle>,
+    debug: DebugRenderPipeline,
 }
 
 impl PhysicsWorld {
@@ -80,6 +82,10 @@ impl PhysicsWorld {
             physics_hooks,
             event_handler,
             player_handles: Default::default(),
+            debug: DebugRenderPipeline::new(
+                Default::default(),
+                DebugRenderMode::all() & !DebugRenderMode::COLLIDER_AABBS,
+            ),
         }
     }
 
@@ -361,9 +367,28 @@ impl PhysicsWorld {
         let slide_movement = remaining_movement - projection_onto_normal;
         Some(na_to_glam(slide_movement))
     }
+
+    pub fn get_debug_lines(&mut self) -> Vec<net_types::DebugLine> {
+        let mut lines = Vec::new();
+        let mut backend = PhysicsRenderer { lines: &mut lines };
+        self.debug.render(
+            &mut backend,
+            &self.bodies,
+            &self.colliders,
+            &self.impulse_joints,
+            &self.multibody_joints,
+            &self.narrow_phase,
+        );
+
+        lines
+    }
 }
 
 fn na_to_glam(input: nalgebra::Vector3<f32>) -> glam::Vec3 {
+    glam::vec3(input.x, input.y, input.z)
+}
+
+fn na_point_to_glam(input: Point<f32>) -> glam::Vec3 {
     glam::vec3(input.x, input.y, input.z)
 }
 
@@ -406,4 +431,23 @@ impl Drop for PhysicsCollider {
 
 fn glam_to_na(input: glam::Vec3) -> nalgebra::Vector3<f32> {
     vector![input.x, input.y, input.z]
+}
+struct PhysicsRenderer<'a> {
+    lines: &'a mut Vec<net_types::DebugLine>,
+}
+
+impl<'a> DebugRenderBackend for PhysicsRenderer<'a> {
+    fn draw_line(
+        &mut self,
+        _object: DebugRenderObject,
+        a: Point<Real>,
+        b: Point<Real>,
+        color: [f32; 4],
+    ) {
+        self.lines.push(net_types::DebugLine::new(
+            na_point_to_glam(a),
+            na_point_to_glam(b),
+            glam::Vec3::new(color[0], color[1], color[2]),
+        ));
+    }
 }

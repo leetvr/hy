@@ -7,6 +7,7 @@ members = [
     "net-types",
     "physics",
     "server",
+    "util",
 ]
 resolver = "2"
 
@@ -52,7 +53,7 @@ serde-wasm-bindgen = "0.6.5"
 wasm-bindgen-futures = "0.4.45"
 crossbeam = "0.8.4"
 derive_more = { version = "1.0.0", features = ["from"] }
-rapier3d = "0.22.0"
+rapier3d = { version = "0.22.0", features = ["debug-render"] }
 nalgebra = "0.33.2"
 dolly = "0.6.0"
 thiserror = "2.0.0"
@@ -64,6 +65,7 @@ net-types.path = "net-types"
 blocks.path = "blocks"
 physics.path = "physics"
 entities.path = "entities"
+util.path = "util"
 
 [profile.release]
 debug = "line-tables-only"

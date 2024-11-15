@@ -32,6 +32,17 @@ impl DebugLine {
     }
 }
 
+impl From<net_types::DebugLine> for DebugLine {
+    fn from(value: net_types::DebugLine) -> Self {
+        Self {
+            start: value.start.to_array(),
+            start_color: value.color.extend(1.0).to_array(),
+            end: value.end.to_array(),
+            end_color: value.color.extend(1.0).to_array(),
+        }
+    }
+}
+
 pub struct DebugRenderer {
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
