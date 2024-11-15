@@ -24,7 +24,7 @@ pub use blocks::BlockPos;
 
 use blocks::BlockType;
 use game_state::GameState;
-use glam::UVec2;
+use glam::{UVec2, UVec3};
 use nanorand::Rng;
 use net_types::ClientPacket;
 use net_types::ClientShouldSwitchMode;
@@ -726,7 +726,11 @@ impl Engine {
             _ => (),
         }
 
-        self.renderer.render(&draw_calls, &self.debug_lines);
+        let block_grid = self.state.block_grid();
+        let block_grid_size = block_grid.map_or(UVec3::ZERO, |grid| grid.size().into());
+
+        self.renderer
+            .render(&draw_calls, &self.debug_lines, block_grid_size);
 
         self.debug_lines.clear();
     }

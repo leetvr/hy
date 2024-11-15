@@ -8,14 +8,11 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
 
 out vec2 uvInterpolant;
-out vec3 shadowSpaceCoords;
 
 uniform mat4 matrix;
-uniform mat4 shadowMatrix;
 
 void main() {
     gl_Position = matrix * vec4(position, 1.0);
-    shadowSpaceCoords = (shadowMatrix * vec4(position, 1.0)).xyz;
-    shadowSpaceCoords = shadowSpaceCoords * 0.5 + 0.5;
+    gl_Position.y = -gl_Position.y;
     uvInterpolant = uv;
 }
