@@ -331,7 +331,7 @@ impl Engine {
             _ => {}
         }
 
-        audio::test_audio_manager(self);
+        audio::audio_debug_tools::test_audio_manager(self);
 
         // Send packets
         match &mut self.state {
@@ -893,8 +893,7 @@ impl Engine {
         )
     }
 
-    // Update a sound instance with the specified handle
-    // TODO: [toggling ambient status, updating fixed position and entity_id]
+    // Update an already active SoundInstance with the specified handle
     pub fn update_sound_with_handle(
         &mut self,
         handle: u32, // Hmmmm, probably should refactor wasm parameters to strings?
@@ -925,10 +924,6 @@ impl Engine {
             volume,
             enable_distortion,
         )
-    }
-
-    pub fn kill_sounds(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.clear_sounds_bank()
     }
 
     fn update_audio_manager(&mut self) {
@@ -971,13 +966,14 @@ impl Engine {
 
         // Update sound positions in AudioManager
         self.audio_manager.synchronise_positions(&positions);
+
+        // Note, I haven't properly tested the cleanup phase in the following code.
+        // TODO: Also need to cleanup one shot (non looping) sounds not associated with an entity
         // Collect existing entity IDs for cleanup
         let existing_entity_ids: HashSet<entities::EntityID> = entities.keys().cloned().collect();
         // Clean up sounds associated with non-existent entities
         self.audio_manager
             .cleanup_entity_sounds(&existing_entity_ids);
-
-        // TODO: cleanup up one shot (non looping) sounds that have finished playing, sounds that are too far away
     }
 }
 

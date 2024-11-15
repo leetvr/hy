@@ -5,10 +5,8 @@ use glam::Vec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::WaveShaperNode;
-#[allow(unused)]
 use web_sys::{
-    js_sys::ArrayBuffer, window, AudioBuffer, AudioBufferSourceNode, AudioContext, AudioListener,
-    AudioParam, GainNode, OscillatorNode, PannerNode, Response,
+    js_sys::ArrayBuffer, AudioBuffer, AudioBufferSourceNode, AudioContext, GainNode, PannerNode,
 };
 use web_sys::{js_sys::Uint8Array, DistanceModelType, PanningModelType};
 
@@ -109,16 +107,30 @@ impl AudioManager {
     }
 
     async fn load_audio_buffer_from_url(&mut self, url: &str) -> Result<AudioBuffer, JsValue> {
-        let window = web_sys::window().unwrap();
-        let response = JsFuture::from(window.fetch_with_str(url)).await?;
-        let response: web_sys::Response = response.dyn_into().unwrap();
+        let window =
+            web_sys::window().ok_or_else(|| JsValue::from_str("No window object available"))?;
 
+        // Fetch the URL and wait for the response,
+        let response_future = window.fetch_with_str(url);
+        let response = JsFuture::from(response_future).await?;
+        let response: web_sys::Response = response
+            .dyn_into()
+            .map_err(|_| JsValue::from_str("Response conversion failed"))?;
+
+        // Get the ArrayBuffer from the response
         let array_buffer = JsFuture::from(response.array_buffer()?).await?;
-        let array_buffer: ArrayBuffer = array_buffer.dyn_into().unwrap();
+        let array_buffer: ArrayBuffer = array_buffer
+            .dyn_into()
+            .map_err(|_| JsValue::from_str("ArrayBuffer conversion failed"))?;
 
+        // Decode the data
         let audio_buffer_promise = self.context.decode_audio_data(&array_buffer)?;
         let audio_buffer = JsFuture::from(audio_buffer_promise).await?;
-        Ok(audio_buffer.dyn_into().unwrap())
+        let audio_buffer: AudioBuffer = audio_buffer
+            .dyn_into()
+            .map_err(|_| JsValue::from_str("AudioBuffer conversion failed"))?;
+
+        Ok(audio_buffer)
     }
 
     /// Attempt to create and play a sound
@@ -181,7 +193,7 @@ impl AudioManager {
         }
 
         // Generate a unique handle
-        let handle = self.next_sound_handle;
+        let handle = self.next_handle();
         self.next_sound_handle += 1;
 
         // Insert into active_sounds
@@ -198,12 +210,12 @@ impl AudioManager {
         position: Option<Vec3>,
         // @Kane: we could handle switching between ambient and non ambient although
         // it's gonna be annoying and I'm not sure that it's specified in the User Stories
-        is_ambient: Option<bool>, // TODO
+        _is_ambient: Option<bool>, // TODO?
         is_looping: Option<bool>,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
-        is_distortion: Option<bool>, // TODO
+        _is_distortion: Option<bool>, // TODO
     ) -> Result<(), JsValue> {
         let sound = self
             .active_sounds
@@ -222,74 +234,11 @@ impl AudioManager {
         pitch.map(|p| sound.source_node.playback_rate().set_value(p.max(0.01)));
         reference_distance.map(|rd| sound.panner_node.set_ref_distance(rd as f64));
         volume.map(|v| {
-            // Clamp volume between 0.0 and 1.0 for safety
-            let clamped_volume = v.clamp(0.0, 1.0);
+            // What even is safety?
+            let clamped_volume = v.clamp(0.0, 5.0);
             sound.sound_gain_node.gain().set_value(clamped_volume);
         });
 
-        Ok(())
-    }
-
-    /// Stops a sound given its handle.
-    pub fn stop_sound_with_handle(&mut self, handle: u32) -> Result<(), JsValue> {
-        if let Some(sound_instance) = self.active_sounds.remove(&handle) {
-            sound_instance.cleanup_sound_instance()?;
-            Ok(())
-        } else {
-            web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
-            Err(JsValue::from_str("Sound handle not found"))
-        }
-    }
-
-    /// Sets the volume for a specific sound instance
-    pub fn set_sound_volume(&mut self, handle: u32, volume: f32) -> Result<(), JsValue> {
-        let sound = self
-            .active_sounds
-            .get_mut(&handle)
-            .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
-
-        // Clamp the volume between 0.0 and 1.0
-        let clamped_volume = volume.clamp(0.0, 1.0);
-        sound.sound_gain_node.gain().set_value(clamped_volume);
-
-        Ok(())
-    }
-
-    /// Sets the master volume for all sounds.
-    ///
-    /// ## Parameters:
-    ///
-    /// * `volume` - The new master volume level (0.0 to 1.0).
-    pub fn set_master_volume(&self, volume: f32) {
-        let clamped_volume = volume.clamp(0.0, 1.0);
-        self.master_gain_node.gain().set_value(clamped_volume);
-    }
-
-    /// Stops all currently playing sounds and clears the active_sounds map.
-    pub fn stop_all_sounds(&mut self) -> Result<(), JsValue> {
-        for (&handle, sound_instance) in self.active_sounds.iter() {
-            match sound_instance.cleanup_sound_instance() {
-                Ok(_) => {
-                    web_sys::console::log_1(
-                        &format!("Stopped sound with handle {}", handle).into(),
-                    );
-                }
-                Err(err) => {
-                    web_sys::console::error_1(
-                        &format!("Failed to stop sound with handle {}: {:?}", handle, err).into(),
-                    );
-                }
-            }
-        }
-        self.active_sounds.clear();
-        web_sys::console::log_1(&"All sounds stopped.".into());
-        Ok(())
-    }
-
-    /// Clears the sounds_bank, removing all loaded sounds.
-    pub fn clear_sounds_bank(&mut self) -> Result<(), JsValue> {
-        self.sounds_bank.clear();
-        web_sys::console::log_1(&"Sounds bank cleared.".into());
         Ok(())
     }
 
@@ -357,6 +306,62 @@ impl AudioManager {
             .filter(|si| si.entity_id.as_ref() == Some(entity_id))
             .collect()
     }
+
+    /// Stops all currently playing sounds and clears the active_sounds map.
+    pub fn stop_all_sounds(&mut self) -> Result<(), JsValue> {
+        for (&handle, sound_instance) in self.active_sounds.iter() {
+            match sound_instance.cleanup_sound_instance() {
+                Ok(_) => {
+                    web_sys::console::log_1(
+                        &format!("Stopped sound with handle {}", handle).into(),
+                    );
+                }
+                Err(err) => {
+                    web_sys::console::error_1(
+                        &format!("Failed to stop sound with handle {}: {:?}", handle, err).into(),
+                    );
+                }
+            }
+        }
+        self.active_sounds.clear();
+        web_sys::console::log_1(&"All sounds stopped.".into());
+        Ok(())
+    }
+
+    /// Stops a sound given its handle.
+    pub fn _stop_sound_with_handle(&mut self, handle: u32) -> Result<(), JsValue> {
+        if let Some(sound_instance) = self.active_sounds.remove(&handle) {
+            sound_instance.cleanup_sound_instance()?;
+            Ok(())
+        } else {
+            web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
+            Err(JsValue::from_str("Sound handle not found"))
+        }
+    }
+
+    /// Sets the volume for a specific sound instance
+    fn _set_sound_volume(&mut self, handle: u32, volume: f32) -> Result<(), JsValue> {
+        let sound = self
+            .active_sounds
+            .get_mut(&handle)
+            .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
+
+        // Clamp the volume between 0.0 and 1.0
+        let clamped_volume = volume.clamp(0.0, 1.0);
+        sound.sound_gain_node.gain().set_value(clamped_volume);
+
+        Ok(())
+    }
+
+    /// Sets the master volume for all sounds.
+    ///
+    /// ## Parameters:
+    ///
+    /// * `volume` - The new master volume level (0.0 to 1.0).
+    pub fn _set_master_volume(&self, volume: f32) {
+        let clamped_volume = volume.clamp(0.0, 1.0);
+        self.master_gain_node.gain().set_value(clamped_volume);
+    }
 }
 
 /// Represents an instance of a sound being played, managing its audio nodes and properties.
@@ -364,7 +369,7 @@ struct SoundInstance {
     source_node: AudioBufferSourceNode,
     sound_gain_node: GainNode,
     panner_node: PannerNode,
-    distortion_node: Option<WaveShaperNode>,
+    distortion_node: Option<WaveShaperNode>, // TODO: toggle
     entity_id: Option<EntityID>,
 }
 
@@ -467,7 +472,7 @@ impl SoundInstance {
         self.panner_node.disconnect()?;
         self.sound_gain_node.disconnect()?;
         // If distortion is enabled, disconnect it as well
-        if let Some(ref wave_shaper) = self.distortion_node {
+        if let Some(wave_shaper) = &self.distortion_node {
             wave_shaper.disconnect()?;
         }
 
@@ -536,186 +541,184 @@ fn create_distortion_curve(scaling_factor: f32) -> Vec<f32> {
     curve
 }
 
-// #######################################
-// ### NOTE: following is all testing code
-pub fn test_audio_manager(engine: &mut crate::Engine) {
-    if matches!(engine.state, crate::game_state::GameState::Loading) {
-        return;
-    }
-
-    // This are just the entities in `entities.json` that start moving when switching to `Playing`
-    let moving_entity_id = "16569510173499221049";
-    let moving_entity_id_2 = "16359639986536789467";
-    let entity_sound_name = "portal"; // this sound easier to hear spatialisation
-
-    if engine.controls.mouse_left {
-        // Test: Spawn sound at target_raycast positiion
-        if engine.controls.keyboard_inputs.contains("KeyX") {
-            test_play_sound_at_pos(engine, "pain");
-        }
-        // Test: Spawn dynamic sound on entity
-        if engine.controls.keyboard_inputs.contains("KeyC") {
-            test_play_sound_at_entity(engine, entity_sound_name, moving_entity_id);
-        }
-        // Test: ambient sound spawning
-        if engine.controls.keyboard_inputs.contains("KeyV") {
-            test_play_ambient_sound(engine, "footsteps");
+// NOTE: @Kane following is all janky testing code but it's very helpful for visualising spatialisation
+// and quickly spawning sounds in realtime. You can apply dynamic update to the last
+// spawned sound by right clicking, which activates `test_update_last_spawned_sound`
+// So I haven't removed this code for this PR but presumably I will once you've reviewed
+pub mod audio_debug_tools {
+    use super::*;
+    pub fn test_audio_manager(engine: &mut crate::Engine) {
+        if matches!(engine.state, crate::game_state::GameState::Loading) {
+            return;
         }
 
-        if engine.controls.keyboard_inputs.contains("KeyB") {
-            let _ = engine.audio_manager.stop_all_sounds();
+        // This are just the entities in `entities.json` that start moving when switching to `Playing`
+        let moving_entity_id = "16569510173499221049";
+        let entity_sound_name = "portal"; // this sound easier to hear spatialisation
+
+        let inputs = engine.controls.keyboard_inputs.clone();
+
+        if engine.controls.mouse_left {
+            // Test: Spawn sound at target_raycast positiion
+            if inputs.contains("KeyX") {
+                test_play_sound_at_pos(engine, "pain");
+            }
+            // Test: Spawn dynamic sound on entity
+            if inputs.contains("KeyC") {
+                test_play_sound_at_entity(engine, entity_sound_name, moving_entity_id);
+            }
+            // Test: ambient sound spawning
+            if inputs.contains("KeyV") {
+                test_play_ambient_sound(engine, "footsteps");
+            }
+
+            if inputs.contains("KeyB") {
+                let _ = engine.audio_manager.stop_all_sounds();
+            }
         }
+
+        if engine.controls.mouse_right {
+            test_update_last_spawned_sound(engine, moving_entity_id);
+        }
+
+        visualise_spawned_sound_at_entity(engine, moving_entity_id);
+        visualise_positioned_sounds(engine);
     }
 
-    if engine.controls.mouse_right {
-        test_update_last_spawned_sound(engine, moving_entity_id);
-    }
-
-    visualise_spawned_sound_at_entity(engine, moving_entity_id);
-    visualise_positioned_sounds(engine);
-}
-
-// Tested for following transitions [looping, pitch, refDist]
-fn test_update_last_spawned_sound(engine: &mut crate::Engine, entity_id: &str) {
-    // Test: Apply the update function on the last sound that was spawned
-    let last_sound_handle = (engine.audio_manager.next_handle() as i32) - 1;
-    if last_sound_handle <= 0 {
-        tracing::error!("Negative handle");
-        return; // no sounds emitted yet
-    }
-    if let Err(e) = engine.update_sound_with_handle(
-        last_sound_handle as u32,    // last_sound_handle as u32,
-        Some(entity_id.to_string()), // Some(sound_handle.to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(0.),
-        Some(0.),
-        Some(0.),
-    ) {
-        tracing::error!(
-            "Failed to play ambient sound '{}' error: {:?}",
-            last_sound_handle,
-            e
-        );
-    }
-}
-
-fn test_play_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
-    if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, Some(0.5), false) {
-        tracing::error!("Failed to play ambient sound '{}' error: {:?}", sound_id, e);
-    }
-}
-
-pub fn test_play_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
-    if let Err(e) = engine.play_sound_at_entity(
-        sound_id,
-        entity_id.to_string(),
-        true,
-        Some(0.5),
-        None,
-        Some(10.0),
-        false,
-    ) {
-        tracing::error!(
-            "Failed to play_sound_at_entity for {}.... {:?}",
-            entity_id,
-            e
-        );
-    }
-}
-
-pub fn test_play_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
-    let crate::game_state::GameState::Editing { target_raycast, .. } = &mut engine.state else {
-        return;
-    };
-    let Some(ray_hit) = target_raycast else {
-        return;
-    };
-
-    let pos = ray_hit.position;
-    if let Err(_) = engine.play_sound_at_pos(
-        sound_id,
-        pos.x as f32,
-        pos.y as f32,
-        pos.z as f32,
-        false,
-        true,
-        None,
-        None,
-        Some(10.),
-        false,
-    ) {
-        tracing::error!("Failed to play sound '{}' at position {:?}", sound_id, pos)
-    }
-}
-
-pub fn visualise_positioned_sounds(engine: &mut crate::Engine) {
-    // Iterate over all sounds and find those without an associated entity
-    for (handle, sound_instance) in engine.audio_manager.active_sounds.iter() {
-        if sound_instance.entity_id.is_none() {
-            let sound_position = sound_instance.get_position();
-
-            // Visualize the sound with a vertical line to indicate its position
-            engine
-                .debug_lines
-                .push(crate::render::DebugLine::new_with_color(
-                    sound_position,
-                    sound_position + glam::Vec3::new(0.0, 10.0, 0.0),
-                    glam::Vec4::new(0.0, 0.0, 1.0, 1.0), // Use blue for positioned sounds
-                ));
-
-            tracing::info!(
-                "Visualized ambient sound at position: {:?} with handle: {}",
-                sound_position,
-                handle
+    fn test_update_last_spawned_sound(engine: &mut crate::Engine, entity_id: &str) {
+        // Well, we probably shouldn't take any usize parameters in the play_sound functions
+        let last_sound_handle = (engine.audio_manager.next_handle() as i32) - 1;
+        if last_sound_handle <= 0 {
+            tracing::error!("Negative handle");
+            return; // no sounds emitted yet
+        }
+        if let Err(e) = engine.update_sound_with_handle(
+            last_sound_handle as u32,
+            Some(entity_id.to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(0.),
+            Some(0.),
+            Some(0.),
+        ) {
+            tracing::error!(
+                "Failed to play ambient sound '{}' error: {:?}",
+                last_sound_handle,
+                e
             );
         }
     }
-}
 
-pub fn visualise_spawned_sound_at_entity(engine: &mut crate::Engine, entity_id: &str) {
-    use crate::game_state::GameState;
-
-    let entity_id_str = entity_id.to_string();
-
-    // Make sure the entity has a sound associated with it
-    if !engine
-        .audio_manager
-        .has_active_sound_with_entity_id(&entity_id_str)
-    {
-        return;
+    fn test_play_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
+        if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, Some(0.5), false) {
+            tracing::error!("Failed to play ambient sound '{}' error: {:?}", sound_id, e);
+        }
     }
 
-    // Visualise lines above the entity and the associated sound
-    let entities = match &engine.state {
-        GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities,
-        GameState::Loading => return,
-    };
-    for sound_instance in engine
-        .audio_manager
-        .get_sound_instances_with_entity_id(&entity_id_str)
-    {
-        let sound_position = sound_instance.get_position();
-        if let Some(entity_data) = entities.get(&entity_id_str) {
-            let _entity_position = entity_data.state.position;
-            engine
-                .debug_lines
-                .push(crate::render::DebugLine::new_with_color(
-                    sound_position + Vec3::new(0., 0.0, 0.0),
-                    sound_position + Vec3::new(0.0, 10.0, 0.0),
-                    glam::Vec4::new(1., 1., 0., 1.),
-                ));
-            // engine
-            //     .debug_lines
-            //     .push(crate::render::DebugLine::new_with_color(
-            //         entity_position,
-            //         entity_position + Vec3::new(0.0, 10.0, 0.0),
-            //         glam::Vec4::new(1., 0., 0., 1.),
-            //     ));
+    fn test_play_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
+        if let Err(e) = engine.play_sound_at_entity(
+            sound_id,
+            entity_id.to_string(),
+            true,
+            Some(0.5),
+            None,
+            Some(10.0),
+            false,
+        ) {
+            tracing::error!(
+                "Failed to play_sound_at_entity for {}.... {:?}",
+                entity_id,
+                e
+            );
+        }
+    }
+
+    fn test_play_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
+        let crate::game_state::GameState::Editing { target_raycast, .. } = &mut engine.state else {
+            return;
+        };
+        let Some(ray_hit) = target_raycast else {
+            return;
+        };
+
+        let pos = ray_hit.position;
+        if let Err(_) = engine.play_sound_at_pos(
+            sound_id,
+            pos.x as f32,
+            pos.y as f32,
+            pos.z as f32,
+            false,
+            true,
+            None,
+            None,
+            Some(10.),
+            false,
+        ) {
+            tracing::error!("Failed to play sound '{}' at position {:?}", sound_id, pos)
+        }
+    }
+
+    fn visualise_positioned_sounds(engine: &mut crate::Engine) {
+        // Iterate over all sounds and find those without an associated entity
+        for (handle, sound_instance) in engine.audio_manager.active_sounds.iter() {
+            if sound_instance.entity_id.is_none() {
+                let sound_position = sound_instance.get_position();
+
+                // Visualize the sound with a vertical line to indicate its position
+                engine
+                    .debug_lines
+                    .push(crate::render::DebugLine::new_with_color(
+                        sound_position,
+                        sound_position + glam::Vec3::new(0.0, 10.0, 0.0),
+                        glam::Vec4::new(0.0, 0.0, 1.0, 1.0), // Use blue for positioned sounds
+                    ));
+
+                tracing::info!(
+                    "Visualized ambient sound at position: {:?} with handle: {}",
+                    sound_position,
+                    handle
+                );
+            }
+        }
+    }
+
+    fn visualise_spawned_sound_at_entity(engine: &mut crate::Engine, entity_id: &str) {
+        use crate::game_state::GameState;
+
+        let entity_id_str = entity_id.to_string();
+
+        // Make sure the entity has a sound associated with it
+        if !engine
+            .audio_manager
+            .has_active_sound_with_entity_id(&entity_id_str)
+        {
+            return;
+        }
+
+        // Visualise lines above the sound associated with the entity
+        let entities = match &engine.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities,
+            GameState::Loading => return,
+        };
+        for sound_instance in engine
+            .audio_manager
+            .get_sound_instances_with_entity_id(&entity_id_str)
+        {
+            let sound_position = sound_instance.get_position();
+            if let Some(entity_data) = entities.get(&entity_id_str) {
+                let _entity_position = entity_data.state.position;
+                engine
+                    .debug_lines
+                    .push(crate::render::DebugLine::new_with_color(
+                        sound_position + Vec3::new(0., 0.0, 0.0),
+                        sound_position + Vec3::new(0.0, 10.0, 0.0),
+                        glam::Vec4::new(1., 1., 0., 1.),
+                    ));
+            }
         }
     }
 }
