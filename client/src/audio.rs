@@ -46,6 +46,10 @@ impl AudioManager {
         })
     }
 
+    fn next_handle(&self) -> u32 {
+        self.next_sound_handle
+    }
+
     // Use this to preload our sounds
     pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
         self.load_sound_from_id("pain").await?;
@@ -190,23 +194,29 @@ impl AudioManager {
     pub fn update_sound_with_handle(
         &mut self,
         handle: u32,
-        _is_ambient: Option<bool>,
+        entity_id: Option<entities::EntityID>,
+        position: Option<Vec3>,
+        // @Kane: we could handle switching between ambient and non ambient although
+        // it's gonna be annoying and I'm not sure that it's specified in the User Stories
+        is_ambient: Option<bool>, // TODO
         is_looping: Option<bool>,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
-        is_distortion: Option<bool>,
+        is_distortion: Option<bool>, // TODO
     ) -> Result<(), JsValue> {
         let sound = self
             .active_sounds
             .get_mut(&handle)
             .ok_or_else(|| JsValue::from_str("Sound instance not found"))?;
 
-        // @Kane: we could handle switching between ambient and non ambient although I'm
-        // it might be annoying and not sure that it's specified in the User Stories
-
-        // TODO: Update panner if position or new entity provided
-        // TODO: Toggle distortion
+        // Handle static position updates and transitions to/from having an associated entity
+        if let Some(new_entity_id) = entity_id {
+            sound.entity_id = Some(new_entity_id.to_string());
+        } else if let Some(new_position) = position {
+            sound.entity_id = None;
+            sound.set_position_from_vec3(new_position);
+        }
 
         is_looping.map(|looping| sound.source_node.set_loop(looping));
         pitch.map(|p| sound.source_node.playback_rate().set_value(p.max(0.01)));
@@ -526,7 +536,8 @@ fn create_distortion_curve(scaling_factor: f32) -> Vec<f32> {
     curve
 }
 
-// TESTING Code
+// #######################################
+// ### NOTE: following is all testing code
 pub fn test_audio_manager(engine: &mut crate::Engine) {
     if matches!(engine.state, crate::game_state::GameState::Loading) {
         return;
@@ -535,78 +546,89 @@ pub fn test_audio_manager(engine: &mut crate::Engine) {
     // This are just the entities in `entities.json` that start moving when switching to `Playing`
     let moving_entity_id = "16569510173499221049";
     let moving_entity_id_2 = "16359639986536789467";
-    let entity_sound_name = "portal";
+    let entity_sound_name = "portal"; // this sound easier to hear spatialisation
 
     if engine.controls.mouse_left {
-        // Test: Spawn "kane" sound at entity
+        // Test: Spawn sound at target_raycast positiion
         if engine.controls.keyboard_inputs.contains("KeyX") {
-            test_spawn_sound_at_pos(engine, "pain");
+            test_play_sound_at_pos(engine, "pain");
         }
-        // Test: Spawn hurt sound at target_raycast positiion
+        // Test: Spawn dynamic sound on entity
         if engine.controls.keyboard_inputs.contains("KeyC") {
-            test_spawn_sound_at_entity(engine, entity_sound_name, moving_entity_id);
-            test_spawn_sound_at_entity(engine, entity_sound_name, moving_entity_id_2);
+            test_play_sound_at_entity(engine, entity_sound_name, moving_entity_id);
         }
         // Test: ambient sound spawning
         if engine.controls.keyboard_inputs.contains("KeyV") {
-            test_spawn_ambient_sound(engine, "footsteps");
+            test_play_ambient_sound(engine, "footsteps");
+        }
+
+        if engine.controls.keyboard_inputs.contains("KeyB") {
+            let _ = engine.audio_manager.stop_all_sounds();
         }
     }
 
     if engine.controls.mouse_right {
-        test_update_sound(engine);
+        test_update_last_spawned_sound(engine, moving_entity_id);
     }
 
     visualise_spawned_sound_at_entity(engine, moving_entity_id);
+    visualise_positioned_sounds(engine);
 }
 
-fn test_update_sound(engine: &mut crate::Engine) {
-    // Test: Apply the update function on the first sound that is spawned
-    let first_sound_handle = 0;
-    if let Err(e) =
-        engine.update_sound_with_handle(first_sound_handle, None, None, Some(2.0), None, None, None)
-    {
+// Tested for following transitions [looping, pitch, refDist]
+fn test_update_last_spawned_sound(engine: &mut crate::Engine, entity_id: &str) {
+    // Test: Apply the update function on the last sound that was spawned
+    let last_sound_handle = (engine.audio_manager.next_handle() as i32) - 1;
+    if last_sound_handle <= 0 {
+        tracing::error!("Negative handle");
+        return; // no sounds emitted yet
+    }
+    if let Err(e) = engine.update_sound_with_handle(
+        last_sound_handle as u32,    // last_sound_handle as u32,
+        Some(entity_id.to_string()), // Some(sound_handle.to_string()),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(0.),
+        Some(0.),
+        Some(0.),
+    ) {
         tracing::error!(
             "Failed to play ambient sound '{}' error: {:?}",
-            first_sound_handle,
+            last_sound_handle,
             e
         );
     }
 }
 
-fn test_spawn_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
-    if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, None, false) {
+fn test_play_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
+    if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, Some(0.5), false) {
         tracing::error!("Failed to play ambient sound '{}' error: {:?}", sound_id, e);
     }
 }
 
-pub fn test_spawn_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
-    let entity_id = entity_id.to_string();
-    match engine.play_sound_at_entity(
+pub fn test_play_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
+    if let Err(e) = engine.play_sound_at_entity(
         sound_id,
-        entity_id.clone(),
+        entity_id.to_string(),
         true,
         Some(0.5),
         None,
         Some(10.0),
         false,
     ) {
-        Ok(handle) => tracing::debug!(
-            "Successfully played sound '{}' at EntityID '{}' with handle '{}'",
-            sound_id,
-            entity_id,
-            handle,
-        ),
-        Err(e) => tracing::debug!(
-            "Failed to play sound '{}' at EntityID '{}': {:?}",
-            sound_id,
+        tracing::error!(
+            "Failed to play_sound_at_entity for {}.... {:?}",
             entity_id,
             e
-        ),
+        );
     }
 }
 
-pub fn test_spawn_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
+pub fn test_play_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
     let crate::game_state::GameState::Editing { target_raycast, .. } = &mut engine.state else {
         return;
     };
@@ -615,28 +637,42 @@ pub fn test_spawn_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
     };
 
     let pos = ray_hit.position;
-    match engine.play_sound_at_pos(
+    if let Err(_) = engine.play_sound_at_pos(
         sound_id,
         pos.x as f32,
         pos.y as f32,
         pos.z as f32,
         false,
-        false,
+        true,
         None,
         None,
         Some(10.),
         false,
     ) {
-        Ok(handle) => {
-            tracing::debug!(
-                "Successfully played sound '{}' at {:?} with handle '{}'",
-                sound_id,
-                pos,
+        tracing::error!("Failed to play sound '{}' at position {:?}", sound_id, pos)
+    }
+}
+
+pub fn visualise_positioned_sounds(engine: &mut crate::Engine) {
+    // Iterate over all sounds and find those without an associated entity
+    for (handle, sound_instance) in engine.audio_manager.active_sounds.iter() {
+        if sound_instance.entity_id.is_none() {
+            let sound_position = sound_instance.get_position();
+
+            // Visualize the sound with a vertical line to indicate its position
+            engine
+                .debug_lines
+                .push(crate::render::DebugLine::new_with_color(
+                    sound_position,
+                    sound_position + glam::Vec3::new(0.0, 10.0, 0.0),
+                    glam::Vec4::new(0.0, 0.0, 1.0, 1.0), // Use blue for positioned sounds
+                ));
+
+            tracing::info!(
+                "Visualized ambient sound at position: {:?} with handle: {}",
+                sound_position,
                 handle
-            )
-        }
-        Err(_) => {
-            tracing::debug!("Failed to play sound '{}' at position {:?}", sound_id, pos)
+            );
         }
     }
 }
@@ -665,7 +701,7 @@ pub fn visualise_spawned_sound_at_entity(engine: &mut crate::Engine, entity_id: 
     {
         let sound_position = sound_instance.get_position();
         if let Some(entity_data) = entities.get(&entity_id_str) {
-            let entity_position = entity_data.state.position;
+            let _entity_position = entity_data.state.position;
             engine
                 .debug_lines
                 .push(crate::render::DebugLine::new_with_color(
@@ -673,13 +709,13 @@ pub fn visualise_spawned_sound_at_entity(engine: &mut crate::Engine, entity_id: 
                     sound_position + Vec3::new(0.0, 10.0, 0.0),
                     glam::Vec4::new(1., 1., 0., 1.),
                 ));
-            engine
-                .debug_lines
-                .push(crate::render::DebugLine::new_with_color(
-                    entity_position,
-                    entity_position + Vec3::new(0.0, 10.0, 0.0),
-                    glam::Vec4::new(1., 0., 0., 1.),
-                ));
+            // engine
+            //     .debug_lines
+            //     .push(crate::render::DebugLine::new_with_color(
+            //         entity_position,
+            //         entity_position + Vec3::new(0.0, 10.0, 0.0),
+            //         glam::Vec4::new(1., 0., 0., 1.),
+            //     ));
         }
     }
 }

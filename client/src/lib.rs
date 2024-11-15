@@ -893,16 +893,27 @@ impl Engine {
     // TODO: [toggling ambient status, updating fixed position and entity_id]
     pub fn update_sound_with_handle(
         &mut self,
-        handle: u32,
-        is_ambient: Option<bool>,
+        handle: u32, // Hmmmm, probably should refactor wasm parameters to strings?
+        entity_id: Option<entities::EntityID>,
+        is_ambient: Option<bool>, // not implemented
         is_looping: Option<bool>,
         pitch: Option<f32>,
         reference_distance: Option<f32>,
         volume: Option<f32>,
-        enable_distortion: Option<bool>,
+        enable_distortion: Option<bool>, // not implemented
+        // There's gotta be a better way to pass the position?
+        x: Option<f32>,
+        y: Option<f32>,
+        z: Option<f32>,
     ) -> Result<(), JsValue> {
+        let position: Option<Vec3> = match (x, y, z) {
+            (Some(x), Some(y), Some(z)) => Some(Vec3::new(x, y, z)),
+            _ => None, // Return None if any component is missing
+        };
         self.audio_manager.update_sound_with_handle(
             handle,
+            entity_id,
+            position,
             is_ambient,
             is_looping,
             pitch,
@@ -914,10 +925,6 @@ impl Engine {
 
     pub fn kill_sounds(&mut self) -> Result<(), JsValue> {
         self.audio_manager.clear_sounds_bank()
-    }
-
-    pub fn stop_sounds(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.stop_all_sounds()
     }
 
     fn update_audio_manager(&mut self) {
