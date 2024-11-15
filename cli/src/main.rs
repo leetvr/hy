@@ -1,9 +1,9 @@
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand};
 
-#[derive(Clone, ValueEnum, Debug)]
+#[derive(Subcommand, Debug)]
 enum CliCommand {
     /// Create a new World
-    Create,
+    Create { subject: String },
     /// Create a new BlockType in the current World
     BlockType,
     /// Create a new EntityType in the current World
@@ -13,13 +13,18 @@ enum CliCommand {
 #[derive(Parser)]
 struct Args {
     /// The broad command to run
+    #[command(subcommand)]
     command: CliCommand,
-    /// The main subject of the command, if any
-    subject: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
 
-    println!("command -: {:?}", args.command);
+    match args.command {
+        CliCommand::Create { ref subject } => do_create(subject, &args),
+        CliCommand::BlockType => todo!(),
+        CliCommand::EntityType => todo!(),
+    }
 }
+
+fn do_create(_subject: &String, _args: &Args) {}
