@@ -87,6 +87,7 @@ pub(crate) fn handle_add_entity(
         entity_data,
     }: AddEntity,
 ) {
+    tracing::debug!("Added entity {entity_id}");
     entities.insert(entity_id, entity_data);
 }
 

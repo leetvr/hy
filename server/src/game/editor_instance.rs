@@ -7,7 +7,9 @@ use net_types::{ClientShouldSwitchMode, PlayerId, ServerPacket, SetBlock};
 use physics::PhysicsWorld;
 use tokio::sync::mpsc;
 
-use super::{network::Client, world::World, NextServerState};
+use crate::js::JSContext;
+
+use super::{game_instance::GameInstance, network::Client, world::World, NextServerState};
 
 pub struct EditorInstance {
     pub world: Arc<Mutex<World>>,
@@ -17,11 +19,47 @@ pub struct EditorInstance {
 
 impl EditorInstance {
     pub async fn from_transition(
-        world: Arc<Mutex<World>>,
+        game_instance: GameInstance,
         editor_client: Client,
-        physics_world: Arc<Mutex<PhysicsWorld>>,
+        storage_dir: &PathBuf,
+        js_context: &mut JSContext,
     ) -> Self {
-        // The most important thing to do here is tell the client to switch to edit mode.
+        // Reload the world from storage
+        let GameInstance {
+            world,
+            physics_world,
+            mut colliders,
+            mut players,
+            ..
+        } = game_instance;
+
+        // Reload the world from storage
+        *world.lock().expect("Deadlock!") = World::load(storage_dir).expect("couldn't load world");
+
+        // Respawn all the entities
+        {
+            let mut world = world.lock().expect("Deadlock!");
+            for entity_data in world.entities.values_mut() {
+                js_context.spawn_entity(entity_data);
+            }
+        }
+
+        // Clean up the old game instance
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock!");
+
+            // Clean up the old player handles
+            for (_, player) in players.drain() {
+                physics_world.remove_body(player.body);
+            }
+
+            // Clean up old colliders
+            for collider in colliders.drain(..) {
+                physics_world.remove_collider(collider);
+            }
+        }
+
+        // IMPORTANT: Send the client a packet to confirm the mode switch
         {
             let world = world.lock().expect("Deadlock!");
             editor_client

@@ -69,6 +69,3 @@ export const update = (playerID, currentState, controls, collisions) => {
         };
     }
 };
-function length(v) {
-    return Math.hypot(v[0], v[1], v[2]);
-}

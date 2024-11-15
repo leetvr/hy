@@ -5,14 +5,12 @@ const DT = 0.01666667;
 
 export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
   if (Math.random() > 0.5) {
-    console.log("[onspawn] Lucky!");
     return {
       ...entityData,
       model_path: "kibble_ctf/test_entity_alt.gltf",
     };
   }
 
-  console.log("[onspawn] Unlucky!");
   return entityData;
 };
 
