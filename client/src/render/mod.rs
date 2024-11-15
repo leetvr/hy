@@ -29,7 +29,8 @@ const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
 const UV_ATTRIBUTE: u32 = 2;
 
-const SHADOW_SIZE: UVec2 = UVec2::splat(1024);
+const SHADOW_SIZE: UVec2 = UVec2::splat(2048);
+const LIGHT_DIRECTION: Vec3 = Vec3::new(1.0, -1.0, -1.0);
 
 pub struct Renderer {
     gl: glow::Context,
@@ -101,6 +102,7 @@ impl Renderer {
 
     pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine], grid_size: UVec3) {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
+        let light_direction = LIGHT_DIRECTION.normalize();
 
         unsafe {
             let mut blend_state = EnableState::new(&self.gl, glow::BLEND, false);
@@ -133,11 +135,21 @@ impl Renderer {
             self.gl.clear_depth_f32(1.0);
             self.gl.clear(glow::DEPTH_BUFFER_BIT);
 
-            let shadow_matrix = compute_shadow_bounding_box(Vec3::new(1.0, -1.0, -1.0), grid_size);
+            self.gl.enable(glow::POLYGON_OFFSET_FILL);
+            self.gl.polygon_offset(0.0, 0.0);
+
+            let shadow_matrix = compute_shadow_bounding_box(light_direction, grid_size);
 
             blend_state.set(&self.gl, false);
 
-            self.render_pass(&self.shadow_program, draw_calls, None, shadow_matrix, None);
+            self.render_pass(
+                &self.shadow_program,
+                draw_calls,
+                None,
+                shadow_matrix,
+                None,
+                light_direction,
+            );
 
             // --------------------
             // --- Forward Pass ---
@@ -153,6 +165,8 @@ impl Renderer {
             self.gl
                 .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
+            self.gl.disable(glow::POLYGON_OFFSET_FILL);
+
             let projection_matrix =
                 Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
@@ -164,6 +178,7 @@ impl Renderer {
                 Some(&mut blend_state),
                 projection_matrix * view_matrix,
                 Some(shadow_matrix),
+                light_direction,
             );
 
             let clip_from_world = projection_matrix * view_matrix;
@@ -184,6 +199,7 @@ impl Renderer {
         blend_state: Option<&mut EnableState>,
         clip_from_world: Mat4,
         shadow_from_world: Option<Mat4>,
+        light_direction: Vec3,
     ) {
         unsafe {
             self.gl.use_program(Some(program.program));
@@ -201,13 +217,26 @@ impl Renderer {
 
                 self.gl.depth_mask(!blending);
 
+                // Set light direction
+                self.gl.uniform_3_f32_slice(
+                    program.light_dir_location.as_ref(),
+                    (-light_direction).as_ref(),
+                );
+
+                // Set worldFromLocal matrix
+                self.gl.uniform_matrix_4_f32_slice(
+                    program.world_from_local_location.as_ref(),
+                    false,
+                    bytemuck::cast_slice(draw_call.transform.as_ref()),
+                );
+
                 let mvp_matrix = clip_from_world * draw_call.transform;
 
                 // Set matrix
                 self.gl.uniform_matrix_4_f32_slice(
                     program.matrix_location.as_ref(),
                     false,
-                    bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
+                    bytemuck::cast_slice(mvp_matrix.as_ref()),
                 );
                 if let Some(shadow_from_world) = shadow_from_world {
                     let shadow_matrix = shadow_from_world * draw_call.transform;
@@ -226,7 +255,7 @@ impl Renderer {
                 );
 
                 // Set shadow map
-                if let Some(shadow_map_location) = program.shadow_map_location.as_ref() {
+                if let Some(_) = program.shadow_map_location.as_ref() {
                     self.gl.active_texture(glow::TEXTURE1);
                     self.gl
                         .bind_texture(glow::TEXTURE_2D, Some(self.shadow_target.depth_texture));
@@ -278,6 +307,9 @@ struct PrimaryProgram {
     tint_location: Option<glow::UniformLocation>,
     depth_cutoff_location: Option<glow::UniformLocation>,
     shadow_map_location: Option<glow::UniformLocation>,
+
+    light_dir_location: Option<glow::UniformLocation>,
+    world_from_local_location: Option<glow::UniformLocation>,
 }
 
 impl PrimaryProgram {
@@ -292,6 +324,9 @@ impl PrimaryProgram {
             let depth_cutoff_location = gl.get_uniform_location(program, "depthCutoff");
             let shadow_map_location = gl.get_uniform_location(program, "shadowMap");
 
+            let light_dir_location = gl.get_uniform_location(program, "lightDir");
+            let world_from_local_location = gl.get_uniform_location(program, "worldFromLocal");
+
             gl.use_program(Some(program));
 
             gl.uniform_1_i32(texture_location.as_ref(), 0);
@@ -305,6 +340,9 @@ impl PrimaryProgram {
                 tint_location,
                 depth_cutoff_location,
                 shadow_map_location,
+
+                light_dir_location,
+                world_from_local_location,
             }
         }
     }
@@ -811,33 +849,39 @@ pub fn build_cube_draw_calls<'a>(
 }
 
 pub fn compute_shadow_bounding_box(direction: Vec3, grid_size: UVec3) -> Mat4 {
-    // All 8 corners of the grid
-    let corners = [
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec3::new(grid_size.x as f32, 0.0, 0.0),
-        Vec3::new(0.0, grid_size.y as f32, 0.0),
-        Vec3::new(grid_size.x as f32, grid_size.y as f32, 0.0),
-        Vec3::new(0.0, 0.0, grid_size.z as f32),
-        Vec3::new(grid_size.x as f32, 0.0, grid_size.z as f32),
-        Vec3::new(0.0, grid_size.y as f32, grid_size.z as f32),
-        Vec3::new(grid_size.x as f32, grid_size.y as f32, grid_size.z as f32),
-    ];
+    // TODO(cw): Too Fancy
+    // // All 8 corners of the grid
+    // let corners = [
+    //     Vec3::new(0.0, 0.0, 0.0),
+    //     Vec3::new(grid_size.x as f32, 0.0, 0.0),
+    //     Vec3::new(0.0, grid_size.y as f32, 0.0),
+    //     Vec3::new(grid_size.x as f32, grid_size.y as f32, 0.0),
+    //     Vec3::new(0.0, 0.0, grid_size.z as f32),
+    //     Vec3::new(grid_size.x as f32, 0.0, grid_size.z as f32),
+    //     Vec3::new(0.0, grid_size.y as f32, grid_size.z as f32),
+    //     Vec3::new(grid_size.x as f32, grid_size.y as f32, grid_size.z as f32),
+    // ];
 
-    // Project those corners in the direction of the light
-    let zero_view_matrix = Mat4::look_at_rh(-direction, Vec3::ZERO, Vec3::Y);
+    // // Project those corners in the direction of the light
+    // let zero_view_matrix = Mat4::look_at_rh(-direction, Vec3::ZERO, Vec3::Y);
 
-    let mut min = Vec3::INFINITY;
-    let mut max = Vec3::NEG_INFINITY;
+    // let mut min = Vec3::INFINITY;
+    // let mut max = Vec3::NEG_INFINITY;
 
-    for corner in corners {
-        let projected = zero_view_matrix.transform_point3(corner);
+    // for corner in corners {
+    //     let projected = zero_view_matrix.transform_point3(corner);
 
-        min = min.min(projected);
-        max = max.max(projected);
-    }
+    //     min = min.min(projected);
+    //     max = max.max(projected);
+    // }
 
-    let center = (min + max) / 2.0;
-    let size = max - min;
+    // let center = (min + max) / 2.0;
+    // let size = max - min;
+
+    let center = grid_size.as_vec3() * 0.5;
+    let size = Vec3::splat(grid_size.as_vec3().max_element() * 1.5);
+
+    tracing::info!("Center: {:?}, Size: {:?}", center, size);
 
     let projection_matrix = Mat4::orthographic_rh_gl(
         -size.x / 2.0,
