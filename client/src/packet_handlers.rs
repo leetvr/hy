@@ -93,13 +93,17 @@ pub(crate) fn handle_update_entity(
     UpdateEntity {
         entity_id,
         position,
+        rotation,
+        anchor,
     }: UpdateEntity,
 ) -> Result<()> {
     let Some(entity) = entities.get_mut(&entity_id) else {
         bail!("Received update entity for unknown entity {entity_id:?}");
     };
 
-    entity.state.position = position.into();
+    entity.state.position = position;
+    entity.state.rotation = rotation;
+    entity.state.anchor = anchor;
 
     Ok(())
 }

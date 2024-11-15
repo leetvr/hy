@@ -1,5 +1,6 @@
 mod extensions;
 
+use net_types::Controls;
 use physics::PhysicsWorld;
 use std::{
     path::PathBuf,
@@ -16,7 +17,6 @@ use {
     entities::{EntityID, PlayerId},
     std::collections::HashMap,
 };
-use {entities::EntityPosition, net_types::Controls};
 use {
     entities::{EntityData, EntityTypeID},
     serde::Serialize,
@@ -169,10 +169,7 @@ impl JSContext {
             let interactions = entity_data.state.interactions.drain(..).collect::<Vec<_>>();
 
             let script_state = ScriptEntityState {
-                position: match &entity_data.state.position {
-                    EntityPosition::Absolute(pos) => *pos,
-                    EntityPosition::Anchored { .. } => glam::Vec3::ZERO,
-                },
+                position: entity_data.state.position,
                 velocity: entity_data.state.velocity,
             };
             (
@@ -193,14 +190,8 @@ impl JSContext {
         {
             let mut world = self.world.lock().expect("Deadlock!");
             let entity = world.entities.get_mut(entity_id).unwrap();
+            entity.state.position = next_state.position;
             entity.state.velocity = next_state.velocity;
-            match &mut entity.state.position {
-                EntityPosition::Absolute(pos) => *pos = next_state.position,
-                EntityPosition::Anchored { .. } => {
-                    // Do nothing
-                    // The script can't change the position of an anchored entity
-                }
-            };
         }
 
         Ok(())

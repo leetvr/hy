@@ -60,26 +60,9 @@ impl EntityType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum EntityPosition {
-    Absolute(glam::Vec3),
-    Anchored {
-        player_id: PlayerId,
-        parent_anchor: String,
-        translation: glam::Vec3,
-        rotation: glam::Quat,
-    },
-}
-
-impl Default for EntityPosition {
-    fn default() -> Self {
-        EntityPosition::Absolute(glam::Vec3::ZERO)
-    }
-}
-
-impl From<glam::Vec3> for EntityPosition {
-    fn from(vec: glam::Vec3) -> Self {
-        EntityPosition::Absolute(vec)
-    }
+pub struct Anchor {
+    pub player_id: PlayerId,
+    pub parent_anchor: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -92,8 +75,10 @@ pub struct Interaction {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EntityState {
-    pub position: EntityPosition,
+    pub position: glam::Vec3,
+    pub rotation: glam::Quat,
     pub velocity: glam::Vec3,
+    pub anchor: Option<Anchor>,
     pub interactions: Vec<Interaction>,
 }
 

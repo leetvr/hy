@@ -15,7 +15,7 @@ use {
 };
 
 use bytemuck::offset_of;
-use glam::{Mat4, UVec2, UVec3, Vec3, Vec3Swizzles};
+use glam::{Mat4, UVec2, UVec3, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};

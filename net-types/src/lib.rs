@@ -1,7 +1,7 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
-    entities::{EntityData, EntityID, EntityPosition, EntityTypeRegistry, PlayerId},
+    entities::{Anchor, EntityData, EntityID, EntityTypeRegistry, PlayerId},
     serde::{Deserialize, Serialize},
     std::collections::HashMap,
 };
@@ -85,7 +85,9 @@ pub struct RemoveEntity {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateEntity {
     pub entity_id: EntityID,
-    pub position: EntityPosition,
+    pub position: glam::Vec3,
+    pub rotation: glam::Quat,
+    pub anchor: Option<Anchor>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, From)]

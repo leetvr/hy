@@ -6,7 +6,7 @@ use {
     anyhow::Result,
     blocks::BlockTypeID,
     dolly::prelude::YawPitch,
-    entities::{EntityPosition, PlayerId},
+    entities::{Anchor, EntityState, PlayerId},
     glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
     net_types::ServerPacket,
@@ -658,14 +658,12 @@ impl Engine {
                         continue;
                     };
 
-                    if let Some(transform) = get_transform(players, &entity.state.position) {
-                        draw_calls.extend(render::build_render_plan(
-                            slice::from_ref(&model.gltf),
-                            slice::from_ref(&model.render_model),
-                            transform,
-                            None,
-                        ));
-                    }
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        get_entity_transform(players, &entity.state),
+                        None,
+                    ));
                 }
             }
             _ => {}
@@ -718,16 +716,12 @@ impl Engine {
                 ..
             } => {
                 if let Some(model) = self.entity_models.get(&preview_entity.model_path) {
-                    if let Some(transform) =
-                        get_transform(&HashMap::new(), &preview_entity.state.position)
-                    {
-                        draw_calls.extend(render::build_render_plan(
-                            slice::from_ref(&model.gltf),
-                            slice::from_ref(&model.render_model),
-                            transform,
-                            Some([0.0, 0.5, 1.0, 0.5].into()),
-                        ));
-                    }
+                    draw_calls.extend(render::build_render_plan(
+                        slice::from_ref(&model.gltf),
+                        slice::from_ref(&model.render_model),
+                        get_entity_transform(&HashMap::new(), &preview_entity.state),
+                        Some([0.0, 0.5, 1.0, 0.5].into()),
+                    ));
                 }
             }
             _ => (),
@@ -826,64 +820,65 @@ fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow
     Ok(renderer.create_texture_from_image(data, width, height))
 }
 
-fn get_transform(
+fn get_entity_transform(
     players: &HashMap<PlayerId, Player>,
-    entity_position: &EntityPosition,
-) -> Option<Transform> {
-    match entity_position {
-        EntityPosition::Absolute(pos) => Some(Transform::new(*pos, Quat::IDENTITY)),
-        EntityPosition::Anchored {
-            player_id,
-            parent_anchor,
-            translation,
-            rotation,
-        } => {
-            if let Some(player) = players.get(player_id) {
-                // Recursively search for the anchor node and build its transform along the way
-                // Side note(ll): This is a cute function!
-                fn build_transform(
-                    model: &GLTFModel,
-                    node: usize,
-                    find_node: &String,
-                    parent_transform: Transform,
-                ) -> Option<Transform> {
-                    let node = &model.nodes[node];
-                    if node.name.as_ref() == Some(find_node) {
-                        return Some(parent_transform * node.current_transform);
-                    } else {
-                        for child in &node.children {
-                            if let Some(transform) = build_transform(
-                                model,
-                                *child,
-                                find_node,
-                                parent_transform * node.current_transform,
-                            ) {
-                                return Some(transform);
-                            }
+    EntityState {
+        position,
+        rotation,
+        anchor,
+        ..
+    }: &EntityState,
+) -> Transform {
+    if let Some(Anchor {
+        player_id,
+        parent_anchor,
+    }) = anchor
+    {
+        if let Some(player) = players.get(player_id) {
+            // Recursively search for the anchor node and build its transform along the way
+            // Side note(ll): This is a cute function!
+            fn build_transform(
+                model: &GLTFModel,
+                node: usize,
+                find_node: &String,
+                parent_transform: Transform,
+            ) -> Option<Transform> {
+                let node = &model.nodes[node];
+                if node.name.as_ref() == Some(find_node) {
+                    return Some(parent_transform * node.current_transform);
+                } else {
+                    for child in &node.children {
+                        if let Some(transform) = build_transform(
+                            model,
+                            *child,
+                            find_node,
+                            parent_transform * node.current_transform,
+                        ) {
+                            return Some(transform);
                         }
                     }
-                    None
                 }
+                None
+            }
 
-                if let Some(node_transform) = build_transform(
-                    &player.model,
-                    player.model.root_node_idx,
-                    parent_anchor,
-                    player_transform(player),
-                ) {
-                    let transform = node_transform * Transform::new(*translation, *rotation);
-                    return Some(transform);
-                } else {
-                    tracing::warn!("couldn't find anchor node {parent_anchor}");
-                }
+            if let Some(node_transform) = build_transform(
+                &player.model,
+                player.model.root_node_idx,
+                parent_anchor,
+                player_transform(player),
+            ) {
+                let transform = node_transform * Transform::new(*position, *rotation);
+                return transform;
             } else {
-                tracing::warn!("Entity is anchored to non-existent player");
-            };
-
-            // Fallback for invalidly anchored entity. Probably this
-            None
-        }
+                tracing::warn!("couldn't find anchor node {parent_anchor}");
+            }
+        } else {
+            tracing::warn!("Entity is anchored to non-existent player");
+        };
     }
+
+    // No valid, return absolute position and rotation
+    Transform::new(*position, *rotation)
 }
 
 fn player_transform(player: &Player) -> Transform {

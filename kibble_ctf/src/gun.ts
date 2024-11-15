@@ -14,6 +14,7 @@ const moreKanes = (interaction: Interaction) => {
     hy.spawnEntity(
         0,
         interaction.position,
+        [0., 0., 0.],
         [
             -Math.cos(angle) * speed,
             0.,

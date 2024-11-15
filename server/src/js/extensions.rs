@@ -51,6 +51,7 @@ fn spawn_entity(
     state: &mut OpState,
     entity_type_id: u8,
     #[serde] position: glam::Vec3,
+    #[serde] rotation: glam::Vec3,
     #[serde] velocity: glam::Vec3,
 ) -> Result<EntityID, AnyError> {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
@@ -68,6 +69,7 @@ fn spawn_entity(
         model_path: entity_type.default_model_path().into(),
         state: EntityState {
             position: position.into(),
+            rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
             velocity: velocity.into(),
             ..Default::default()
         },
@@ -86,33 +88,25 @@ fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
     world.despawn_entity(entity_id);
 }
 
-#[op2]
+#[op2(fast)]
 fn anchor_entity(
     state: &mut OpState,
     #[string] entity_id: String,
     #[bigint] player_id: u64,
     #[string] anchor_name: String,
-    #[serde] offset: glam::Vec3,
-    #[serde] rotation: glam::Vec3,
 ) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    world.anchor_entity(
-        entity_id,
-        player_id,
-        anchor_name,
-        offset,
-        glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
-    );
+    world.anchor_entity(entity_id, player_id, anchor_name);
 }
 
-#[op2]
-fn detach_entity(state: &mut OpState, #[string] entity_id: String, #[serde] position: Vec3) {
+#[op2(fast)]
+fn detach_entity(state: &mut OpState, #[string] entity_id: String) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    world.detach_entity(entity_id, position);
+    world.detach_entity(entity_id);
 }
 
 #[op2]
