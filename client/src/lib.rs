@@ -331,12 +331,7 @@ impl Engine {
             _ => {}
         }
 
-        if self.is_audio_manager_debug() {
-            // Test: Spawn hurt at position with left click
-            spawn_test_sound_at_pos_on_left_click(self, "pain");
-            // Test: Spawn "kane" at entity with right click
-            spawn_sound_at_kane_face(self, "kane");
-        }
+        audio::test_audio_manager(self);
 
         // Send packets
         match &mut self.state {
@@ -858,7 +853,7 @@ impl Engine {
             sound_id,
             maybe_entity_id,
             None,
-            false,
+            true, // disable spatialisation
             is_looping,
             pitch,
             None,
@@ -915,12 +910,6 @@ impl Engine {
             volume,
             enable_distortion,
         )
-    }
-
-    // if `true` then TestStopSounds Component will be rendered
-    // and spawn_debug_sound_on_left_click will be enabled
-    pub fn is_audio_manager_debug(&mut self) -> bool {
-        true
     }
 
     pub fn kill_sounds(&mut self) -> Result<(), JsValue> {
@@ -1056,70 +1045,3 @@ const MOUSE_SENSITIVITY_Y: f32 = 0.005;
 
 const CAMERA_DISTANCE: f32 = 8.0;
 const CAMERA_HEIGHT: f32 = 2.0;
-
-// Will fail if the sound hasn't been loaded
-pub fn spawn_test_sound_at_pos_on_left_click(engine: &mut Engine, sound_id: &str) {
-    if let GameState::Editing { target_raycast, .. } = &mut engine.state {
-        if engine.controls.mouse_left {
-            if let Some(ray_hit) = target_raycast {
-                let pos = ray_hit.position;
-                match engine.play_sound_at_pos(
-                    sound_id,
-                    pos.x as f32,
-                    pos.y as f32,
-                    pos.z as f32,
-                    false,
-                    false,
-                    None,
-                    None,
-                    Some(10.),
-                    false,
-                ) {
-                    Ok(handle) => {
-                        tracing::debug!(
-                            "Successfully played sound '{}' at {:?} with handle '{}'",
-                            sound_id,
-                            pos,
-                            handle
-                        )
-                    }
-                    Err(_) => {
-                        tracing::debug!("Failed to play sound '{}' at position {:?}", sound_id, pos)
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn spawn_sound_at_kane_face(engine: &mut Engine, sound_id: &str) {
-    // Early exit if the game state is Loading or if debug is off and the right mouse button is not pressed.
-    if matches!(engine.state, GameState::Loading) || !engine.controls.mouse_right {
-        return;
-    }
-    let entity_id = "0".to_string();
-    let is_looping = true;
-
-    match engine.play_sound_at_entity(
-        sound_id,
-        entity_id.clone(),
-        is_looping,
-        Some(0.5),
-        None,
-        Some(10.0),
-        false,
-    ) {
-        Ok(handle) => tracing::debug!(
-            "Successfully played sound '{}' at EntityID '{}' with handle '{}'",
-            sound_id,
-            entity_id,
-            handle,
-        ),
-        Err(e) => tracing::debug!(
-            "Failed to play sound '{}' at EntityID '{}': {:?}",
-            sound_id,
-            entity_id,
-            e
-        ),
-    }
-}

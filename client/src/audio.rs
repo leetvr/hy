@@ -505,3 +505,111 @@ fn create_distortion_curve(scaling_factor: f32) -> Vec<f32> {
     }
     curve
 }
+
+// TESTING Code
+pub fn test_audio_manager(engine: &mut crate::Engine) {
+    if matches!(engine.state, crate::game_state::GameState::Loading) {
+        return;
+    }
+
+    if engine.controls.mouse_left {
+        if engine.controls.keyboard_inputs.contains("KeyX") {
+            // Test: Spawn "kane" sound at entity
+            test_spawn_sound_at_pos(engine, "pain");
+        }
+        if engine.controls.keyboard_inputs.contains("KeyC") {
+            // Test: Spawn hurt sound at target_raycast positiion
+            test_spawn_sound_at_kane_face(engine, "kane", "0");
+        }
+        if engine.controls.keyboard_inputs.contains("KeyV") {
+            // Test: ambient sound spawning
+            test_spawn_ambient_sound(engine, "footsteps");
+        }
+    }
+
+    if engine.controls.mouse_right {
+        test_update_sound(engine);
+    }
+}
+
+fn test_update_sound(engine: &mut crate::Engine) {
+    // Test: Apply the update function on the first sound that is spawned
+    let first_sound_handle = 0;
+    if let Err(e) =
+        engine.update_sound_with_handle(first_sound_handle, None, None, Some(1.0), None, None, None)
+    {
+        tracing::error!(
+            "Failed to play ambient sound '{}' error: {:?}",
+            first_sound_handle,
+            e
+        );
+    }
+}
+
+fn test_spawn_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
+    if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, None, false) {
+        tracing::error!("Failed to play ambient sound '{}' error: {:?}", sound_id, e);
+    }
+}
+
+pub fn test_spawn_sound_at_kane_face(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
+    let entity_id = entity_id.to_string();
+
+    match engine.play_sound_at_entity(
+        sound_id,
+        entity_id.clone(),
+        true,
+        Some(0.5),
+        None,
+        Some(10.0),
+        true,
+    ) {
+        Ok(handle) => tracing::debug!(
+            "Successfully played sound '{}' at EntityID '{}' with handle '{}'",
+            sound_id,
+            entity_id,
+            handle,
+        ),
+        Err(e) => tracing::debug!(
+            "Failed to play sound '{}' at EntityID '{}': {:?}",
+            sound_id,
+            entity_id,
+            e
+        ),
+    }
+}
+
+pub fn test_spawn_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
+    let crate::game_state::GameState::Editing { target_raycast, .. } = &mut engine.state else {
+        return;
+    };
+    let Some(ray_hit) = target_raycast else {
+        return;
+    };
+
+    let pos = ray_hit.position;
+    match engine.play_sound_at_pos(
+        sound_id,
+        pos.x as f32,
+        pos.y as f32,
+        pos.z as f32,
+        false,
+        false,
+        None,
+        None,
+        Some(10.),
+        false,
+    ) {
+        Ok(handle) => {
+            tracing::debug!(
+                "Successfully played sound '{}' at {:?} with handle '{}'",
+                sound_id,
+                pos,
+                handle
+            )
+        }
+        Err(_) => {
+            tracing::debug!("Failed to play sound '{}' at position {:?}", sound_id, pos)
+        }
+    }
+}
