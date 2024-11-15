@@ -1,15 +1,18 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+use {
+    crate::game::{network::Client, world::World, NextServerState},
+    entities::PlayerId,
+    net_types::{ClientShouldSwitchMode, ServerPacket, SetBlock},
+    physics::PhysicsWorld,
+    std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    },
+    tokio::sync::mpsc,
 };
-
-use net_types::{ClientShouldSwitchMode, PlayerId, ServerPacket, SetBlock};
-use physics::PhysicsWorld;
-use tokio::sync::mpsc;
 
 use crate::js::JSContext;
 
-use super::{game_instance::GameInstance, network::Client, world::World, NextServerState};
+use super::game_instance::GameInstance;
 
 pub struct EditorInstance {
     pub world: Arc<Mutex<World>>,
@@ -130,7 +133,7 @@ impl EditorInstance {
 
     fn add_entity(&mut self, entity: net_types::AddEntity, storage_dir: &PathBuf) {
         let id = entity.entity_id;
-        let position = entity.entity_data.state.position;
+        let position = entity.entity_data.state.position.clone();
         let entity_type_id = entity.entity_data.entity_type;
         tracing::info!("Adding entity {id:?} at {position:?} of type {entity_type_id}");
 

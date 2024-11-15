@@ -1,29 +1,17 @@
 use {
     blocks::{BlockGrid, BlockPos, BlockRegistry},
     derive_more::From,
-    entities::{EntityData, EntityID, EntityTypeRegistry},
+    entities::{Anchor, EntityData, EntityID, EntityTypeRegistry, PlayerId},
     serde::{Deserialize, Serialize},
     std::collections::HashMap,
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PlayerId(u64);
-
-impl PlayerId {
-    pub fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    pub fn inner(&self) -> u64 {
-        self.0
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 // Client's input state, sent greedily to the server
 pub struct Controls {
     pub move_direction: glam::Vec2,
     pub jump: bool,
+    pub fire: bool,
     pub camera_yaw: f32, // radians
 }
 
@@ -99,6 +87,8 @@ pub struct RemoveEntity {
 pub struct UpdateEntity {
     pub entity_id: EntityID,
     pub position: glam::Vec3,
+    pub rotation: glam::Quat,
+    pub anchor: Option<Anchor>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, From)]

@@ -1,8 +1,6 @@
 mod extensions;
 
-use entities::{EntityData, EntityState, EntityTypeID};
-use extensions::hy;
-use net_types::{Controls, PlayerId};
+use net_types::Controls;
 use physics::PhysicsWorld;
 use std::{
     path::PathBuf,
@@ -10,14 +8,31 @@ use std::{
     sync::{Arc, Mutex},
 };
 use {
-    crate::game::PlayerCollision,
+    crate::game::{PlayerCollision, PlayerState, World},
     deno_core::{
-        serde_v8,
+        op2, serde_v8,
         v8::{self},
+        OpState,
     },
+    entities::{EntityID, PlayerId},
+    std::collections::HashMap,
 };
+use {
+    entities::{EntityData, EntityTypeID},
+    serde::Serialize,
+};
+use {extensions::hy, serde::Deserialize};
 
-use crate::game::{PlayerState, World};
+#[op2]
+#[serde]
+// NOTE(kmrw: serde is apparently slow but who cares)
+fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
+    // tracing::info!("Get entities called");
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let state = shared_state.lock().unwrap();
+
+    state.entities.clone()
+}
 
 pub struct JSContext {
     runtime: deno_core::JsRuntime,
@@ -135,28 +150,48 @@ impl JSContext {
         let entity_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
-        let current_state = {
-            let world = self.world.lock().expect("Deadlock!");
-            let Some(entity_data) = &world.entities.get(entity_id) else {
+
+        #[derive(Serialize, Deserialize)]
+        // CRIMES(ll): I don't want to deal with anchored entity positions in the script right now,
+        // so make this separate struct that only handles Vec3 positions
+        struct ScriptEntityState {
+            position: glam::Vec3,
+            velocity: glam::Vec3,
+        }
+
+        let (current_state, interactions) = {
+            let mut world = self.world.lock().expect("Deadlock!");
+            let Some(entity_data) = world.entities.get_mut(entity_id) else {
                 tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
                 return Ok(());
             };
-            serde_v8::to_v8(scope, &entity_data.state).unwrap()
+
+            let interactions = entity_data.state.interactions.drain(..).collect::<Vec<_>>();
+
+            let script_state = ScriptEntityState {
+                position: entity_data.state.position,
+                velocity: entity_data.state.velocity,
+            };
+            (
+                serde_v8::to_v8(scope, &script_state).unwrap(),
+                serde_v8::to_v8(scope, &interactions).unwrap(),
+            )
         };
 
-        // Put the args together
-        let args = [current_state.into()];
+        let args = [current_state.into(), interactions.into()];
 
         // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();
 
         // Get the entity's next state
-        let next_state: EntityState = serde_v8::from_v8(scope, result)?;
+        let next_state: ScriptEntityState = serde_v8::from_v8(scope, result)?;
 
         // Update the entity
         {
             let mut world = self.world.lock().expect("Deadlock!");
-            world.entities.get_mut(entity_id).unwrap().state = next_state;
+            let entity = world.entities.get_mut(entity_id).unwrap();
+            entity.state.position = next_state.position;
+            entity.state.velocity = next_state.velocity;
         }
 
         Ok(())

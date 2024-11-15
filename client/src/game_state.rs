@@ -1,8 +1,11 @@
-use {entities::EntityID, std::collections::HashMap};
+use {
+    entities::{EntityID, PlayerId},
+    std::collections::HashMap,
+};
 
 use blocks::{BlockGrid, BlockRegistry, BlockTypeID, RayHit};
 use entities::{EntityData, EntityTypeRegistry};
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 
 use crate::{camera::FlyCamera, Player};
 

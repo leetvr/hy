@@ -2,17 +2,24 @@ const ENTITY_SPEED = 15;
 const DT = 0.01666667;
 export const onSpawn = (entityData) => {
     if (Math.random() > 0.5) {
-        console.log("[onspawn] Lucky!");
         return Object.assign(Object.assign({}, entityData), { model_path: "kibble_ctf/test_entity_alt.gltf" });
     }
-    console.log("[onspawn] Unlucky!");
     return entityData;
 };
-export const update = (currentState) => {
+export const update = (currentState, interactions) => {
     const [lastX, lastY, lastZ] = currentState.position;
-    const nextPosition = [lastX, lastY, lastZ - ENTITY_SPEED * DT];
+    const [velX, velY, velZ] = currentState.velocity;
+    const nextPosition = [lastX + velX * DT, lastY + velY * DT, lastZ + velZ * DT];
+    if (nextPosition[0] > 32) {
+        nextPosition[0] = 0;
+    }
+    if (nextPosition[0] < 0) {
+        nextPosition[0] = 32;
+    }
+    if (nextPosition[2] > 32) {
+        nextPosition[2] = 0;
+    }
     if (nextPosition[2] < 0) {
-        // Reset the current entity
         nextPosition[2] = 32;
     }
     return Object.assign(Object.assign({}, currentState), { position: nextPosition });
