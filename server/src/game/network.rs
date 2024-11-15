@@ -2,9 +2,8 @@ use {
     crate::game::PlayerState,
     anyhow::Result,
     crossbeam::queue::SegQueue,
-    entities::EntityID,
+    entities::{Anchor, EntityID, PlayerId},
     futures_util::{SinkExt, StreamExt},
-    net_types::PlayerId,
     std::{collections::HashMap, ops::Add, sync::Arc},
     tokio::{
         net::TcpListener,
@@ -126,7 +125,14 @@ pub struct ClientAwareness {
     pub players: HashMap<PlayerId, ClientPlayerState>,
 
     // The scripted entities that the client is aware of, and their last known position
-    pub entities: HashMap<EntityID, glam::Vec3>,
+    pub entities: HashMap<EntityID, KnownEntityState>,
+}
+
+#[derive(Clone, Debug)]
+pub struct KnownEntityState {
+    pub position: glam::Vec3,
+    pub rotation: glam::Quat,
+    pub anchor: Option<Anchor>,
 }
 
 // The state of a player as the client knows it

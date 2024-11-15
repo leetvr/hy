@@ -94,10 +94,7 @@ impl Engine {
             name: "We should let you set entity names in the editor".into(),
             entity_type: entity_type_id,
             model_path: entity_type.default_model_path().into(),
-            state: EntityState {
-                position: Default::default(),
-                velocity: Default::default(),
-            },
+            state: EntityState::default(),
         });
     }
 }

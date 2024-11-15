@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
-    entities::{EntityData, EntityTypeRegistry},
+    entities::{Anchor, EntityData, EntityTypeRegistry, Interaction, PlayerId},
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
@@ -33,6 +33,34 @@ impl World {
             .push(WorldCommand::DespawnEntity(entity_id));
     }
 
+    pub fn anchor_entity(&mut self, entity_id: String, player_id: u64, anchor_name: String) {
+        self.command_queue.push(WorldCommand::AnchorEntity {
+            entity_id,
+            player_id,
+            anchor_name,
+        });
+    }
+
+    pub fn detach_entity(&mut self, entity_id: String) {
+        self.command_queue
+            .push(WorldCommand::DetachEntity { entity_id });
+    }
+
+    pub fn interact_entity(
+        &mut self,
+        entity_id: String,
+        player_id: PlayerId,
+        position: glam::Vec3,
+        facing_angle: f32,
+    ) {
+        self.command_queue.push(WorldCommand::InteractEntity {
+            entity_id,
+            player_id,
+            position,
+            facing_angle,
+        });
+    }
+
     pub fn apply_queued_updates(&mut self) {
         for command in self.command_queue.drain(..) {
             match command {
@@ -41,6 +69,37 @@ impl World {
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
                     self.entities.remove(&entity_id);
+                }
+                WorldCommand::AnchorEntity {
+                    entity_id,
+                    player_id,
+                    anchor_name,
+                } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.anchor = Some(Anchor {
+                            player_id: PlayerId::new(player_id),
+                            parent_anchor: anchor_name,
+                        });
+                    }
+                }
+                WorldCommand::DetachEntity { entity_id } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.anchor = None;
+                    }
+                }
+                WorldCommand::InteractEntity {
+                    entity_id,
+                    player_id,
+                    position,
+                    facing_angle,
+                } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.interactions.push(Interaction {
+                            player_id,
+                            position,
+                            facing_angle,
+                        });
+                    }
                 }
             }
         }
@@ -85,4 +144,18 @@ impl World {
 enum WorldCommand {
     SpawnEntity(String, EntityData),
     DespawnEntity(String),
+    AnchorEntity {
+        entity_id: String,
+        player_id: u64,
+        anchor_name: String,
+    },
+    DetachEntity {
+        entity_id: String,
+    },
+    InteractEntity {
+        entity_id: String,
+        player_id: PlayerId,
+        position: glam::Vec3,
+        facing_angle: f32,
+    },
 }

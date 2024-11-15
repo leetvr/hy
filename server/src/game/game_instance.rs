@@ -1,6 +1,10 @@
-use std::{
-    mem,
-    sync::{Arc, Mutex},
+use {
+    crate::game::network::KnownEntityState,
+    entities::{Anchor, PlayerId},
+    std::{
+        mem,
+        sync::{Arc, Mutex},
+    },
 };
 
 use {
@@ -10,8 +14,9 @@ use {
 };
 
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
+use entities::EntityTypeID;
 use glam::Vec3;
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 use physics::{PhysicsCollider, PhysicsWorld};
 use tokio::sync::mpsc;
 
@@ -30,10 +35,10 @@ pub struct GameInstance {
     next_client_id: ClientId,
     pub clients: HashMap<ClientId, Client>,
 
-    physics_world: PhysicsWorld,
-    _colliders: Vec<PhysicsCollider>,
+    pub physics_world: Arc<Mutex<PhysicsWorld>>,
+    pub colliders: Vec<PhysicsCollider>,
     next_player_id: u64,
-    players: HashMap<PlayerId, Player>,
+    pub players: HashMap<PlayerId, Player>,
     player_spawn_point: glam::Vec3,
 }
 
@@ -51,11 +56,13 @@ impl GameInstance {
             bake_terrain_colliders(&mut physics_world, &world.blocks, &mut colliders);
         }
 
+        let physics_world = Arc::new(Mutex::new(physics_world));
+
         Self {
             world,
             player_spawn_point,
             physics_world,
-            _colliders: colliders,
+            colliders,
             _game_state: Default::default(),
             next_client_id: Default::default(),
             clients: Default::default(),
@@ -68,8 +75,24 @@ impl GameInstance {
         let EditorInstance {
             world,
             mut editor_client,
+            physics_world,
         } = editor_instance;
-        let mut game_instance = GameInstance::new(world);
+        let mut game_instance = GameInstance::new(world.clone());
+
+        let world = world.lock().expect("DEADLOCK!!");
+
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            // Rebuild the terrain
+            bake_terrain_colliders(
+                &mut physics_world,
+                &world.blocks,
+                &mut game_instance.colliders,
+            );
+
+            // Remove any old player handles
+            physics_world.player_handles.clear();
+        }
 
         // IMPORTANT: We need the client to forget any previous world state
         editor_client.awareness = Default::default();
@@ -77,13 +100,17 @@ impl GameInstance {
         // Create a player for the editor client
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
-        game_instance.players.insert(
-            new_player_id,
-            Player::new(
-                &mut game_instance.physics_world,
-                game_instance.player_spawn_point,
-            ),
-        );
+        {
+            let mut physics_world = physics_world.lock().expect("Deadlock");
+            game_instance.players.insert(
+                new_player_id,
+                Player::new(
+                    new_player_id,
+                    &mut physics_world,
+                    game_instance.player_spawn_point,
+                ),
+            );
+        }
 
         // Set the player ID on the editor client
         editor_client.player_id = new_player_id;
@@ -102,6 +129,8 @@ impl GameInstance {
             )
             .await;
 
+        // Make sure that the newly created game instance points to the existing physics world
+        game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
@@ -109,6 +138,18 @@ impl GameInstance {
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
+
+        // Remove any entities attached to removed players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            world.entities.retain(|_, entity| {
+                if let Some(Anchor { player_id, .. }) = entity.state.anchor {
+                    self.players.contains_key(&player_id)
+                } else {
+                    true
+                }
+            });
+        }
 
         // Update players
         for client in self.clients.values() {
@@ -119,20 +160,28 @@ impl GameInstance {
             };
 
             player.state = js_context
-                .get_player_next_state(&player.state, &client.last_controls, collisions)
+                .get_player_next_state(
+                    client.player_id,
+                    &player.state,
+                    &client.last_controls,
+                    collisions,
+                )
                 .await
                 .unwrap();
+
+            // Update Rapier
+            {
+                let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+                physics_world.set_velocity_and_position(
+                    &player.body,
+                    player.state.velocity,
+                    player.state.position,
+                );
+            }
         }
 
         // Update entities
-        let entity_data = {
-            let world = self.world.lock().expect("Deadlock!");
-            world
-                .entities
-                .iter()
-                .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
-                .collect::<Vec<_>>()
-        };
+        let entity_data = self.get_entities_in_world();
 
         for (entity_id, entity_type_id) in entity_data {
             js_context
@@ -142,7 +191,9 @@ impl GameInstance {
         }
 
         // Step physics
-        self.physics_world.step();
+        {
+            self.physics_world.lock().expect("Deadlock!").step();
+        }
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
@@ -157,10 +208,13 @@ impl GameInstance {
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
-        self.players.insert(
-            player_id,
-            Player::new(&mut self.physics_world, self.player_spawn_point),
-        );
+        {
+            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+            self.players.insert(
+                player_id,
+                Player::new(player_id, &mut physics_world, self.player_spawn_point),
+            );
+        }
 
         let client_id = self.next_client_id;
         self.next_client_id = self.next_client_id + 1;
@@ -200,6 +254,8 @@ impl GameInstance {
         let mut maybe_next_state = None;
         let live_players = self.players.keys().copied().collect::<HashSet<_>>();
         let world = self.world.lock().expect("Deadlock!");
+        let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+
         let live_entities = world.entities.keys().cloned().collect::<HashSet<_>>();
         'client_loop: for (client_id, client) in self.clients.iter_mut() {
             while let Some(packet) = match client.incoming_rx.try_recv() {
@@ -239,7 +295,7 @@ impl GameInstance {
             if disconnected.contains(client_id) {
                 if let Some(player) = self.players.remove(&client.player_id) {
                     // Make sure to remove the physics body
-                    self.physics_world.remove_body(player.body);
+                    physics_world.remove_body(player.body);
                 }
                 false
             } else {
@@ -249,6 +305,22 @@ impl GameInstance {
 
         // If we need to transition to a new state, return that
         maybe_next_state
+    }
+
+    pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
+        let mut world = self.world.lock().expect("Deadlock!");
+        for entity_data in world.entities.values_mut() {
+            js_context.spawn_entity(entity_data);
+        }
+    }
+
+    fn get_entities_in_world(&self) -> Vec<(EntityID, EntityTypeID)> {
+        let world = self.world.lock().expect("Deadlock!");
+        world
+            .entities
+            .iter()
+            .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
+            .collect::<Vec<_>>()
     }
 }
 
@@ -356,10 +428,14 @@ async fn sync_entities_to_client(
                 .into(),
             )
             .await;
-        client
-            .awareness
-            .entities
-            .insert(entity_id.clone(), entity.state.position);
+        client.awareness.entities.insert(
+            entity_id.clone(),
+            KnownEntityState {
+                position: entity.state.position.clone(),
+                rotation: entity.state.rotation.clone(),
+                anchor: entity.state.anchor.clone(),
+            },
+        );
     }
 
     // Remove old entities from this client
@@ -377,20 +453,33 @@ async fn sync_entities_to_client(
     }
 
     // Update client's entity positions for all known entities
-    for (entity_id, known_position) in &mut client.awareness.entities {
+    for (
+        entity_id,
+        KnownEntityState {
+            position: known_position,
+            rotation: known_rotation,
+            anchor: known_anchor,
+        },
+    ) in &mut client.awareness.entities
+    {
         let entity = entities.get(entity_id).unwrap();
-        if entity.state.position != *known_position {
+        if entity.state.position != *known_position
+            || entity.state.rotation != *known_rotation
+            || entity.state.anchor != *known_anchor
+        {
             let _ = client
                 .outgoing_tx
                 .send(
                     net_types::UpdateEntity {
                         entity_id: entity_id.clone(),
-                        position: entity.state.position,
+                        position: entity.state.position.clone(),
+                        rotation: entity.state.rotation.clone(),
+                        anchor: entity.state.anchor.clone(),
                     }
                     .into(),
                 )
                 .await;
-            *known_position = entity.state.position;
+            *known_position = entity.state.position.clone();
         }
     }
 }

@@ -19,6 +19,7 @@ export interface PlayerState {
 export interface PlayerControls {
   move_direction: Vec2;
   jump: boolean;
+  fire: boolean;
   camera_yaw: number; // radians
 }
 
@@ -40,19 +41,42 @@ export interface PlayerCollision {
   resolution: Vec3;
 }
 
+export interface Interaction {
+  player: number;
+  position: Vec3;
+  facingAngle: number;
+}
+
 type PlayerUpdate = (
-  current_state: PlayerState,
+  playerID: number,
+  currentState: PlayerState,
   controls: PlayerControls,
   collisions: PlayerCollision[],
 ) => PlayerState;
-type EntityUpdate = (current_state: EntityState) => EntityState;
+
+/**
+ * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
+ *
+ * @param entityData - The initial data for this entity.
+ * @returns The state of this entity when it's first spawned.
+ * @remarks
+ * Changes to the `entity_type` field will be ignored.
+ */
+type OnEntitySpawn = (entityData: EntityData) => EntityData;
+
+type EntityUpdate = (currentState: EntityState, interactions: Interaction[]) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
   getEntities: () => Map<String, EntityData[]>;
-  spawnEntity: (entity: number, position: Vec3) => String;
-  despawnEntity: (entity_id: String) => void;
+  isPlayerOnGround: (id: number) => boolean;
+  spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => String;
+  despawnEntity: (entityId: String) => void;
+  checkMovementForCollisions: (playerID: number, movement: Vec3) => Vec3 | null;
+  anchorEntity: (entityId: String, anchorId: number, anchorName: String) => void;
+  detachEntity: (entityId: String, position: Vec3) => void;
+  interactEntity: (entityId: String, playerId: number, position: Vec3, facingAngle: number) => void;
 }
 
 declare global {

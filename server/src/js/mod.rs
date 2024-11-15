@@ -1,25 +1,27 @@
-use entities::{EntityData, EntityID, EntityState, EntityTypeID};
+mod extensions;
+
 use net_types::Controls;
+use physics::PhysicsWorld;
 use std::{
-    collections::HashMap,
     path::PathBuf,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 use {
-    crate::game::PlayerCollision,
-    anyhow::bail,
+    crate::game::{PlayerCollision, PlayerState, World},
     deno_core::{
-        extension, op2, serde_v8,
+        op2, serde_v8,
         v8::{self},
+        OpState,
     },
+    entities::{EntityID, PlayerId},
+    std::collections::HashMap,
 };
 use {
-    deno_core::{error::AnyError, OpState},
-    nanorand::Rng,
+    entities::{EntityData, EntityTypeID},
+    serde::Serialize,
 };
-
-use crate::game::{PlayerState, World};
+use {extensions::hy, serde::Deserialize};
 
 #[op2]
 #[serde]
@@ -31,19 +33,6 @@ fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
 
     state.entities.clone()
 }
-
-extension!(
-    hy,
-    ops = [get_entities, spawn_entity, despawn_entity],
-    esm_entry_point = "ext:hy/runtime.js",
-    esm = [dir "src/js", "runtime.js"],
-    options = {
-        shared_state: Arc<Mutex<World>>,
-    },
-    state = |state, options| {
-        state.put(options.shared_state.clone())
-    }
-);
 
 pub struct JSContext {
     runtime: deno_core::JsRuntime,
@@ -57,6 +46,7 @@ impl JSContext {
     pub async fn new(
         script_root: impl Into<PathBuf>,
         world: Arc<Mutex<World>>,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
     ) -> anyhow::Result<Self> {
         // Get a clone the entity type registry before we pass it over to the runtime
         let entity_type_registry = {
@@ -67,7 +57,7 @@ impl JSContext {
         // Load the runtime
         let mut runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
             module_loader: Some(Rc::new(deno_core::FsModuleLoader)),
-            extensions: vec![hy::init_ops_and_esm(world.clone())],
+            extensions: vec![hy::init_ops_and_esm(world.clone(), physics_world)],
             ..Default::default()
         });
 
@@ -101,6 +91,7 @@ impl JSContext {
 
     pub async fn get_player_next_state(
         &mut self,
+        player_id: PlayerId,
         current_state: &PlayerState,
         controls: &Controls,
         collisions: Vec<PlayerCollision>,
@@ -120,10 +111,16 @@ impl JSContext {
         let player_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
+        let player_id = serde_v8::to_v8(scope, player_id).unwrap();
         let current_state = serde_v8::to_v8(scope, current_state).unwrap();
         let controls = serde_v8::to_v8(scope, controls).unwrap();
         let colliding = serde_v8::to_v8(scope, collisions).unwrap();
-        let args = [current_state.into(), controls.into(), colliding.into()];
+        let args = [
+            player_id.into(),
+            current_state.into(),
+            controls.into(),
+            colliding.into(),
+        ];
 
         let result = player_update.call(scope, undefined, &args).unwrap();
         let next_state: PlayerState = serde_v8::from_v8(scope, result)?;
@@ -140,6 +137,7 @@ impl JSContext {
         let module_namespace = &self.entity_module_namespaces[entity_type_id as usize];
         let module_namespace = module_namespace.open(scope);
 
+        // Get the update function
         let function_name = v8::String::new(scope, "update").unwrap();
         let Some(update_fn) = module_namespace.get(scope, function_name.into()) else {
             anyhow::bail!("ERROR: Module has no function named update!");
@@ -152,29 +150,94 @@ impl JSContext {
         let entity_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
 
         let undefined = deno_core::v8::undefined(scope).into();
-        let current_state = {
-            let world = self.world.lock().expect("Deadlock!");
-            let Some(entity_data) = &world.entities.get(entity_id) else {
+
+        #[derive(Serialize, Deserialize)]
+        // CRIMES(ll): I don't want to deal with anchored entity positions in the script right now,
+        // so make this separate struct that only handles Vec3 positions
+        struct ScriptEntityState {
+            position: glam::Vec3,
+            velocity: glam::Vec3,
+        }
+
+        let (current_state, interactions) = {
+            let mut world = self.world.lock().expect("Deadlock!");
+            let Some(entity_data) = world.entities.get_mut(entity_id) else {
                 tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
                 return Ok(());
             };
-            serde_v8::to_v8(scope, &entity_data.state).unwrap()
+
+            let interactions = entity_data.state.interactions.drain(..).collect::<Vec<_>>();
+
+            let script_state = ScriptEntityState {
+                position: entity_data.state.position,
+                velocity: entity_data.state.velocity,
+            };
+            (
+                serde_v8::to_v8(scope, &script_state).unwrap(),
+                serde_v8::to_v8(scope, &interactions).unwrap(),
+            )
         };
 
-        let args = [current_state.into()];
+        let args = [current_state.into(), interactions.into()];
 
+        // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();
 
         // Get the entity's next state
-        let next_state: EntityState = serde_v8::from_v8(scope, result)?;
+        let next_state: ScriptEntityState = serde_v8::from_v8(scope, result)?;
 
         // Update the entity
         {
             let mut world = self.world.lock().expect("Deadlock!");
-            world.entities.get_mut(entity_id).unwrap().state = next_state;
+            let entity = world.entities.get_mut(entity_id).unwrap();
+            entity.state.position = next_state.position;
+            entity.state.velocity = next_state.velocity;
         }
 
         Ok(())
+    }
+
+    pub(crate) fn spawn_entity(&mut self, entity_data: &mut EntityData) {
+        // Load the module for this entity type
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = &self.entity_module_namespaces[entity_data.entity_type as usize];
+        let module_namespace = module_namespace.open(scope);
+
+        // Check whether this entity type has an onSpawn function
+        let function_name = v8::String::new(scope, "onSpawn").unwrap();
+        let Some(on_spawn) = module_namespace.get(scope, function_name.into()) else {
+            return;
+        };
+
+        // Since onSpawn is optional, if there's no function then just return
+        if !on_spawn.is_function() {
+            return;
+        }
+
+        // Get the actual function
+        let on_spawn = v8::Local::<v8::Function>::try_from(on_spawn).unwrap(); // we know it's a function
+
+        // Put the args together
+        let undefined = deno_core::v8::undefined(scope).into();
+        let initial_state = serde_v8::to_v8(scope, &entity_data).unwrap();
+
+        let args = [initial_state.into()];
+
+        // Call the function
+        let result = on_spawn.call(scope, undefined, &args).unwrap();
+
+        // Get the entity's initial state
+        let EntityData {
+            name,
+            model_path,
+            state,
+            ..
+        } = serde_v8::from_v8(scope, result).unwrap();
+
+        // Update the entity
+        entity_data.name = name;
+        entity_data.model_path = model_path;
+        entity_data.state = state;
     }
 }
 
@@ -189,43 +252,4 @@ async fn get_module_namespace(
     runtime.run_event_loop(Default::default()).await?;
     let module_namespace = runtime.get_module_namespace(module_id)?;
     Ok(module_namespace)
-}
-
-#[op2]
-#[serde]
-fn spawn_entity(
-    state: &mut OpState,
-    entity_type_id: u8,
-    #[serde] position: glam::Vec3,
-) -> Result<EntityID, AnyError> {
-    let shared_state = state.borrow::<Arc<Mutex<World>>>();
-    let mut world = shared_state.lock().unwrap();
-
-    let Some(entity_type) = world.entity_type_registry.get(entity_type_id) else {
-        bail!("Entity type not found");
-    };
-
-    let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
-    let entity_data = EntityData {
-        id: entity_id.clone(),
-        name: "We should let you set entity names in the editor".into(),
-        entity_type: entity_type.id,
-        model_path: entity_type.default_model_path().into(),
-        state: EntityState {
-            position: position,
-            velocity: Default::default(),
-        },
-    };
-
-    world.spawn_entity(entity_id.clone(), entity_data);
-
-    Ok(entity_id)
-}
-
-#[op2(fast)]
-fn despawn_entity(state: &mut OpState, #[string] entity_id: String) {
-    let shared_state = state.borrow::<Arc<Mutex<World>>>();
-    let mut world = shared_state.lock().unwrap();
-
-    world.despawn_entity(entity_id);
 }
