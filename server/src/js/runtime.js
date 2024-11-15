@@ -21,19 +21,22 @@ globalThis.hy = {
   isPlayerOnGround: (playerID) => {
     return core.ops.is_player_on_ground(playerID);
   },
-  spawnEntity: (entity_type_id, position) => {
-    return core.ops.spawn_entity(entity_type_id, position);
+  spawnEntity: (entityTypeId, position, velocity) => {
+    return core.ops.spawn_entity(entityTypeId, position, velocity);
   },
-  despawnEntity: (entity_id) => {
-    return core.ops.despawn_entity(entity_id);
+  despawnEntity: (entityId) => {
+    return core.ops.despawn_entity(entityId);
   },
   checkMovementForCollisions: (playerID, movement) => {
     return core.ops.check_movement_for_collisions(playerID, movement);
   },
-  anchorEntity: (entity_id, anchor_id, anchor_name, offset, rotation) => {
-    return core.ops.anchor_entity(entity_id, anchor_id, anchor_name, offset, rotation);
+  anchorEntity: (entityId, anchorId, anchorName, offset, rotation) => {
+    return core.ops.anchor_entity(entityId, anchorId, anchorName, offset, rotation);
   },
-  detachEntity: (entity_id, position) => {
-    return core.ops.detach_entity(entity_id, position);
+  detachEntity: (entityId, position) => {
+    return core.ops.detach_entity(entityId, position);
+  },
+  interactEntity: (entityId, playerId, position, facingAngle) => {
+    return core.ops.interact_entity(entityId, playerId, position, facingAngle);
   }
 };

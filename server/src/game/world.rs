@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
-    entities::{EntityData, EntityPosition, EntityTypeRegistry, PlayerId},
+    entities::{EntityData, EntityPosition, EntityTypeRegistry, Interaction, PlayerId},
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
@@ -57,6 +57,21 @@ impl World {
         });
     }
 
+    pub fn interact_entity(
+        &mut self,
+        entity_id: String,
+        player_id: PlayerId,
+        position: glam::Vec3,
+        facing_angle: f32,
+    ) {
+        self.command_queue.push(WorldCommand::InteractEntity {
+            entity_id,
+            player_id,
+            position,
+            facing_angle,
+        });
+    }
+
     pub fn apply_queued_updates(&mut self) {
         for command in self.command_queue.drain(..) {
             match command {
@@ -90,6 +105,20 @@ impl World {
                         if let EntityPosition::Anchored { .. } = entity.state.position {
                             entity.state.position = EntityPosition::Absolute(position);
                         }
+                    }
+                }
+                WorldCommand::InteractEntity {
+                    entity_id,
+                    player_id,
+                    position,
+                    facing_angle,
+                } => {
+                    if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.interactions.push(Interaction {
+                            player_id,
+                            position,
+                            facing_angle,
+                        });
                     }
                 }
             }
@@ -146,5 +175,11 @@ enum WorldCommand {
         entity_id: String,
         // When detaching an anchored entity it should also get a new absolute position
         position: glam::Vec3,
+    },
+    InteractEntity {
+        entity_id: String,
+        player_id: PlayerId,
+        position: glam::Vec3,
+        facing_angle: f32,
     },
 }

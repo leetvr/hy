@@ -2,7 +2,7 @@ use {
     crate::game::World,
     anyhow::bail,
     deno_core::{error::AnyError, extension, op2, OpState},
-    entities::{EntityData, EntityID, EntityState},
+    entities::{EntityData, EntityID, EntityState, PlayerId},
     glam::{EulerRot, Vec3},
     nanorand::Rng,
     physics::PhysicsWorld,
@@ -51,6 +51,7 @@ fn spawn_entity(
     state: &mut OpState,
     entity_type_id: u8,
     #[serde] position: glam::Vec3,
+    #[serde] velocity: glam::Vec3,
 ) -> Result<EntityID, AnyError> {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
@@ -67,6 +68,7 @@ fn spawn_entity(
         model_path: entity_type.default_model_path().into(),
         state: EntityState {
             position: position.into(),
+            velocity: velocity.into(),
             ..Default::default()
         },
     };
@@ -113,6 +115,20 @@ fn detach_entity(state: &mut OpState, #[string] entity_id: String, #[serde] posi
     world.detach_entity(entity_id, position);
 }
 
+#[op2]
+fn interact_entity(
+    state: &mut OpState,
+    #[string] entity_id: String,
+    #[bigint] player_id: u64,
+    #[serde] position: Vec3,
+    facing_angle: f32,
+) {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+
+    world.interact_entity(entity_id, PlayerId::new(player_id), position, facing_angle);
+}
+
 // Exports the extensions as a variable named `hy`
 extension!(
     hy,
@@ -124,6 +140,7 @@ extension!(
         despawn_entity,
         anchor_entity,
         detach_entity,
+        interact_entity,
     ],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],

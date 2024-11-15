@@ -82,11 +82,19 @@ impl From<glam::Vec3> for EntityPosition {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Interaction {
+    pub player_id: PlayerId,
+    pub position: glam::Vec3,
+    #[serde(rename = "facingAngle")]
+    pub facing_angle: f32,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EntityState {
     pub position: EntityPosition,
     pub velocity: glam::Vec3,
-    pub interacted: bool,
+    pub interactions: Vec<Interaction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

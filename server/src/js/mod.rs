@@ -159,12 +159,14 @@ impl JSContext {
             velocity: glam::Vec3,
         }
 
-        let current_state = {
-            let world = self.world.lock().expect("Deadlock!");
-            let Some(entity_data) = &world.entities.get(entity_id) else {
+        let (current_state, interactions) = {
+            let mut world = self.world.lock().expect("Deadlock!");
+            let Some(entity_data) = world.entities.get_mut(entity_id) else {
                 tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
                 return Ok(());
             };
+
+            let interactions = entity_data.state.interactions.drain(..).collect::<Vec<_>>();
 
             let script_state = ScriptEntityState {
                 position: match &entity_data.state.position {
@@ -173,11 +175,13 @@ impl JSContext {
                 },
                 velocity: entity_data.state.velocity,
             };
-            serde_v8::to_v8(scope, &script_state).unwrap()
+            (
+                serde_v8::to_v8(scope, &script_state).unwrap(),
+                serde_v8::to_v8(scope, &interactions).unwrap(),
+            )
         };
 
-        // Put the args together
-        let args = [current_state.into()];
+        let args = [current_state.into(), interactions.into()];
 
         // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();
