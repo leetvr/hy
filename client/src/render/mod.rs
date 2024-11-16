@@ -1,6 +1,7 @@
 mod cube_vao;
 mod debug_renderer;
 mod grid_renderer;
+mod skybox;
 mod vertex;
 
 // Re-exports
@@ -30,7 +31,7 @@ const NORMAL_ATTRIBUTE: u32 = 1;
 const UV_ATTRIBUTE: u32 = 2;
 
 const SHADOW_SIZE: UVec2 = UVec2::splat(2048);
-const LIGHT_DIRECTION: Vec3 = Vec3::new(1.0, -1.0, -1.0);
+const LIGHT_DIRECTION: Vec3 = Vec3::new(-1.0, -1.0, -1.0);
 
 pub struct Renderer {
     gl: glow::Context,
@@ -46,6 +47,7 @@ pub struct Renderer {
 
     grid_renderer: grid_renderer::GridRenderer,
     debug_renderer: debug_renderer::DebugRenderer,
+    skybox_renderer: skybox::SkyboxRenderer,
 }
 
 impl Renderer {
@@ -59,9 +61,6 @@ impl Renderer {
         // Initialize glow with the WebGL2 context
         let gl = get_gl_context(webgl2_context);
 
-        let vertex_shader_source = include_str!("shaders/tri.vert");
-        let fragment_shader_source = include_str!("shaders/tri.frag");
-
         let forward_program = PrimaryProgram::new(
             &gl,
             include_str!("shaders/tri.vert"),
@@ -73,6 +72,8 @@ impl Renderer {
             include_str!("shaders/shadow_tri.vert"),
             include_str!("shaders/shadow_tri.frag"),
         );
+
+        let skybox_renderer = skybox::SkyboxRenderer::new(&gl);
 
         let shadow_target = ShadowTarget::new(&gl, SHADOW_SIZE);
 
@@ -93,6 +94,7 @@ impl Renderer {
             resolution,
             grid_renderer,
             debug_renderer,
+            skybox_renderer,
         })
     }
 
@@ -138,7 +140,7 @@ impl Renderer {
             self.gl.enable(glow::POLYGON_OFFSET_FILL);
             self.gl.polygon_offset(0.0, 0.0);
 
-            let shadow_matrix = compute_shadow_bounding_box(light_direction, grid_size);
+            let shadow_from_world = compute_shadow_bounding_box(light_direction, grid_size);
 
             blend_state.set(&self.gl, false);
 
@@ -146,7 +148,7 @@ impl Renderer {
                 &self.shadow_program,
                 draw_calls,
                 None,
-                shadow_matrix,
+                shadow_from_world,
                 None,
                 light_direction,
             );
@@ -168,18 +170,26 @@ impl Renderer {
             self.gl.disable(glow::POLYGON_OFFSET_FILL);
 
             let projection_matrix =
-                Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
+                Mat4::perspective_rh_gl(60.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
             let view_matrix = self.camera.view_matrix();
+
+            let origin_view_matrix = self.camera.origin_view_matrix();
+
+            let clip_from_world = projection_matrix * view_matrix;
+            let origin_world_from_clip = (projection_matrix * origin_view_matrix).inverse();
 
             self.render_pass(
                 &self.forward_program,
                 draw_calls,
                 Some(&mut blend_state),
-                projection_matrix * view_matrix,
-                Some(shadow_matrix),
+                clip_from_world,
+                Some(shadow_from_world),
                 light_direction,
             );
+
+            self.skybox_renderer
+                .render(&self.gl, origin_world_from_clip);
 
             let clip_from_world = projection_matrix * view_matrix;
             self.grid_renderer
@@ -733,6 +743,11 @@ impl Default for Camera {
 impl Camera {
     pub fn view_matrix(&self) -> Mat4 {
         (Mat4::from_translation(self.position) * Mat4::from_quat(self.rotation)).inverse()
+    }
+
+    /// View matrix without any translation. Used For skybox stuff
+    pub fn origin_view_matrix(&self) -> Mat4 {
+        Mat4::from_quat(self.rotation).inverse()
     }
 }
 

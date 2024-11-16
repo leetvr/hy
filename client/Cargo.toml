@@ -13,6 +13,7 @@ wasm-bindgen.workspace = true
 itertools.workspace = true
 glam.workspace = true
 web-sys.workspace = true
+ktx2.workspace = true
 gltf.workspace = true
 bytemuck.workspace = true
 nanorand.workspace = true
