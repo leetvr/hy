@@ -14,6 +14,12 @@ enum CliCommand {
     BlockType,
     /// Create a new EntityType in the current World
     EntityType,
+    /// Start the Hytopia Development Server
+    #[command(name = "run")]
+    RunServer,
+    /// Load up the web browser
+    #[command(name = "dev")]
+    LoadWebBrowser,
 }
 
 #[derive(Parser)]
@@ -74,6 +80,8 @@ fn main() -> Result<(), ExitCode> {
         CliCommand::Create { ref subject } => do_create(subject, &args),
         CliCommand::BlockType => todo!(),
         CliCommand::EntityType => todo!(),
+        CliCommand::RunServer => todo!(),
+        CliCommand::LoadWebBrowser => todo!(),
     }
 }
 
