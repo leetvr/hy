@@ -1,15 +1,19 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use entities::EntityID;
 use glam::Vec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
+use web_sys::console::log_1;
 use web_sys::WaveShaperNode;
-use web_sys::{
-    js_sys::ArrayBuffer, AudioBuffer, AudioBufferSourceNode, AudioContext, GainNode, PannerNode,
-};
 use web_sys::{js_sys::Uint8Array, DistanceModelType, PanningModelType};
+use web_sys::{AudioBuffer, AudioBufferSourceNode, AudioContext, GainNode, PannerNode};
 
+// TODO: We should probably load all audio files in a certain
+// folder or something and map the names to the file or something
+const SOUND_NAMES: [&str; 5] = ["pain", "kane", "footsteps", "portal", "steps_gravel"];
 const FOOTSTEPS_OGG: &[u8] = include_bytes!("../../assets/footsteps.ogg");
 const PAIN_WAV: &[u8] = include_bytes!("../../assets/pain.wav");
 const STEP_GRAVEL_WAV: &[u8] = include_bytes!("../../assets/step_gravel.wav");
@@ -20,7 +24,7 @@ pub struct AudioManager {
     context: AudioContext,
     master_gain_node: GainNode,
     // Mapping of sound names to loaded AudioBuffers
-    sounds_bank: HashMap<String, AudioBuffer>,
+    sounds_bank: Rc<RefCell<HashMap<String, AudioBuffer>>>,
     // Active sound instances mapped by a unique handle
     active_sounds: HashMap<u32, SoundInstance>,
     // Counter for generating unique handles for each SoundInstance in `active_sounds`
@@ -38,7 +42,7 @@ impl AudioManager {
         Ok(AudioManager {
             context,
             master_gain_node,
-            sounds_bank: HashMap::new(),
+            sounds_bank: Rc::new(RefCell::new(HashMap::new())),
             active_sounds: HashMap::new(),
             next_sound_handle: 0,
         })
@@ -48,29 +52,44 @@ impl AudioManager {
         self.next_sound_handle
     }
 
-    // Use this to preload our sounds
-    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
-        self.load_sound_from_id("pain").await?;
-        self.load_sound_from_id("kane").await?;
-        self.load_sound_from_id("footsteps").await?;
-        self.load_sound_from_id("portal").await?;
-        // self.load_sound_from_id("step_gravel").await?;
-        // self.load_sound_from_url("https://s3-us-west-2.amazonaws.com/s.cdpn.io/858/outfoxing.mp3")
-        //     .await?;
-        web_sys::console::log_1(&"Sounds successfully loaded into sounds_bank".into());
+    pub fn load_sound_bank(&mut self) {
+        for name in SOUND_NAMES {
+            self.load_sound_file_from_name(name);
+        }
+    }
+
+    pub fn clear_sounds_bank(&mut self) -> Result<(), JsValue> {
+        self.sounds_bank.borrow_mut().clear();
+        log_1(&"Sounds bank cleared.".into());
         Ok(())
     }
 
-    pub async fn load_sound_from_id(&mut self, sound_id: &str) -> Result<(), JsValue> {
-        let audio_buffer = self.load_audio_buffer_from_bytes(sound_id).await?;
-        self.sounds_bank.insert(sound_id.to_string(), audio_buffer);
-        // self.sound_buffer = Some(audio_buffer);
-        web_sys::console::log_1(&"Embedded sound loaded successfully".into());
-        Ok(())
+    /// Synchronously initiates loading of a sound from a file.
+    /// Spawns an asynchronous task to fetch and store the AudioBuffer.
+    pub fn load_sound_file_from_name(&self, sound_name: &str) {
+        let sound_id = sound_name.to_string();
+        let sounds_bank = Rc::clone(&self.sounds_bank);
+        let context = self.context.clone();
+
+        wasm_bindgen_futures::spawn_local(async move {
+            match Self::load_buffer_from_bytes(context, &sound_id).await {
+                Ok(audio_buffer) => {
+                    sounds_bank
+                        .borrow_mut()
+                        .insert(sound_id.clone(), audio_buffer);
+                    log_1(&format!("Sound '{}' loaded successfully.", sound_id).into());
+                }
+                Err(e) => {
+                    tracing::error!("Error loading sound '{}': {:?}", sound_id, e);
+                }
+            }
+        });
     }
 
-    /// Loads the audio buffer from embedded bytes.
-    async fn load_audio_buffer_from_bytes(&self, sound_id: &str) -> Result<AudioBuffer, JsValue> {
+    async fn load_buffer_from_bytes(
+        audio_context: AudioContext,
+        sound_id: &str,
+    ) -> Result<AudioBuffer, JsValue> {
         // Map sound IDs to embedded byte slices
         let sound_bytes = match sound_id {
             "footsteps" => FOOTSTEPS_OGG,
@@ -79,7 +98,7 @@ impl AudioManager {
             "kane" => KANE_CLOMP,
             "portal" => PORTAL_WAV,
             _ => {
-                web_sys::console::error_1(&format!("Unknown sound ID:{}", sound_id).into());
+                tracing::error!("Unknown sound ID:{}", sound_id);
                 return Err(JsValue::from_str(&format!(
                     "Unable to load audio buffer: Unknown sound id {sound_id}"
                 )));
@@ -91,22 +110,37 @@ impl AudioManager {
         // Get the ArrayBuffer from the Uint8Array
         let array_buffer = uint8_array.buffer();
         // Decode the audio data
-        let decode_promise = self.context.decode_audio_data(&array_buffer)?;
+        let decode_promise = audio_context.decode_audio_data(&array_buffer)?;
         let decoded_buffer = JsFuture::from(decode_promise).await?;
         // Cast the decoded buffer to AudioBuffer
         let audio_buffer: AudioBuffer = decoded_buffer.dyn_into()?;
         Ok(audio_buffer)
     }
 
-    pub async fn load_sound_from_url(&mut self, url: &str) -> Result<(), JsValue> {
-        let audio_buffer = self.load_audio_buffer_from_url(url).await?;
-        // self.sound_buffer = Some(audio_buffer);
-        self.sounds_bank.insert(url.to_string(), audio_buffer);
-        web_sys::console::log_1(&"Sound buffer loaded successfully".into());
-        Ok(())
+    /// Synchronously initiates loading of a sound from a URL.
+    /// Spawns an asynchronous task to fetch and store the AudioBuffer.
+    pub fn load_sound_from_url(&self, url: &str) {
+        let url = url.to_string();
+        let sounds_bank = Rc::clone(&self.sounds_bank);
+        let context = self.context.clone(); // Cloning AudioContext is safe
+
+        wasm_bindgen_futures::spawn_local(async move {
+            match Self::load_buffer_from_url(context, &url).await {
+                Ok(audio_buffer) => {
+                    sounds_bank.borrow_mut().insert(url.clone(), audio_buffer);
+                    log_1(&format!("Sound from URL '{}' loaded successfully.", url).into());
+                }
+                Err(e) => {
+                    tracing::error!("Error loading sound from URL '{}': {:?}", url, e);
+                }
+            }
+        });
     }
 
-    async fn load_audio_buffer_from_url(&mut self, url: &str) -> Result<AudioBuffer, JsValue> {
+    async fn load_buffer_from_url(
+        context: AudioContext,
+        url: &str,
+    ) -> Result<AudioBuffer, JsValue> {
         let window =
             web_sys::window().ok_or_else(|| JsValue::from_str("No window object available"))?;
 
@@ -119,14 +153,14 @@ impl AudioManager {
 
         // Get the ArrayBuffer from the response
         let array_buffer = JsFuture::from(response.array_buffer()?).await?;
-        let array_buffer: ArrayBuffer = array_buffer
+        let array_buffer = array_buffer
             .dyn_into()
             .map_err(|_| JsValue::from_str("ArrayBuffer conversion failed"))?;
 
         // Decode the data
-        let audio_buffer_promise = self.context.decode_audio_data(&array_buffer)?;
+        let audio_buffer_promise = context.decode_audio_data(&array_buffer)?;
         let audio_buffer = JsFuture::from(audio_buffer_promise).await?;
-        let audio_buffer: AudioBuffer = audio_buffer
+        let audio_buffer = audio_buffer
             .dyn_into()
             .map_err(|_| JsValue::from_str("AudioBuffer conversion failed"))?;
 
@@ -162,8 +196,10 @@ impl AudioManager {
         volume: Option<f32>,
         enable_distortion: bool,
     ) -> Result<u32, JsValue> {
-        let Some(ref audio_buffer) = self.sounds_bank.get(sound_id) else {
-            web_sys::console::error_1(&"Sound buffer not loaded".into());
+        let bank = self.sounds_bank.borrow();
+
+        let Some(audio_buffer) = bank.get(sound_id) else {
+            tracing::error!("Unable to play sound, AudioBuffer not loaded");
             return Err(JsValue::from_str("Sound buffer not loaded"));
         };
 
@@ -179,7 +215,7 @@ impl AudioManager {
             volume,
             enable_distortion,
         ) else {
-            web_sys::console::error_1(&"Unable to create sound_instance".into());
+            tracing::error!("Unable to create sound_instance");
             return Err(JsValue::from_str("Unable to create sound_instance"));
         };
 
@@ -188,7 +224,7 @@ impl AudioManager {
         }
 
         if let Err(e) = sound_instance.start() {
-            web_sys::console::error_1(&"Failed to start sound instance".into());
+            tracing::error!("Failed to start sound instance");
             return Err(e);
         }
 
@@ -312,19 +348,15 @@ impl AudioManager {
         for (&handle, sound_instance) in self.active_sounds.iter() {
             match sound_instance.cleanup_sound_instance() {
                 Ok(_) => {
-                    web_sys::console::log_1(
-                        &format!("Stopped sound with handle {}", handle).into(),
-                    );
+                    log_1(&format!("Stopped sound with handle {}", handle).into());
                 }
                 Err(err) => {
-                    web_sys::console::error_1(
-                        &format!("Failed to stop sound with handle {}: {:?}", handle, err).into(),
-                    );
+                    tracing::error!("Failed to stop sound with handle {}: {:?}", handle, err)
                 }
             }
         }
         self.active_sounds.clear();
-        web_sys::console::log_1(&"All sounds stopped.".into());
+        log_1(&"All sounds stopped.".into());
         Ok(())
     }
 
@@ -334,7 +366,7 @@ impl AudioManager {
             sound_instance.cleanup_sound_instance()?;
             Ok(())
         } else {
-            web_sys::console::error_1(&format!("Sound handle '{}' not found", handle).into());
+            tracing::error!("Sound handle '{}' not found", handle);
             Err(JsValue::from_str("Sound handle not found"))
         }
     }
@@ -561,15 +593,15 @@ pub mod audio_debug_tools {
         if engine.controls.mouse_left {
             // Test: Spawn sound at target_raycast positiion
             if inputs.contains("KeyX") {
-                test_play_sound_at_pos(engine, "pain");
+                trigger_play_sound_at_pos(engine, "pain");
             }
             // Test: Spawn dynamic sound on entity
             if inputs.contains("KeyC") {
-                test_play_sound_at_entity(engine, entity_sound_name, moving_entity_id);
+                trigger_play_sound_at_entity(engine, entity_sound_name, moving_entity_id);
             }
             // Test: ambient sound spawning
             if inputs.contains("KeyV") {
-                test_play_ambient_sound(engine, "footsteps");
+                trigger_play_ambient_sound(engine, "footsteps");
             }
 
             if inputs.contains("KeyB") {
@@ -578,14 +610,14 @@ pub mod audio_debug_tools {
         }
 
         if engine.controls.mouse_right {
-            test_update_last_spawned_sound(engine, moving_entity_id);
+            trigger_update_last_spawned_sound(engine, moving_entity_id);
         }
 
         visualise_spawned_sound_at_entity(engine, moving_entity_id);
         visualise_positioned_sounds(engine);
     }
 
-    fn test_update_last_spawned_sound(engine: &mut crate::Engine, entity_id: &str) {
+    fn trigger_update_last_spawned_sound(engine: &mut crate::Engine, entity_id: &str) {
         // Well, we probably shouldn't take any usize parameters in the play_sound functions
         let last_sound_handle = (engine.audio_manager.next_handle() as i32) - 1;
         if last_sound_handle <= 0 {
@@ -613,13 +645,13 @@ pub mod audio_debug_tools {
         }
     }
 
-    fn test_play_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
+    fn trigger_play_ambient_sound(engine: &mut crate::Engine, sound_id: &str) {
         if let Err(e) = engine.play_ambient_sound(sound_id, None, true, None, Some(0.5), false) {
             tracing::error!("Failed to play ambient sound '{}' error: {:?}", sound_id, e);
         }
     }
 
-    fn test_play_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
+    fn trigger_play_sound_at_entity(engine: &mut crate::Engine, sound_id: &str, entity_id: &str) {
         if let Err(e) = engine.play_sound_at_entity(
             sound_id,
             entity_id.to_string(),
@@ -637,7 +669,7 @@ pub mod audio_debug_tools {
         }
     }
 
-    fn test_play_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
+    fn trigger_play_sound_at_pos(engine: &mut crate::Engine, sound_id: &str) {
         let crate::game_state::GameState::Editing { target_raycast, .. } = &mut engine.state else {
             return;
         };
@@ -664,7 +696,7 @@ pub mod audio_debug_tools {
 
     fn visualise_positioned_sounds(engine: &mut crate::Engine) {
         // Iterate over all sounds and find those without an associated entity
-        for (handle, sound_instance) in engine.audio_manager.active_sounds.iter() {
+        for (_, sound_instance) in engine.audio_manager.active_sounds.iter() {
             if sound_instance.entity_id.is_none() {
                 let sound_position = sound_instance.get_position();
 
@@ -676,12 +708,6 @@ pub mod audio_debug_tools {
                         sound_position + glam::Vec3::new(0.0, 10.0, 0.0),
                         glam::Vec4::new(0.0, 0.0, 1.0, 1.0), // Use blue for positioned sounds
                     ));
-
-                tracing::info!(
-                    "Visualized ambient sound at position: {:?} with handle: {}",
-                    sound_position,
-                    handle
-                );
             }
         }
     }

@@ -60,9 +60,6 @@ function WasmWrapper() {
       try {
         await init(); // init
         const engine = Engine.new();
-        
-        // Should we be loading sounds elsewhere?
-        await engine.load_sounds_into_bank();
 
         const tick = (timestamp: number) => {
           engine.tick(timestamp);

@@ -117,7 +117,8 @@ impl Engine {
             LoadedGLTF { gltf, render_model }
         };
 
-        let audio_manager = audio::AudioManager::new()?;
+        let mut audio_manager = audio::AudioManager::new()?;
+        audio_manager.load_sound_bank();
 
         Ok(Self {
             context: context::Context::new(canvas),
@@ -775,18 +776,20 @@ impl Engine {
         }
     }
 
-    pub async fn load_sounds_into_bank(&mut self) -> Result<(), JsValue> {
-        self.audio_manager.load_sounds_into_bank().await
+    pub fn stop_sounds(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.stop_all_sounds()
     }
 
-    pub async fn load_sound(&mut self, sound_id: &str) -> Result<(), JsValue> {
-        // self.audio_manager.load_sound(url).await
-        self.audio_manager.load_sound_from_id(sound_id).await
+    pub fn clear_bank(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.clear_sounds_bank()
     }
 
-    pub async fn load_url_sound(&mut self, url: &str) -> Result<(), JsValue> {
-        // self.audio_manager.load_sound(url).await
-        self.audio_manager.load_sound_from_url(url).await
+    pub fn load_sound(&mut self, sound_id: &str) {
+        self.audio_manager.load_sound_file_from_name(sound_id)
+    }
+
+    pub fn load_url(&mut self, url: &str) {
+        self.audio_manager.load_sound_from_url(url)
     }
 
     /// Plays a sound associated with a specific entity.
@@ -822,7 +825,7 @@ impl Engine {
         }
         .ok_or_else(|| {
             let error_msg = format!("Entity ID {} not found", entity_id);
-            web_sys::console::error_1(&error_msg.clone().into());
+            tracing::error!(error_msg);
             JsValue::from_str(&error_msg)
         })?;
 
