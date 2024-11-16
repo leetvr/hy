@@ -386,6 +386,7 @@ dependencies = [
  "console",
  "indicatif",
  "tempfile",
+ "webbrowser",
 ]
 
 [[package]]

@@ -85,7 +85,7 @@ fn main() -> Result<(), ExitCode> {
         CliCommand::BlockType => todo!(),
         CliCommand::EntityType => todo!(),
         CliCommand::RunServer { ref subject } => do_run_server(subject, &args),
-        CliCommand::LoadWebBrowser => todo!(),
+        CliCommand::LoadWebBrowser => do_load_web_browser(&args),
     }
 }
 
@@ -110,8 +110,8 @@ fn do_run_server(_subject: &String, _args: &Args) -> Result<(), ExitCode> {
     Ok(())
 }
 
-#[allow(dead_code)]
-fn do_load_web_browser() -> Result<(), ExitCode> {
+fn do_load_web_browser(_args: &Args) -> Result<(), ExitCode> {
+    webbrowser::open("http://localhost:8888").map_err(|_| ExitCode::FAILURE)?;
     Ok(())
 }
 
