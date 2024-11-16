@@ -10,12 +10,12 @@ enum CliCommand {
     /// Create a new World
     Create {
         #[arg(help = "Name of the World to create")]
-        subject: String,
+        world_name: String,
     },
     /// Create a new BlockType in the current World
     BlockType {
         #[arg(help = "Name of the new BlockType to create")]
-        subject: String,
+        block_type_name: String,
     },
     /// Create a new EntityType in the current World
     EntityType {
@@ -26,7 +26,7 @@ enum CliCommand {
     #[command(name = "run")]
     RunServer {
         #[arg(help = "Name of the World to load into the development server")]
-        subject: String,
+        world_name: String,
     },
     /// Load up the web browser
     #[command(name = "dev")]
@@ -90,12 +90,18 @@ fn main() -> Result<(), ExitCode> {
     let args = Args::parse();
 
     match args.command {
-        CliCommand::Create { ref subject } => do_create(subject, &args),
-        CliCommand::BlockType { ref subject } => do_new_blocktype(subject, &args),
+        CliCommand::Create {
+            world_name: ref subject,
+        } => do_create(subject, &args),
+        CliCommand::BlockType {
+            block_type_name: ref subject,
+        } => do_new_blocktype(subject, &args),
         CliCommand::EntityType {
             ref entity_type_name,
-        } => do_new_entity_type(entity_type_name, args),
-        CliCommand::RunServer { ref subject } => do_run_server(subject, &args),
+        } => do_new_entity_type(entity_type_name, &args),
+        CliCommand::RunServer {
+            world_name: ref subject,
+        } => do_run_server(subject, &args),
         CliCommand::LoadWebBrowser => do_load_web_browser(&args),
     }
 }
