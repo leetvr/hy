@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
+use indicatif::ProgressBar;
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 
 #[derive(Subcommand, Debug)]
 enum CliCommand {
@@ -24,6 +26,13 @@ struct Args {
 enum CliMessage {
     CreateWorldExistsAlready(String),
     CreateWorldOsError(std::io::Error),
+    MakingWorld,
+    MadeWorld,
+}
+
+struct ProgressTask<'a> {
+    task: &'a dyn Fn() -> Result<(), ExitCode>,
+    label: Option<String>,
 }
 
 fn main() -> Result<(), ExitCode> {
@@ -46,7 +55,24 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
         return Err(ExitCode::FAILURE);
     } else {
         match std::fs::create_dir(subject) {
-            Ok(()) => {}
+            Ok(()) => {
+                show_message(CliMessage::MakingWorld, args);
+                let bar = ProgressBar::new(3);
+                let mut bar_time = Instant::now();
+                progress_bar(
+                    &bar,
+                    &mut bar_time,
+                    Some("✅ Set up standard block types 🧱"),
+                );
+                progress_bar(&bar, &mut bar_time, Some("✅ Set up entities 🤖"));
+                progress_bar(
+                    &bar,
+                    &mut bar_time,
+                    Some("✅ Set up base world voxel grid 🌐"),
+                );
+                drop(bar);
+                show_message(CliMessage::MadeWorld, args);
+            }
             Err(x) => {
                 show_message(CliMessage::CreateWorldOsError(x), args);
                 return Err(ExitCode::FAILURE);
@@ -54,6 +80,17 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
         };
     }
     return Ok(());
+}
+
+fn progress_bar(bar: &ProgressBar, time: &mut Instant, message: Option<&str>) {
+    bar.inc(1);
+    if let Some(msg) = message {
+        bar.suspend(|| println!("{}", msg));
+    }
+    let time_taken = Instant::now() - *time;
+    let ms_to_sleep = (150 - time_taken.as_millis()).clamp(0, 150);
+    std::thread::sleep(Duration::from_millis(ms_to_sleep.try_into().unwrap()));
+    *time = Instant::now();
 }
 
 fn show_message(message: CliMessage, _args: &Args) {
@@ -66,6 +103,8 @@ fn show_message(message: CliMessage, _args: &Args) {
             "‼️ Unexpected operating system error creating World: {:?}",
             os_err
         ),
+        CliMessage::MakingWorld => println!("🌎 Preparing to make a new world..."),
+        CliMessage::MadeWorld => println!("🌅 World created successfully"),
     }
 }
 
@@ -77,6 +116,29 @@ mod tests {
 
     fn dummy_args() -> Args {
         Args::parse_from(vec!["", "create", "xx"])
+    }
+
+    #[test]
+    fn test_create() {
+        let args = dummy_args();
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test-world");
+        assert!(do_create(&path.clone().into_os_string().into_string().unwrap(), &args).is_ok());
+
+        // Check the files we claim are in the documentation exist
+        for file in [
+            "blocktypes",
+            "entities.json",
+            "entitytypes",
+            "grid.dat",
+            "metadata.json",
+            "player.ts",
+            "skybox",
+            "world.json",
+            "world.ts",
+        ] {
+            assert!(std::fs::exists(path.join(file)).unwrap());
+        }
     }
 
     #[test]
