@@ -17,7 +17,10 @@ enum CliCommand {
     EntityType,
     /// Start the Hytopia Development Server
     #[command(name = "run")]
-    RunServer,
+    RunServer {
+        #[arg(help = "Name of the World to load into the development server")]
+        subject: String,
+    },
     /// Load up the web browser
     #[command(name = "dev")]
     LoadWebBrowser,
@@ -81,16 +84,34 @@ fn main() -> Result<(), ExitCode> {
         CliCommand::Create { ref subject } => do_create(subject, &args),
         CliCommand::BlockType => todo!(),
         CliCommand::EntityType => todo!(),
-        CliCommand::RunServer => todo!(),
+        CliCommand::RunServer { ref subject } => do_run_server(subject, &args),
         CliCommand::LoadWebBrowser => todo!(),
     }
 }
 
+#[allow(dead_code)]
 fn do_new_blocktype() -> Result<(), ExitCode> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn do_new_entity_type() -> Result<(), ExitCode> {
+    Ok(())
+}
+
+fn do_run_server(_subject: &String, _args: &Args) -> Result<(), ExitCode> {
+    Command::new("cargo")
+        // TODO: not just k_ctf
+        .args(["run", "--bin", "server", "kibble_ctf"])
+        // Suppress browser if we're just asked to run the server
+        .env("BROWSER", "none")
+        .status()
+        .map_err(|_| ExitCode::FAILURE)?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn do_load_web_browser() -> Result<(), ExitCode> {
     Ok(())
 }
 
