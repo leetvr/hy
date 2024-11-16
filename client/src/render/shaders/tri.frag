@@ -8,6 +8,7 @@ precision highp sampler2DShadow;
 const float LIGHT_INTENSITY = 1.5;
 const float AMBIENT_INTENSITY = 0.2;
 
+in vec3 worldSpaceInterpolant;
 in vec3 normalInterpolant;
 in vec2 uvInterpolant;
 in vec3 shadowSpaceCoords;
@@ -20,6 +21,19 @@ uniform vec4 tint;
 
 uniform float depthCutoff;
 uniform vec3 lightDir;
+
+const int MAX_LIGHTS = 64;
+
+struct Light {
+    vec3 position;
+    float distance;
+    vec3 color;
+};
+
+uniform LightBuffer {
+    uint count;
+    Light lights[MAX_LIGHTS];
+} light_buffer;
 
 float saturate(float val) {
     return clamp(val, 0.0, 1.0);
@@ -46,6 +60,13 @@ void main() {
     fragColor.rgb *= nol;
 
     fragColor.rgb += AMBIENT_INTENSITY * tex.rgb;
+
+    for (uint i = 0u; i < light_buffer.count; i++) {
+        Light light = light_buffer.lights[i];
+        // Linear falloff
+        float lightIntensity = saturate(1.0 - length(light.position - worldSpaceInterpolant) / light.distance);
+        fragColor.rgb += tex.rgb * light.color * lightIntensity;
+    }
 
     if (depthCutoff == 0.0) {
         return;

@@ -15,7 +15,7 @@ use {
     std::{mem, slice},
 };
 
-use bytemuck::offset_of;
+use bytemuck::{offset_of, Pod, Zeroable};
 use glam::{Mat4, UVec2, UVec3, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
@@ -33,6 +33,35 @@ const UV_ATTRIBUTE: u32 = 2;
 const SHADOW_SIZE: UVec2 = UVec2::splat(2048);
 const LIGHT_DIRECTION: Vec3 = Vec3::new(-1.0, -1.0, -1.0);
 
+const MAX_LIGHTS: usize = 64;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Zeroable, Pod)]
+struct LightBuffer {
+    light_count: u32,
+    _padding: [u32; 3],
+    lights: [Light; MAX_LIGHTS],
+}
+
+impl Default for LightBuffer {
+    fn default() -> Self {
+        Self {
+            light_count: Default::default(),
+            _padding: Default::default(),
+            lights: [Default::default(); MAX_LIGHTS],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, Zeroable, Pod)]
+pub struct Light {
+    pub position: Vec3,
+    pub distance: f32,
+    pub color: Vec3,
+    pub _padding: f32,
+}
+
 pub struct Renderer {
     gl: glow::Context,
     canvas: HtmlCanvasElement,
@@ -48,6 +77,8 @@ pub struct Renderer {
     grid_renderer: grid_renderer::GridRenderer,
     debug_renderer: debug_renderer::DebugRenderer,
     skybox_renderer: skybox::SkyboxRenderer,
+
+    light_buffer: glow::Buffer,
 }
 
 impl Renderer {
@@ -84,6 +115,8 @@ impl Renderer {
 
         let resolution = UVec2::new(canvas.width(), canvas.height());
 
+        let light_buffer = unsafe { gl.create_buffer().expect("Failed to create buffer") };
+
         Ok(Self {
             gl,
             canvas,
@@ -95,6 +128,7 @@ impl Renderer {
             grid_renderer,
             debug_renderer,
             skybox_renderer,
+            light_buffer,
         })
     }
 
@@ -102,11 +136,32 @@ impl Renderer {
         self.resolution = dimension;
     }
 
-    pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine], grid_size: UVec3) {
+    pub fn render(
+        &self,
+        draw_calls: &[DrawCall],
+        debug_lines: &[DebugLine],
+        lights: &[Light],
+        grid_size: UVec3,
+    ) {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
         let light_direction = LIGHT_DIRECTION.normalize();
 
         unsafe {
+            // Upload to light buffer
+            let mut light_buffer_data = LightBuffer::default();
+            for (idx, light) in lights.iter().enumerate().take(MAX_LIGHTS) {
+                light_buffer_data.lights[idx] = *light;
+            }
+            light_buffer_data.light_count = lights.len() as u32;
+
+            self.gl
+                .bind_buffer(glow::UNIFORM_BUFFER, Some(self.light_buffer));
+            self.gl.buffer_data_u8_slice(
+                glow::UNIFORM_BUFFER,
+                bytemuck::bytes_of(&light_buffer_data),
+                glow::STREAM_DRAW,
+            );
+
             let mut blend_state = EnableState::new(&self.gl, glow::BLEND, false);
             self.gl.enable(glow::DEPTH_TEST);
             self.gl.blend_func_separate(
@@ -213,6 +268,9 @@ impl Renderer {
     ) {
         unsafe {
             self.gl.use_program(Some(program.program));
+
+            self.gl
+                .bind_buffer_base(glow::UNIFORM_BUFFER, 0, Some(self.light_buffer));
 
             for draw_call in draw_calls {
                 let blending = draw_call.primitive.transparency_type.requires_blending();
@@ -336,6 +394,11 @@ impl PrimaryProgram {
 
             let light_dir_location = gl.get_uniform_location(program, "lightDir");
             let world_from_local_location = gl.get_uniform_location(program, "worldFromLocal");
+
+            let uniform_block_index = gl.get_uniform_block_index(program, "light_buffer");
+            if let Some(uniform_block_index) = uniform_block_index {
+                gl.uniform_block_binding(program, uniform_block_index, 0);
+            }
 
             gl.use_program(Some(program));
 

@@ -732,8 +732,15 @@ impl Engine {
         let block_grid = self.state.block_grid();
         let block_grid_size = block_grid.map_or(UVec3::ZERO, |grid| grid.size().into());
 
+        let light = render::Light {
+            position: Vec3::new(5.0, 2.0, 5.0),
+            color: Vec3::new(1.0, 1.0, 1.0),
+            distance: 5.0,
+            ..Default::default()
+        };
+
         self.renderer
-            .render(&draw_calls, &self.debug_lines, block_grid_size);
+            .render(&draw_calls, &self.debug_lines, &[light], block_grid_size);
 
         self.debug_lines.clear();
     }
