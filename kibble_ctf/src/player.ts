@@ -1,6 +1,6 @@
 import { Vec3, PlayerUpdate, PlayerControls, PlayerState, PlayerCollision, Vec2 } from "../lib/hy";
 
-const GRAVITY = -20; // Gravity acceleration (m/s^2)
+const GRAVITY = -9.8; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 8.0; // Movement speed (units per second)
 const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
@@ -49,12 +49,19 @@ export const update: PlayerUpdate = (
   // Ground detection
   const isOnGround = hy.isPlayerOnGround(playerID);
 
+  if (controls.jump) {
+    console.log("Jump pressed!");
+  }
+
   // Handle jumping, falling
   if (!isOnGround) {
+    console.log("Falling");
     newVelocity[1] += GRAVITY * DT;
   } else if (controls.jump) {
     newVelocity[1] = JUMP_SPEED;
-  } else {
+    console.log("Jumping!");
+  } else if (velocity[1] < 0) {
+    console.log("Stopping fall");
     newVelocity[1] = 0;
   }
 

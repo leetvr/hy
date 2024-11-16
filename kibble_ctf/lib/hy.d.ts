@@ -17,9 +17,9 @@ export interface PlayerState {
 }
 
 export interface PlayerControls {
-  move_direction: Vec2;
-  jump: boolean;
-  camera_yaw: number; // radians
+  readonly move_direction: Vec2;
+  readonly jump: boolean;
+  readonly camera_yaw: number; // radians
 }
 
 export interface EntityData {

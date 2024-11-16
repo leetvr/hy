@@ -231,6 +231,7 @@ impl Engine {
                                     .call2(&JsValue::NULL, &block_registry, &entity_type_registry)
                                     .expect("Unable to call on_init!");
                             }
+                            let camera = FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0);
 
                             if START_IN_EDIT_MODE {
                                 self.state = GameState::Editing {
@@ -238,7 +239,7 @@ impl Engine {
                                     block_registry,
                                     entities,
                                     entity_type_registry,
-                                    camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
+                                    camera,
                                     target_raycast: None,
                                     selected_block_id: None,
                                     preview_entity: None,
@@ -252,7 +253,7 @@ impl Engine {
                                     block_registry,
                                     entities,
                                     _entity_type_registry: entity_type_registry,
-                                    camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
+                                    camera,
                                     client_player,
                                     players: Default::default(),
                                 };
@@ -311,10 +312,12 @@ impl Engine {
                             tracing::debug!("PLAYING: Server wants us to switch modes");
                             mode_switch = Some(new_mode)
                         }
-                        ServerPacket::SetDebugLines(mut server_debug_lines) => {
+                        ServerPacket::SetDebugLines(server_debug_lines) => {
                             // ally-oop
-                            self.debug_lines
-                                .extend(server_debug_lines.drain(..).map(DebugLine::from));
+                            self.debug_lines = server_debug_lines
+                                .into_iter()
+                                .map(DebugLine::from)
+                                .collect();
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -325,10 +328,12 @@ impl Engine {
                             tracing::debug!("EDITING: Server wants us to switch modes");
                             mode_switch = Some(new_mode)
                         }
-                        ServerPacket::SetDebugLines(mut server_debug_lines) => {
+                        ServerPacket::SetDebugLines(server_debug_lines) => {
                             // ally-oop
-                            self.debug_lines
-                                .extend(server_debug_lines.drain(..).map(DebugLine::from));
+                            self.debug_lines = server_debug_lines
+                                .into_iter()
+                                .map(DebugLine::from)
+                                .collect();
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -759,8 +764,6 @@ impl Engine {
 
         self.renderer
             .render(&draw_calls, &self.debug_lines, block_grid_size);
-
-        self.debug_lines.clear();
     }
 
     fn load_entity_models(&mut self) {

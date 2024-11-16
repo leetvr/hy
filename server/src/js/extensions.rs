@@ -24,7 +24,7 @@ fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
 // NOTE(kmrw: serde is apparently slow but who cares)
 fn is_player_on_ground(state: &mut OpState, #[bigint] player_id: u64) -> bool {
     let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
-    let physics_world = physics_world.lock().expect("Deadlock!");
+    let mut physics_world = physics_world.lock().expect("Deadlock!");
 
     physics_world.is_player_on_ground(player_id)
 }

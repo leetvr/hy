@@ -19,6 +19,9 @@ use {
 
 const TERRAIN_GROUP: Group = Group::GROUP_1;
 const PLAYER_GROUP: Group = Group::GROUP_2;
+const GRAVITY: f32 = -0.20;
+pub const TICK_RATE: u32 = 60;
+pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
 pub struct PhysicsWorld {
     // Parameters
@@ -42,6 +45,7 @@ pub struct PhysicsWorld {
     multibody_joints: MultibodyJointSet,
     pub player_handles: HashMap<u64, RigidBodyHandle>,
     debug: DebugRenderPipeline,
+    debug_lines: Vec<net_types::DebugLine>,
 }
 
 impl PhysicsWorld {
@@ -86,10 +90,12 @@ impl PhysicsWorld {
                 Default::default(),
                 DebugRenderMode::all() & !DebugRenderMode::COLLIDER_AABBS,
             ),
+            debug_lines: Default::default(),
         }
     }
 
     pub fn step(&mut self) {
+        self.debug_lines.clear();
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -140,9 +146,9 @@ impl PhysicsWorld {
             .user_data(player_id as _)
             .ccd_enabled(true)
             .build();
-        let collider = ColliderBuilder::cuboid(size.x, size.y / 2.0, size.z)
+        let collider = ColliderBuilder::capsule_y(size.y / 4.0, 0.5)
             .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
-            .position(vector![0.0, -(size.y / 2.0), 0.0].into())
+            .position(vector![0.0, size.y / 2.0, 0.0].into())
             .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
@@ -234,7 +240,7 @@ impl PhysicsWorld {
         let indices: Vec<_> = indices.collect();
         let collider = ColliderBuilder::trimesh(vertices, indices)
             .collision_groups(InteractionGroups::new(TERRAIN_GROUP, Group::all()))
-            .position(vector![0.0, -1.0, 0.0].into())
+            .position(vector![0.0, 0.0, 0.0].into())
             .build();
         let handle = self.colliders.insert(collider);
         PhysicsCollider {
@@ -271,7 +277,7 @@ impl PhysicsWorld {
     }
 
     /// Checks if a player is standing on the ground
-    pub fn is_player_on_ground(&self, player_id: u64) -> bool {
+    pub fn is_player_on_ground(&mut self, player_id: u64) -> bool {
         // Extract the player's shape
         let Some(player_body_handle) = self.player_handles.get(&player_id) else {
             tracing::warn!("Couldn't find a player handle for {player_id}");
@@ -279,19 +285,20 @@ impl PhysicsWorld {
         };
         let player_body_handle = *player_body_handle;
         let player_body = &self.bodies[player_body_handle];
-        let current_position = player_body.position();
         let Some(player_collider_handle) = player_body.colliders().first() else {
             tracing::warn!("Couldn't find a collider for {player_id}");
             return false;
         };
 
+        let player_collider = &self.colliders[*player_collider_handle];
+        let current_position = player_collider.position();
         let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
 
         // Ground detection
         let down_direction = -Vector3::y_axis();
-        let ground_check_distance = 0.1;
         let mut options = ShapeCastOptions::default();
-        options.max_time_of_impact = ground_check_distance;
+        options.max_time_of_impact = 0.5;
+        options.stop_at_penetration = true;
 
         if let Some((collided, _)) = self.query_pipeline.cast_shape(
             &self.bodies,
@@ -305,6 +312,19 @@ impl PhysicsWorld {
             let collided = &self.colliders[collided];
             let collided_position = collided.position();
             tracing::trace!("Player is on ground: {current_position:?}, {collided_position:?}");
+
+            let mut lines = Vec::new();
+            let mut backend = PhysicsRenderer { lines: &mut lines };
+            // self.debug.rend(
+            //     &mut backend,
+            //     &self.bodies,
+            //     &self.colliders,
+            //     &self.impulse_joints,
+            //     &self.multibody_joints,
+            //     &self.narrow_phase,
+            // );
+            self.debug_lines.append(&mut lines);
+
             true
         } else {
             tracing::trace!("Player is not on the ground: {current_position:?}");
@@ -379,6 +399,8 @@ impl PhysicsWorld {
             &self.multibody_joints,
             &self.narrow_phase,
         );
+
+        lines.append(&mut self.debug_lines);
 
         lines
     }
