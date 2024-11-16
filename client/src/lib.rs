@@ -6,6 +6,7 @@ use {
     anyhow::Result,
     blocks::BlockTypeID,
     dolly::prelude::YawPitch,
+    entities::{Anchor, EntityState, PlayerId},
     glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
     net_types::ServerPacket,
@@ -415,6 +416,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),
+                    fire: self.controls.keyboard_pressed.contains("KeyE"),
                     camera_yaw: self.controls.yaw,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
@@ -470,7 +472,7 @@ impl Engine {
                         return;
                     };
 
-                    preview_entity.state.position = position.into();
+                    preview_entity.state.position = glam::Vec3::from(position).into();
                 }
 
                 if self.controls.mouse_left {
@@ -487,6 +489,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: Vec2::ZERO,
                     jump: false,
+                    fire: false,
                     camera_yaw: 0.0,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
@@ -621,6 +624,11 @@ impl Engine {
         let mut draw_calls = Vec::new();
         self.load_entity_models();
 
+        let players = match &self.state {
+            GameState::Playing { players, .. } => players,
+            _ => &HashMap::new(),
+        };
+
         // Gather blocks and entities
         match &self.state {
             GameState::Playing {
@@ -688,7 +696,7 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
-                        Transform::new(entity.state.position, Quat::IDENTITY),
+                        get_entity_transform(players, &entity.state),
                         None,
                     ));
                 }
@@ -703,16 +711,11 @@ impl Engine {
                 // HACK: The player model is rotated 90 degrees, also
                 // it rotates the wrong way? I'm just fixing it here but someone
                 // should figure out why it is like this.
-                const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
                 for player in players.values() {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&player.model),
                         slice::from_ref(&self.player_model.render_model),
-                        Transform::new_with_scale(
-                            player.position,
-                            Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
-                            glam::Vec3::splat(0.5),
-                        ),
+                        player_transform(player),
                         None,
                     ));
                 }
@@ -751,7 +754,7 @@ impl Engine {
                     draw_calls.extend(render::build_render_plan(
                         slice::from_ref(&model.gltf),
                         slice::from_ref(&model.render_model),
-                        Transform::new(preview_entity.state.position, Quat::IDENTITY),
+                        get_entity_transform(&HashMap::new(), &preview_entity.state),
                         Some([0.0, 0.5, 1.0, 0.5].into()),
                     ));
                 }
@@ -762,8 +765,17 @@ impl Engine {
         let block_grid = self.state.block_grid();
         let block_grid_size = block_grid.map_or(UVec3::ZERO, |grid| grid.size().into());
 
+        let light = render::Light {
+            position: Vec3::new(5.0, 2.0, 5.0),
+            color: Vec3::new(1.0, 1.0, 1.0),
+            distance: 5.0,
+            ..Default::default()
+        };
+
         self.renderer
-            .render(&draw_calls, &self.debug_lines, block_grid_size);
+            .render(&draw_calls, &self.debug_lines, &[light], block_grid_size);
+
+        self.debug_lines.clear();
     }
 
     fn load_entity_models(&mut self) {
@@ -848,6 +860,76 @@ fn load_texture_from_image(renderer: &mut Renderer, image_data: &[u8]) -> anyhow
     let data = image.as_raw();
 
     Ok(renderer.create_texture_from_image(data, width, height))
+}
+
+fn get_entity_transform(
+    players: &HashMap<PlayerId, Player>,
+    EntityState {
+        position,
+        rotation,
+        anchor,
+        ..
+    }: &EntityState,
+) -> Transform {
+    if let Some(Anchor {
+        player_id,
+        parent_anchor,
+    }) = anchor
+    {
+        if let Some(player) = players.get(player_id) {
+            // Recursively search for the anchor node and build its transform along the way
+            // Side note(ll): This is a cute function!
+            fn build_transform(
+                model: &GLTFModel,
+                node: usize,
+                find_node: &String,
+                parent_transform: Transform,
+            ) -> Option<Transform> {
+                let node = &model.nodes[node];
+                if node.name.as_ref() == Some(find_node) {
+                    return Some(parent_transform * node.current_transform);
+                } else {
+                    for child in &node.children {
+                        if let Some(transform) = build_transform(
+                            model,
+                            *child,
+                            find_node,
+                            parent_transform * node.current_transform,
+                        ) {
+                            return Some(transform);
+                        }
+                    }
+                }
+                None
+            }
+
+            if let Some(node_transform) = build_transform(
+                &player.model,
+                player.model.root_node_idx,
+                parent_anchor,
+                player_transform(player),
+            ) {
+                let transform = node_transform * Transform::new(*position, *rotation);
+                return transform;
+            } else {
+                tracing::warn!("couldn't find anchor node {parent_anchor}");
+            }
+        } else {
+            tracing::warn!("Entity is anchored to non-existent player");
+        };
+    }
+
+    // No valid, return absolute position and rotation
+    Transform::new(*position, *rotation)
+}
+
+fn player_transform(player: &Player) -> Transform {
+    const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
+    Transform::new_with_scale(
+        player.position,
+        Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+        glam::Vec3::splat(0.5),
+    )
 }
 
 #[derive(Clone, Default)]

@@ -6,11 +6,20 @@ export const onSpawn = (entityData) => {
     }
     return entityData;
 };
-export const update = (currentState) => {
+export const update = (currentState, interactions) => {
     const [lastX, lastY, lastZ] = currentState.position;
-    const nextPosition = [lastX, lastY, lastZ - ENTITY_SPEED * DT];
+    const [velX, velY, velZ] = currentState.velocity;
+    const nextPosition = [lastX + velX * DT, lastY + velY * DT, lastZ + velZ * DT];
+    if (nextPosition[0] > 32) {
+        nextPosition[0] = 0;
+    }
+    if (nextPosition[0] < 0) {
+        nextPosition[0] = 32;
+    }
+    if (nextPosition[2] > 32) {
+        nextPosition[2] = 0;
+    }
     if (nextPosition[2] < 0) {
-        // Reset the current entity
         nextPosition[2] = 32;
     }
     return Object.assign(Object.assign({}, currentState), { position: nextPosition });

@@ -1,6 +1,10 @@
-use std::{
-    mem,
-    sync::{Arc, Mutex},
+use {
+    crate::game::network::KnownEntityState,
+    entities::{Anchor, PlayerId},
+    std::{
+        mem,
+        sync::{Arc, Mutex},
+    },
 };
 
 use {
@@ -12,7 +16,7 @@ use {
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
 use entities::EntityTypeID;
 use glam::Vec3;
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 use physics::{PhysicsCollider, PhysicsWorld};
 use tokio::sync::mpsc;
 
@@ -136,6 +140,18 @@ impl GameInstance {
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
+
+        // Remove any entities attached to removed players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            world.entities.retain(|_, entity| {
+                if let Some(Anchor { player_id, .. }) = entity.state.anchor {
+                    self.players.contains_key(&player_id)
+                } else {
+                    true
+                }
+            });
+        }
 
         // Update players
         for client in self.clients.values() {
@@ -427,10 +443,14 @@ async fn sync_entities_to_client(
                 .into(),
             )
             .await;
-        client
-            .awareness
-            .entities
-            .insert(entity_id.clone(), entity.state.position);
+        client.awareness.entities.insert(
+            entity_id.clone(),
+            KnownEntityState {
+                position: entity.state.position.clone(),
+                rotation: entity.state.rotation.clone(),
+                anchor: entity.state.anchor.clone(),
+            },
+        );
     }
 
     // Remove old entities from this client
@@ -448,20 +468,33 @@ async fn sync_entities_to_client(
     }
 
     // Update client's entity positions for all known entities
-    for (entity_id, known_position) in &mut client.awareness.entities {
+    for (
+        entity_id,
+        KnownEntityState {
+            position: known_position,
+            rotation: known_rotation,
+            anchor: known_anchor,
+        },
+    ) in &mut client.awareness.entities
+    {
         let entity = entities.get(entity_id).unwrap();
-        if entity.state.position != *known_position {
+        if entity.state.position != *known_position
+            || entity.state.rotation != *known_rotation
+            || entity.state.anchor != *known_anchor
+        {
             let _ = client
                 .outgoing_tx
                 .send(
                     net_types::UpdateEntity {
                         entity_id: entity_id.clone(),
-                        position: entity.state.position,
+                        position: entity.state.position.clone(),
+                        rotation: entity.state.rotation.clone(),
+                        anchor: entity.state.anchor.clone(),
                     }
                     .into(),
                 )
                 .await;
-            *known_position = entity.state.position;
+            *known_position = entity.state.position.clone();
         }
     }
 }

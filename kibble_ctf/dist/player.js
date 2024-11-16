@@ -7,6 +7,11 @@ export const update = (playerID, currentState, controls, collisions) => {
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
+    if (controls.fire) {
+        let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
+        hy.anchorEntity(gun, playerID, "hand_right_anchor");
+        hy.interactEntity(gun, playerID, position, controls.camera_yaw);
+    }
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];
