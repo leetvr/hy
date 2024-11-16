@@ -40,7 +40,7 @@ fn check_movement_for_collisions(
     #[serde] movement: glam::Vec3,
 ) -> Option<glam::Vec3> {
     let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
-    let physics_world = physics_world.lock().expect("Deadlock!");
+    let mut physics_world = physics_world.lock().expect("Deadlock!");
 
     physics_world.check_movement_for_collisions(player_id, movement)
 }

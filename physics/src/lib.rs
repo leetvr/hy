@@ -14,7 +14,10 @@ use {
             PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
         },
     },
-    std::collections::HashMap,
+    std::{
+        collections::{HashMap, HashSet},
+        f32::EPSILON,
+    },
 };
 
 const TERRAIN_GROUP: Group = Group::GROUP_1;
@@ -86,10 +89,7 @@ impl PhysicsWorld {
             physics_hooks,
             event_handler,
             player_handles: Default::default(),
-            debug: DebugRenderPipeline::new(
-                Default::default(),
-                DebugRenderMode::all() & !DebugRenderMode::COLLIDER_AABBS,
-            ),
+            debug: DebugRenderPipeline::new(Default::default(), DebugRenderMode::COLLIDER_SHAPES),
             debug_lines: Default::default(),
         }
     }
@@ -137,18 +137,22 @@ impl PhysicsWorld {
         &mut self,
         player_id: u64, // evil
         position: glam::Vec3,
-        size: glam::Vec3,
+        player_width: f32,
+        player_height: f32,
     ) -> PhysicsBody {
         let rigid_body = RigidBodyBuilder::kinematic_position_based()
-            .translation(vector![position.x, position.y, position.z])
+            .translation(glam_to_na(position))
             .enabled_rotations(false, false, false)
             .enabled_translations(false, false, false)
             .user_data(player_id as _)
             .ccd_enabled(true)
             .build();
-        let collider = ColliderBuilder::capsule_y(size.y / 4.0, 0.5)
+        let half_height = player_height / 2.0;
+        let radius = player_width / 2.0;
+        tracing::debug!("Creating player with half height of {half_height} and radius {radius}");
+        let collider = ColliderBuilder::cylinder(half_height, radius)
             .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
-            .position(vector![0.0, size.y / 2.0, 0.0].into())
+            .position(vector![0.0, half_height, 0.0].into())
             .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
@@ -297,10 +301,10 @@ impl PhysicsWorld {
         // Ground detection
         let down_direction = -Vector3::y_axis();
         let mut options = ShapeCastOptions::default();
-        options.max_time_of_impact = 0.5;
+        options.max_time_of_impact = 0.1;
         options.stop_at_penetration = true;
 
-        if let Some((collided, _)) = self.query_pipeline.cast_shape(
+        if let Some((collided, hit)) = self.query_pipeline.cast_shape(
             &self.bodies,
             &self.colliders,
             &current_position,
@@ -310,20 +314,11 @@ impl PhysicsWorld {
             QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
         ) {
             let collided = &self.colliders[collided];
-            let collided_position = collided.position();
-            tracing::trace!("Player is on ground: {current_position:?}, {collided_position:?}");
-
-            let mut lines = Vec::new();
-            let mut backend = PhysicsRenderer { lines: &mut lines };
-            // self.debug.rend(
-            //     &mut backend,
-            //     &self.bodies,
-            //     &self.colliders,
-            //     &self.impulse_joints,
-            //     &self.multibody_joints,
-            //     &self.narrow_phase,
-            // );
-            self.debug_lines.append(&mut lines);
+            let collided_position = collided.position().translation;
+            tracing::trace!(
+                "Player is on ground: {current_position:?}, {collided_position:?}, toi: {}",
+                hit.time_of_impact
+            );
 
             true
         } else {
@@ -333,7 +328,7 @@ impl PhysicsWorld {
     }
 
     pub fn check_movement_for_collisions(
-        &self,
+        &mut self,
         player_id: u64,
         movement: glam::Vec3,
     ) -> Option<glam::Vec3> {
@@ -342,55 +337,72 @@ impl PhysicsWorld {
             tracing::warn!("Couldn't find a player handle for {player_id}");
             return None;
         };
+
         let player_body_handle = *player_body_handle;
         let player_body = &self.bodies[player_body_handle];
-        let current_position = player_body.position();
         let Some(player_collider_handle) = player_body.colliders().first() else {
             tracing::warn!("Couldn't find a collider for {player_id}");
             return None;
         };
 
-        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
+        let player_collider = &self.colliders[*player_collider_handle];
+        let current_position = player_collider.position();
+        let player_shape = player_collider.shape();
 
         // Collision detection
         let movement = glam_to_na(movement);
         let max_distance = movement.norm();
-        let movement_normalized = if max_distance > 0.0 {
-            movement / max_distance
-        } else {
-            Vector3::zeros()
-        };
-
+        let movement_normalized = movement.normalize();
         let options = ShapeCastOptions::with_max_time_of_impact(max_distance);
 
-        let Some((_, hit)) = self.query_pipeline.cast_shape(
+        let (_, hit) = self.query_pipeline.cast_shape(
             &self.bodies,
             &self.colliders,
             &current_position,
             &movement_normalized,
-            shape,
+            player_shape,
             options,
-            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
-        ) else {
-            return None;
+            QueryFilter::default()
+                .exclude_rigid_body(player_body_handle)
+                .groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
+        )?;
+
+        // Compute the sliding vector
+        let hit_normal = hit.normal2.into_inner();
+
+        // Herpedy-derp, mathematics
+        let sliding = movement - hit_normal * movement.dot(&hit_normal);
+
+        // Check for zero vector before normalization
+        let adjusted_movement_normalized = if sliding.norm() > EPSILON {
+            sliding.normalize()
+        } else {
+            rapier3d::na::Vector3::zeros()
         };
 
-        // Collision detected
-        let adjusted_distance = hit.time_of_impact;
-        let safe_movement = movement_normalized * adjusted_distance;
+        // Move the character up to the collision point minus a small epsilon
+        let movement_distance = (hit.time_of_impact - 0.001).max(0.0);
+        let corrected_movement = na_to_glam(adjusted_movement_normalized * movement_distance);
 
-        // Sliding
-        let slide_plane_normal = -*hit.normal2;
-        let remaining_movement = movement - safe_movement;
-        let dot_product = remaining_movement.dot(&slide_plane_normal);
-        let projection_onto_normal = slide_plane_normal * dot_product;
-        let slide_movement = remaining_movement - projection_onto_normal;
-        Some(na_to_glam(slide_movement))
+        Some(corrected_movement)
     }
 
     pub fn get_debug_lines(&mut self) -> Vec<net_types::DebugLine> {
         let mut lines = Vec::new();
-        let mut backend = PhysicsRenderer { lines: &mut lines };
+        let colliders = self
+            .player_handles
+            .values()
+            .filter_map(|handle| {
+                let body = &self.bodies.get(*handle)?;
+                let handle = body.colliders().first()?;
+                Some(handle.clone())
+            })
+            .collect::<HashSet<_>>();
+
+        let mut backend = PhysicsRenderer {
+            lines: &mut lines,
+            colliders,
+        };
         self.debug.render(
             &mut backend,
             &self.bodies,
@@ -456,20 +468,30 @@ fn glam_to_na(input: glam::Vec3) -> nalgebra::Vector3<f32> {
 }
 struct PhysicsRenderer<'a> {
     lines: &'a mut Vec<net_types::DebugLine>,
+    /// Colliders to include
+    colliders: HashSet<ColliderHandle>,
 }
 
 impl<'a> DebugRenderBackend for PhysicsRenderer<'a> {
     fn draw_line(
         &mut self,
-        _object: DebugRenderObject,
+        object: DebugRenderObject,
         a: Point<Real>,
         b: Point<Real>,
-        color: [f32; 4],
+        _color: [f32; 4],
     ) {
+        match object {
+            DebugRenderObject::Collider(handle, _) => {
+                if !self.colliders.contains(&handle) {
+                    return;
+                }
+            }
+            _ => return,
+        };
+
         self.lines.push(net_types::DebugLine::new(
             na_point_to_glam(a),
             na_point_to_glam(b),
-            glam::Vec3::new(color[0], color[1], color[2]),
         ));
     }
 }

@@ -98,9 +98,9 @@ pub async fn start_client_listener(
                             };
 
 
-                            let position_message =
+                            let message =
                                 bincode::serialize(&message).unwrap();
-                            if let Err(e) = write.send(Message::Binary(position_message)).await {
+                            if let Err(e) = write.send(Message::Binary(message)).await {
                                 tracing::info!("Error sending message: {}", e);
                                 break;
                             }

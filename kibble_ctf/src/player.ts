@@ -18,7 +18,7 @@ export const update: PlayerUpdate = (
 
   if (controls.fire) {
     let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
-    hy.anchorEntity(gun, playerID, "hand_right_anchor",);
+    hy.anchorEntity(gun, playerID, "hand_right_anchor");
     hy.interactEntity(gun, playerID, position, controls.camera_yaw);
   }
 
@@ -74,15 +74,10 @@ export const update: PlayerUpdate = (
   // Update position based on velocity and delta time
   const movement: Vec3 = [newVelocity[0] * DT, newVelocity[1] * DT, newVelocity[2] * DT];
 
-  newPosition[0] += movement[0];
-  newPosition[1] += movement[1];
-  newPosition[2] += movement[2];
-
   const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
   // Check for collisions with blocks
   if (adjustedMovement) {
     newPosition[0] += adjustedMovement[0];
-    newPosition[1] += adjustedMovement[1];
     newPosition[2] += adjustedMovement[2];
 
     return {
@@ -91,6 +86,9 @@ export const update: PlayerUpdate = (
       animationState: newAnimationState,
     };
   } else {
+    newPosition[0] += movement[0];
+    newPosition[1] += movement[1];
+    newPosition[2] += movement[2];
     return {
       position: newPosition,
       velocity: newVelocity,

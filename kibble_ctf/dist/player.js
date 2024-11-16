@@ -57,14 +57,10 @@ export const update = (playerID, currentState, controls, collisions) => {
     }
     // Update position based on velocity and delta time
     const movement = [newVelocity[0] * DT, newVelocity[1] * DT, newVelocity[2] * DT];
-    newPosition[0] += movement[0];
-    newPosition[1] += movement[1];
-    newPosition[2] += movement[2];
     const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
     // Check for collisions with blocks
     if (adjustedMovement) {
         newPosition[0] += adjustedMovement[0];
-        newPosition[1] += adjustedMovement[1];
         newPosition[2] += adjustedMovement[2];
         return {
             position: newPosition,
@@ -73,6 +69,9 @@ export const update = (playerID, currentState, controls, collisions) => {
         };
     }
     else {
+        newPosition[0] += movement[0];
+        newPosition[1] += movement[1];
+        newPosition[2] += movement[2];
         return {
             position: newPosition,
             velocity: newVelocity,

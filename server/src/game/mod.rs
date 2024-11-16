@@ -258,8 +258,11 @@ pub struct PlayerCollision {
 
 impl Player {
     pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
+        // obtained by creating rulers in Blender and comparing them against the Player model
+        let player_height = 3.04 / 2.0; // because we scale the model down in the client
+        let player_width = 1.6 / 2.0;
         let physics_body =
-            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 2.0, 0.5));
+            physics_world.add_player_body(id.inner(), position, player_width, player_height);
         Self {
             state: PlayerState {
                 position,

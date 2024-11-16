@@ -48,7 +48,7 @@ impl GameInstance {
     pub fn new(world: Arc<Mutex<World>>) -> Self {
         // Roughly in the center of the map
         let player_spawn_point =
-            glam::Vec3::new(WORLD_SIZE as f32 / 2., 16., WORLD_SIZE as f32 / 2.);
+            glam::Vec3::new(WORLD_SIZE as f32 / 2., 4., WORLD_SIZE as f32 / 2.);
 
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
@@ -196,8 +196,11 @@ impl GameInstance {
         {
             let mut physics_world = self.physics_world.lock().expect("Deadlock!");
             physics_world.step();
+
+            // IMPORTANT(kmrw):
+            // - Even a small world can generate *thousands* of lines. This seems to absolutely
+            //   choke the packet sender, so use caution.
             if DEBUG_LINES {
-                let tick = std::time::Instant::now();
                 let debug_lines = physics_world.get_debug_lines();
                 for (_, client) in self.clients.iter() {
                     let _ = client
@@ -205,8 +208,6 @@ impl GameInstance {
                         .send(net_types::ServerPacket::SetDebugLines(debug_lines.clone()))
                         .await;
                 }
-                let elapsed = tick.elapsed().as_secs_f32();
-                tracing::trace!("Debug lines took {elapsed:.4}s")
             }
         }
 

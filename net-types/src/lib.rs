@@ -95,12 +95,11 @@ pub struct UpdateEntity {
 pub struct DebugLine {
     pub start: glam::Vec3,
     pub end: glam::Vec3,
-    pub color: glam::Vec3,
 }
 
 impl DebugLine {
-    pub fn new(start: glam::Vec3, end: glam::Vec3, color: glam::Vec3) -> Self {
-        Self { start, end, color }
+    pub fn new(start: glam::Vec3, end: glam::Vec3) -> Self {
+        Self { start, end }
     }
 }
 

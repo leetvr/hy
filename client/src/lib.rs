@@ -502,11 +502,6 @@ impl Engine {
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
 
-        self.debug_lines.push(render::DebugLine::new(
-            Vec3::new(0.0, 3.0, 0.0),
-            Vec3::new(0.0, 3.0, 10.0),
-        ));
-
         if let GameState::Playing { players, .. } = &mut self.state {
             for player in players.values_mut() {
                 gltf::animate_model(&mut player.model, self.delta_time);

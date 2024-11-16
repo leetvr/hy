@@ -22,4 +22,4 @@ cp client/ui/dist/assets/* assets/
 cp client/ui/dist/index.html assets/
 
 # Start the server
-cargo run --bin server kibble_ctf
+cargo run --release --bin server kibble_ctf

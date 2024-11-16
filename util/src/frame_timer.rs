@@ -10,7 +10,7 @@ pub struct FrameTimer {
 const PRINT_INTERVAL_SECONDS: f32 = 1.;
 
 // How many frame times we should keep to get our rolling average
-const MAX_FRAME_TIME_WINDOW: usize = 1000;
+const MAX_FRAME_TIME_WINDOW: usize = 500;
 
 impl FrameTimer {
     pub fn frame_rate(&self) -> f32 {
