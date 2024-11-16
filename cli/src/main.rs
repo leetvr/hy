@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use console::Style;
 use indicatif::ProgressBar;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
@@ -36,7 +37,7 @@ enum CliMessage {
     CreateWorldExistsAlready(String),
     CreateWorldOsError(std::io::Error),
     MakingWorld,
-    MadeWorld,
+    MadeWorld(String),
 }
 
 /// Wrapper for some useful progress bar functionality as we use it in this app.
@@ -85,6 +86,14 @@ fn main() -> Result<(), ExitCode> {
     }
 }
 
+fn do_new_blocktype() -> Result<(), ExitCode> {
+    Ok(())
+}
+
+fn do_new_entity_type() -> Result<(), ExitCode> {
+    Ok(())
+}
+
 fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
     if std::fs::exists(subject).unwrap_or(false) {
         // In a more perfect world, this branch wouldn't exist here: instead we would have it as a
@@ -102,7 +111,7 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
                 bar.do_progress(Some("✅ Set up entities 🤖"));
                 bar.do_progress(Some("✅ Set up base world voxel grid 🌐"));
                 drop(bar);
-                show_message(CliMessage::MadeWorld, args);
+                show_message(CliMessage::MadeWorld(subject.clone()), args);
             }
             Err(x) => {
                 show_message(CliMessage::CreateWorldOsError(x), args);
@@ -114,6 +123,8 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
 }
 
 fn show_message(message: CliMessage, _args: &Args) {
+    let code_style = Style::new().color256(201).underlined();
+    let link_style = Style::new().color256(39).underlined();
     match message {
         CliMessage::CreateWorldExistsAlready(name) => println!(
             "❌ The World '{}' (or at least a file of that name) exists already",
@@ -124,7 +135,27 @@ fn show_message(message: CliMessage, _args: &Args) {
             os_err
         ),
         CliMessage::MakingWorld => println!("🌎 Preparing to make a new world..."),
-        CliMessage::MadeWorld => println!("🌅 World created successfully"),
+        CliMessage::MadeWorld(name) => println!(
+            r#"🌅 World created successfully
+
+Your new world is located in `{}/`
+
+In a second, I’ll start the development server and load up the Hytopia Editor in your web browser.
+
+Remember you can always:
+ 👉 Start the development server: run `{}`
+ 👉 Use the Hytopia Editor: run `{}' or visit {}
+ 👉 Check out the documentation: {}
+
+{}! Actually I’ll just start kibble_ctf.
+"#,
+            code_style.apply_to(name.clone()),
+            code_style.apply_to(format!("hy run {}", name)),
+            code_style.apply_to(format!("hy dev {}", name)),
+            link_style.apply_to("https://localhost:8888/where/"),
+            link_style.apply_to("https://linktogohere.invalid/docs/"),
+            console::style("HAHA TRICKED U").red(),
+        ),
     }
 }
 
