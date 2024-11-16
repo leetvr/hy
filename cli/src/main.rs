@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use console::Style;
 use indicatif::ProgressBar;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 use std::time::{Duration, Instant};
 
 #[derive(Subcommand, Debug)]
@@ -112,6 +112,16 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
                 bar.do_progress(Some("✅ Set up base world voxel grid 🌐"));
                 drop(bar);
                 show_message(CliMessage::MadeWorld(subject.clone()), args);
+
+                if !args.fast_as_possible {
+                    show_countdown("Starting development server in");
+                }
+                println!("Starting development server...");
+
+                Command::new("cargo")
+                    .args(["run", "--bin", "server", "kibble_ctf"])
+                    .status()
+                    .map_err(|_| ExitCode::FAILURE)?;
             }
             Err(x) => {
                 show_message(CliMessage::CreateWorldOsError(x), args);
@@ -122,7 +132,33 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
     return Ok(());
 }
 
+/// Show a countdown for three seconds
+///
+/// Bail out if (a) the output is not a terminal, or (b) we get any error responses from
+/// console::Term
+fn show_countdown(message: &str) {
+    let term = console::Term::stdout();
+    if !term.is_term() {
+        return;
+    }
+    for i in 0..3 {
+        if let Err(_) = term.write_line(&format!("{} {}...", message, 3 - i)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(1000));
+        if let Err(_) = term.move_cursor_up(1) {
+            return;
+        }
+        if let Err(_) = term.clear_line() {
+            return;
+        }
+    }
+}
+
 fn show_message(message: CliMessage, _args: &Args) {
+    let horiz = Style::new()
+        .color256(197)
+        .apply_to("~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~");
     let code_style = Style::new().color256(201).underlined();
     let link_style = Style::new().color256(39).underlined();
     match message {
@@ -136,7 +172,8 @@ fn show_message(message: CliMessage, _args: &Args) {
         ),
         CliMessage::MakingWorld => println!("🌎 Preparing to make a new world..."),
         CliMessage::MadeWorld(name) => println!(
-            r#"🌅 World created successfully
+            r#"{horiz}
+🌅 World created successfully
 
 Your new world is located in `{}/`
 
