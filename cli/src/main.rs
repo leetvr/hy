@@ -18,7 +18,10 @@ enum CliCommand {
         subject: String,
     },
     /// Create a new EntityType in the current World
-    EntityType,
+    EntityType {
+        #[arg(help = "Name of the new EntityType to create")]
+        entity_type_name: String,
+    },
     /// Start the Hytopia Development Server
     #[command(name = "run")]
     RunServer {
@@ -89,7 +92,9 @@ fn main() -> Result<(), ExitCode> {
     match args.command {
         CliCommand::Create { ref subject } => do_create(subject, &args),
         CliCommand::BlockType { ref subject } => do_new_blocktype(subject, &args),
-        CliCommand::EntityType => todo!(),
+        CliCommand::EntityType {
+            ref entity_type_name,
+        } => do_new_entity_type(entity_type_name, args),
         CliCommand::RunServer { ref subject } => do_run_server(subject, &args),
         CliCommand::LoadWebBrowser => do_load_web_browser(&args),
     }
@@ -114,8 +119,7 @@ fn do_new_blocktype(blocktype_name: &String, args: &Args) -> Result<(), ExitCode
     Ok(())
 }
 
-#[allow(dead_code)]
-fn do_new_entity_type() -> Result<(), ExitCode> {
+fn do_new_entity_type(_entitytype_name: &String, _args: &Args) -> Result<(), ExitCode> {
     Ok(())
 }
 
