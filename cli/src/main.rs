@@ -30,9 +30,35 @@ enum CliMessage {
     MadeWorld,
 }
 
-struct ProgressTask<'a> {
-    task: &'a dyn Fn() -> Result<(), ExitCode>,
-    label: Option<String>,
+/// Wrapper for some useful progress bar functionality as we use it in this app.
+///
+/// In particular, this internally manages the delay, and has some useful helper functions
+struct EmojiProgressBar {
+    bar: ProgressBar,
+    last_updated: Instant,
+    min_task_time_ms: u128,
+}
+
+impl EmojiProgressBar {
+    pub fn new(items: u64, _args: &Args) -> Self {
+        EmojiProgressBar {
+            bar: ProgressBar::new(items),
+            last_updated: Instant::now(),
+            min_task_time_ms: 150,
+        }
+    }
+
+    pub fn do_progress(&mut self, message: Option<&str>) {
+        self.bar.inc(1);
+        if let Some(msg) = message {
+            self.bar.suspend(|| println!("{}", msg));
+        }
+        let time_taken = Instant::now() - self.last_updated;
+        let ms_to_sleep =
+            (self.min_task_time_ms - time_taken.as_millis()).clamp(0, self.min_task_time_ms);
+        std::thread::sleep(Duration::from_millis(ms_to_sleep.try_into().unwrap()));
+        self.last_updated = Instant::now();
+    }
 }
 
 fn main() -> Result<(), ExitCode> {
@@ -57,19 +83,10 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
         match std::fs::create_dir(subject) {
             Ok(()) => {
                 show_message(CliMessage::MakingWorld, args);
-                let bar = ProgressBar::new(3);
-                let mut bar_time = Instant::now();
-                progress_bar(
-                    &bar,
-                    &mut bar_time,
-                    Some("✅ Set up standard block types 🧱"),
-                );
-                progress_bar(&bar, &mut bar_time, Some("✅ Set up entities 🤖"));
-                progress_bar(
-                    &bar,
-                    &mut bar_time,
-                    Some("✅ Set up base world voxel grid 🌐"),
-                );
+                let mut bar = EmojiProgressBar::new(3, args);
+                bar.do_progress(Some("✅ Set up standard block types 🧱"));
+                bar.do_progress(Some("✅ Set up entities 🤖"));
+                bar.do_progress(Some("✅ Set up base world voxel grid 🌐"));
                 drop(bar);
                 show_message(CliMessage::MadeWorld, args);
             }
@@ -80,17 +97,6 @@ fn do_create(subject: &String, args: &Args) -> Result<(), ExitCode> {
         };
     }
     return Ok(());
-}
-
-fn progress_bar(bar: &ProgressBar, time: &mut Instant, message: Option<&str>) {
-    bar.inc(1);
-    if let Some(msg) = message {
-        bar.suspend(|| println!("{}", msg));
-    }
-    let time_taken = Instant::now() - *time;
-    let ms_to_sleep = (150 - time_taken.as_millis()).clamp(0, 150);
-    std::thread::sleep(Duration::from_millis(ms_to_sleep.try_into().unwrap()));
-    *time = Instant::now();
 }
 
 fn show_message(message: CliMessage, _args: &Args) {
