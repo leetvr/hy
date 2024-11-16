@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use console::Style;
 use indicatif::ProgressBar;
+use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use std::time::{Duration, Instant};
 
@@ -12,7 +13,10 @@ enum CliCommand {
         subject: String,
     },
     /// Create a new BlockType in the current World
-    BlockType,
+    BlockType {
+        #[arg(help = "Name of the new BlockType to create")]
+        subject: String,
+    },
     /// Create a new EntityType in the current World
     EntityType,
     /// Start the Hytopia Development Server
@@ -37,9 +41,11 @@ struct Args {
 }
 
 enum CliMessage {
+    BlockTypeExistsAlready(String, String),
     CreateWorldExistsAlready(String),
     CreateWorldOsError(std::io::Error),
     MakingWorld,
+    MakingBlockType,
     MadeWorld(String),
 }
 
@@ -82,15 +88,29 @@ fn main() -> Result<(), ExitCode> {
 
     match args.command {
         CliCommand::Create { ref subject } => do_create(subject, &args),
-        CliCommand::BlockType => todo!(),
+        CliCommand::BlockType { ref subject } => do_new_blocktype(subject, &args),
         CliCommand::EntityType => todo!(),
         CliCommand::RunServer { ref subject } => do_run_server(subject, &args),
         CliCommand::LoadWebBrowser => do_load_web_browser(&args),
     }
 }
 
-#[allow(dead_code)]
-fn do_new_blocktype() -> Result<(), ExitCode> {
+fn do_new_blocktype(blocktype_name: &String, args: &Args) -> Result<(), ExitCode> {
+    // TODO: Figure out what world we're in
+    // TODO -- add an arg to specify which arg
+    let the_world = "kibble_ctf";
+    let mut path = PathBuf::new();
+    path.push(the_world);
+    path.push(blocktype_name);
+    if std::fs::exists(path).unwrap_or(false) {
+        show_message(
+            CliMessage::BlockTypeExistsAlready(String::from(the_world), blocktype_name.clone()),
+            args,
+        );
+        return Err(ExitCode::FAILURE);
+    } else {
+        show_message(CliMessage::MakingBlockType, args);
+    }
     Ok(())
 }
 
@@ -183,6 +203,10 @@ fn show_message(message: CliMessage, _args: &Args) {
     let code_style = Style::new().color256(201).underlined();
     let link_style = Style::new().color256(39).underlined();
     match message {
+        CliMessage::BlockTypeExistsAlready(world, name) => println!(
+            "❌ The Block Type '{}' exists in the world '{}' already",
+            world, name
+        ),
         CliMessage::CreateWorldExistsAlready(name) => println!(
             "❌ The World '{}' (or at least a file of that name) exists already",
             name
@@ -192,6 +216,9 @@ fn show_message(message: CliMessage, _args: &Args) {
             os_err
         ),
         CliMessage::MakingWorld => println!("🌎 Preparing to make a new world..."),
+        CliMessage::MakingBlockType => {
+            println!("🔨 Writing out block type template...\nComplete. New block type ready.")
+        }
         CliMessage::MadeWorld(name) => println!(
             r#"{horiz}
 🌅 World created successfully
