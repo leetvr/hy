@@ -21,6 +21,9 @@ struct Args {
     /// The broad command to run
     #[command(subcommand)]
     command: CliCommand,
+    /// Go as fast as possible rather than optimising output for readability
+    #[arg(long)]
+    fast_as_possible: bool,
 }
 
 enum CliMessage {
@@ -40,11 +43,11 @@ struct EmojiProgressBar {
 }
 
 impl EmojiProgressBar {
-    pub fn new(items: u64, _args: &Args) -> Self {
+    pub fn new(items: u64, args: &Args) -> Self {
         EmojiProgressBar {
             bar: ProgressBar::new(items),
             last_updated: Instant::now(),
-            min_task_time_ms: 150,
+            min_task_time_ms: if args.fast_as_possible { 0 } else { 150 },
         }
     }
 
@@ -56,7 +59,10 @@ impl EmojiProgressBar {
         let time_taken = Instant::now() - self.last_updated;
         let ms_to_sleep =
             (self.min_task_time_ms - time_taken.as_millis()).clamp(0, self.min_task_time_ms);
-        std::thread::sleep(Duration::from_millis(ms_to_sleep.try_into().unwrap()));
+        // >1 rather than >0 to avoid nuisance sleeps
+        if ms_to_sleep > 1 {
+            std::thread::sleep(Duration::from_millis(ms_to_sleep.try_into().unwrap()));
+        }
         self.last_updated = Instant::now();
     }
 }
