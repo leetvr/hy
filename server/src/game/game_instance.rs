@@ -197,9 +197,6 @@ impl GameInstance {
             let mut physics_world = self.physics_world.lock().expect("Deadlock!");
             physics_world.step();
 
-            // IMPORTANT(kmrw):
-            // - Even a small world can generate *thousands* of lines. This seems to absolutely
-            //   choke the packet sender, so use caution.
             if DEBUG_LINES {
                 let debug_lines = physics_world.get_debug_lines();
                 for (_, client) in self.clients.iter() {

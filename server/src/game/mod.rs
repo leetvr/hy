@@ -239,11 +239,12 @@ struct Player {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlayerState {
     position: glam::Vec3,
     velocity: glam::Vec3,
-    #[serde(rename = "animationState")]
     animation_state: String,
+    is_on_ground: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

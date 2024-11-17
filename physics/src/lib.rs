@@ -1,28 +1,23 @@
-use {
-    nalgebra::{point, Vector3},
-    rapier3d::{
-        dynamics::RigidBodyHandle,
-        geometry::{Group, InteractionGroups},
-        math::{Point, Vector},
-        na::vector,
-        parry::query::ShapeCastOptions,
-        pipeline::QueryFilter,
-        prelude::{
-            CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
-            DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
-            ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-            PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
-        },
-    },
-    std::{
-        collections::{HashMap, HashSet},
-        f32::EPSILON,
+use glam::Vec3Swizzles;
+use nalgebra::{point, vector, Vector3};
+use rapier3d::{
+    dynamics::RigidBodyHandle,
+    geometry::{Group, InteractionGroups},
+    math::{Point, Vector},
+    parry::query::ShapeCastOptions,
+    pipeline::QueryFilter,
+    prelude::{
+        CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
+        DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
+        ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
+        PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
     },
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 const TERRAIN_GROUP: Group = Group::GROUP_1;
 const PLAYER_GROUP: Group = Group::GROUP_2;
-const GRAVITY: f32 = -0.20;
 pub const TICK_RATE: u32 = 60;
 pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
@@ -147,10 +142,10 @@ impl PhysicsWorld {
             .user_data(player_id as _)
             .ccd_enabled(true)
             .build();
-        let half_height = player_height / 2.0;
         let radius = player_width / 2.0;
+        let half_height = player_height / 2.0;
         tracing::debug!("Creating player with half height of {half_height} and radius {radius}");
-        let collider = ColliderBuilder::cylinder(half_height, radius)
+        let collider = ColliderBuilder::capsule_y(half_height - radius, radius)
             .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
             .position(vector![0.0, half_height, 0.0].into())
             .build();
@@ -280,58 +275,41 @@ impl PhysicsWorld {
         );
     }
 
-    /// Checks if a player is standing on the ground
-    pub fn is_player_on_ground(&mut self, player_id: u64) -> bool {
-        // Extract the player's shape
-        let Some(player_body_handle) = self.player_handles.get(&player_id) else {
-            tracing::warn!("Couldn't find a player handle for {player_id}");
-            return false;
-        };
-        let player_body_handle = *player_body_handle;
-        let player_body = &self.bodies[player_body_handle];
-        let Some(player_collider_handle) = player_body.colliders().first() else {
-            tracing::warn!("Couldn't find a collider for {player_id}");
-            return false;
-        };
-
-        let player_collider = &self.colliders[*player_collider_handle];
-        let current_position = player_collider.position();
-        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
-
-        // Ground detection
-        let down_direction = -Vector3::y_axis();
-        let mut options = ShapeCastOptions::default();
-        options.max_time_of_impact = 0.1;
-        options.stop_at_penetration = true;
-
-        if let Some((collided, hit)) = self.query_pipeline.cast_shape(
-            &self.bodies,
-            &self.colliders,
-            &current_position,
-            &down_direction,
-            shape,
-            options,
-            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
-        ) {
-            let collided = &self.colliders[collided];
-            let collided_position = collided.position().translation;
-            tracing::trace!(
-                "Player is on ground: {current_position:?}, {collided_position:?}, toi: {}",
-                hit.time_of_impact
-            );
-
-            true
-        } else {
-            tracing::trace!("Player is not on the ground: {current_position:?}");
-            false
-        }
-    }
-
     pub fn check_movement_for_collisions(
         &mut self,
         player_id: u64,
-        movement: glam::Vec3,
-    ) -> Option<glam::Vec3> {
+        current_position: glam::Vec3,
+        desired_velocity: glam::Vec3,
+    ) -> CollisionResult {
+        let Some((_, player_collider_handle)) = self.get_player_handles(player_id) else {
+            return CollisionResult {
+                corrected_movement: desired_velocity,
+                is_on_ground: false,
+                would_have_collided: false,
+            };
+        };
+
+        let result = check_movement_for_collisions(
+            player_collider_handle,
+            glam_to_na(desired_velocity),
+            &self.query_pipeline,
+            &self.bodies,
+            &self.colliders,
+        );
+
+        self.debug_lines.push(net_types::DebugLine {
+            start: current_position,
+            end: current_position + result.corrected_movement,
+        });
+
+        if desired_velocity.xz().length() > 0. {
+            tracing::trace!("Current position: {current_position:?}, desired_velocity: {desired_velocity:?}, result: {result:?}")
+        }
+
+        result
+    }
+
+    fn get_player_handles(&mut self, player_id: u64) -> Option<(RigidBodyHandle, ColliderHandle)> {
         // Extract the player's shape
         let Some(player_body_handle) = self.player_handles.get(&player_id) else {
             tracing::warn!("Couldn't find a player handle for {player_id}");
@@ -345,64 +323,13 @@ impl PhysicsWorld {
             return None;
         };
 
-        let player_collider = &self.colliders[*player_collider_handle];
-        let current_position = player_collider.position();
-        let player_shape = player_collider.shape();
-
-        // Collision detection
-        let movement = glam_to_na(movement);
-        let max_distance = movement.norm();
-        let movement_normalized = movement.normalize();
-        let options = ShapeCastOptions::with_max_time_of_impact(max_distance);
-
-        let (_, hit) = self.query_pipeline.cast_shape(
-            &self.bodies,
-            &self.colliders,
-            &current_position,
-            &movement_normalized,
-            player_shape,
-            options,
-            QueryFilter::default()
-                .exclude_rigid_body(player_body_handle)
-                .groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
-        )?;
-
-        // Compute the sliding vector
-        let hit_normal = hit.normal2.into_inner();
-
-        // Herpedy-derp, mathematics
-        let sliding = movement - hit_normal * movement.dot(&hit_normal);
-
-        // Check for zero vector before normalization
-        let adjusted_movement_normalized = if sliding.norm() > EPSILON {
-            sliding.normalize()
-        } else {
-            rapier3d::na::Vector3::zeros()
-        };
-
-        // Move the character up to the collision point minus a small epsilon
-        let movement_distance = (hit.time_of_impact - 0.001).max(0.0);
-        let corrected_movement = na_to_glam(adjusted_movement_normalized * movement_distance);
-
-        Some(corrected_movement)
+        Some((player_body_handle.clone(), player_collider_handle.clone()))
     }
 
     pub fn get_debug_lines(&mut self) -> Vec<net_types::DebugLine> {
         let mut lines = Vec::new();
-        let colliders = self
-            .player_handles
-            .values()
-            .filter_map(|handle| {
-                let body = &self.bodies.get(*handle)?;
-                let handle = body.colliders().first()?;
-                Some(handle.clone())
-            })
-            .collect::<HashSet<_>>();
 
-        let mut backend = PhysicsRenderer {
-            lines: &mut lines,
-            colliders,
-        };
+        let mut backend = PhysicsRenderer { lines: &mut lines };
         self.debug.render(
             &mut backend,
             &self.bodies,
@@ -415,6 +342,109 @@ impl PhysicsWorld {
         lines.append(&mut self.debug_lines);
 
         lines
+    }
+}
+
+fn check_movement_for_collisions(
+    player_collider_handle: ColliderHandle,
+    desired_velocity: Vector3<f32>,
+    physics_pipeline: &QueryPipeline,
+    bodies: &RigidBodySet,
+    colliders: &ColliderSet,
+) -> CollisionResult {
+    let mut corrected_velocity = desired_velocity;
+    let mut remaining_time = TICK_DT;
+    let mut is_on_ground = false;
+    let mut would_have_collided = false;
+    let player_collider = &colliders[player_collider_handle];
+    let character_shape = player_collider.shape();
+    let mut current_position = player_collider.position().translation.vector;
+
+    const GROUND_THRESHOLD: f32 = 0.1; // Positive because ground normals are (0, 1, 0)
+    const CEILING_THRESHOLD: f32 = -0.7; // Negative because ground normals are (0, 1, 0)
+
+    let shape_cast_options = ShapeCastOptions {
+        max_time_of_impact: 1.0,
+        stop_at_penetration: false,
+        ..Default::default()
+    };
+
+    for _ in 0..5 {
+        let displacement = corrected_velocity * remaining_time;
+        let shape_pos = current_position.into();
+
+        if let Some((_handle, hit)) = physics_pipeline.cast_shape(
+            bodies,
+            colliders,
+            &shape_pos,
+            &displacement,
+            character_shape,
+            shape_cast_options,
+            QueryFilter::default().exclude_collider(player_collider_handle),
+        ) {
+            would_have_collided = true;
+            let toi = hit.time_of_impact;
+            let normal = -hit.normal2.into_inner(); // Use normal2
+
+            // Log the collision normal for debugging
+            tracing::trace!("Collision normal: {:?}, status: {:?}", normal, hit.status);
+
+            // Move up to the point of impact
+            current_position += displacement * toi;
+
+            // Sliding effect with separated adjustments
+            let projection_len = corrected_velocity.dot(&normal);
+            if projection_len < 0.0 {
+                let adjustment = normal * projection_len;
+
+                if normal.y >= GROUND_THRESHOLD {
+                    // Collision with the ground
+                    corrected_velocity.y = 0.;
+                } else if normal.y <= CEILING_THRESHOLD {
+                    // Collision with the ceiling
+                    corrected_velocity.y -= adjustment.y;
+                } else {
+                    // Collision with walls
+                    corrected_velocity.x -= adjustment.x;
+                    corrected_velocity.z -= adjustment.z;
+                }
+            }
+
+            remaining_time *= 1.0 - toi;
+        } else {
+            current_position += displacement;
+            break;
+        }
+    }
+
+    // Double check that we're definitely not on the ground
+    let ground_check_distance = 0.1;
+    let down_direction = Vector3::new(0.0, -1.0, 0.0);
+    let shape_cast_options = ShapeCastOptions {
+        max_time_of_impact: 1.0,
+        ..Default::default()
+    };
+
+    // No seriously, are we on the ground?
+    if let Some((_handle, _hit)) = physics_pipeline.cast_shape(
+        bodies,
+        colliders,
+        &current_position.into(),
+        &(down_direction * ground_check_distance).into(),
+        character_shape,
+        shape_cast_options,
+        QueryFilter::default().exclude_collider(player_collider_handle),
+    ) {
+        // OH BABY WE'RE ON THE GROUND
+        is_on_ground = true;
+        corrected_velocity.y = 0.;
+        tracing::trace!("Aha!! We are on the ground");
+    }
+
+    CollisionResult {
+        corrected_movement: na_to_glam(corrected_velocity),
+        would_have_collided,
+        is_on_ground,
     }
 }
 
@@ -468,30 +498,27 @@ fn glam_to_na(input: glam::Vec3) -> nalgebra::Vector3<f32> {
 }
 struct PhysicsRenderer<'a> {
     lines: &'a mut Vec<net_types::DebugLine>,
-    /// Colliders to include
-    colliders: HashSet<ColliderHandle>,
 }
 
 impl<'a> DebugRenderBackend for PhysicsRenderer<'a> {
     fn draw_line(
         &mut self,
-        object: DebugRenderObject,
+        _object: DebugRenderObject,
         a: Point<Real>,
         b: Point<Real>,
         _color: [f32; 4],
     ) {
-        match object {
-            DebugRenderObject::Collider(handle, _) => {
-                if !self.colliders.contains(&handle) {
-                    return;
-                }
-            }
-            _ => return,
-        };
-
         self.lines.push(net_types::DebugLine::new(
             na_point_to_glam(a),
             na_point_to_glam(b),
         ));
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionResult {
+    corrected_movement: glam::Vec3,
+    would_have_collided: bool,
+    is_on_ground: bool,
 }

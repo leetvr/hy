@@ -5,7 +5,7 @@ use {
     entities::{EntityData, EntityID, EntityState, PlayerId},
     glam::{EulerRot, Vec3},
     nanorand::Rng,
-    physics::PhysicsWorld,
+    physics::{CollisionResult, PhysicsWorld},
     std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -22,27 +22,19 @@ fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
     world.entities.clone()
 }
 
-#[op2(fast)]
-// NOTE(kmrw: serde is apparently slow but who cares)
-fn is_player_on_ground(state: &mut OpState, #[bigint] player_id: u64) -> bool {
-    let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
-    let mut physics_world = physics_world.lock().expect("Deadlock!");
-
-    physics_world.is_player_on_ground(player_id)
-}
-
 #[op2]
 #[serde]
 // NOTE(kmrw: serde is apparently slow but who cares)
 fn check_movement_for_collisions(
     state: &mut OpState,
     #[bigint] player_id: u64,
+    #[serde] current_position: glam::Vec3,
     #[serde] movement: glam::Vec3,
-) -> Option<glam::Vec3> {
+) -> CollisionResult {
     let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
     let mut physics_world = physics_world.lock().expect("Deadlock!");
 
-    physics_world.check_movement_for_collisions(player_id, movement)
+    physics_world.check_movement_for_collisions(player_id, current_position, movement)
 }
 
 #[op2]
@@ -128,7 +120,6 @@ extension!(
     hy,
     ops = [
         get_entities,
-        is_player_on_ground,
         check_movement_for_collisions,
         spawn_entity,
         despawn_entity,

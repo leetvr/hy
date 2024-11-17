@@ -11,7 +11,7 @@ rm -f assets/index.html
 # We want to know if any of these steps fail
 
 # Build the client
-(cd client && wasm-pack build --dev --target web)
+(cd client && wasm-pack build --release --target web)
 (cd client/ui && npm install && npx vite build --minify false)
 
 # Build the scripts

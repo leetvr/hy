@@ -9,3 +9,4 @@ nalgebra.workspace = true
 glam.workspace = true
 tracing.workspace = true
 net-types.workspace = true
+serde.workspace = true

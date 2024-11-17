@@ -1799,6 +1799,7 @@ dependencies = [
  "nalgebra",
  "net-types",
  "rapier3d",
+ "serde",
  "tracing",
 ]
 
