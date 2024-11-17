@@ -29,6 +29,8 @@ use super::{
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
+const DEBUG_LINES: bool = true;
+
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
     _game_state: GameState,
@@ -46,7 +48,7 @@ impl GameInstance {
     pub fn new(world: Arc<Mutex<World>>) -> Self {
         // Roughly in the center of the map
         let player_spawn_point =
-            glam::Vec3::new(WORLD_SIZE as f32 / 2., 16., WORLD_SIZE as f32 / 2.);
+            glam::Vec3::new(WORLD_SIZE as f32 / 2., 4., WORLD_SIZE as f32 / 2.);
 
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
@@ -192,7 +194,18 @@ impl GameInstance {
 
         // Step physics
         {
-            self.physics_world.lock().expect("Deadlock!").step();
+            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+            physics_world.step();
+
+            if DEBUG_LINES {
+                let debug_lines = physics_world.get_debug_lines();
+                for (_, client) in self.clients.iter() {
+                    let _ = client
+                        .outgoing_tx
+                        .send(net_types::ServerPacket::SetDebugLines(debug_lines.clone()))
+                        .await;
+                }
+            }
         }
 
         // Run world commands queued from the scripts

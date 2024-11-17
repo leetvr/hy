@@ -18,17 +18,14 @@ globalThis.hy = {
   getEntities: () => {
     return core.ops.get_entities();
   },
-  isPlayerOnGround: (playerID) => {
-    return core.ops.is_player_on_ground(playerID);
-  },
   spawnEntity: (entityTypeId, position, rotation, velocity) => {
     return core.ops.spawn_entity(entityTypeId, position, rotation, velocity);
   },
   despawnEntity: (entityId) => {
     return core.ops.despawn_entity(entityId);
   },
-  checkMovementForCollisions: (playerID, movement) => {
-    return core.ops.check_movement_for_collisions(playerID, movement);
+  checkMovementForCollisions: (playerID, currentPosition, movement) => {
+    return core.ops.check_movement_for_collisions(playerID, currentPosition, movement);
   },
   anchorEntity: (entityId, anchorId, anchorName) => {
     return core.ops.anchor_entity(entityId, anchorId, anchorName);
@@ -38,5 +35,5 @@ globalThis.hy = {
   },
   interactEntity: (entityId, playerId, position, facingAngle) => {
     return core.ops.interact_entity(entityId, playerId, position, facingAngle);
-  }
+  },
 };

@@ -29,6 +29,7 @@ use glam::{UVec2, UVec3};
 use nanorand::Rng;
 use net_types::ClientPacket;
 use net_types::ClientShouldSwitchMode;
+use render::DebugLine;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
 use wasm_bindgen::prelude::*;
@@ -46,6 +47,8 @@ mod packet_handlers;
 mod render;
 mod socket;
 mod transform;
+
+const START_IN_EDIT_MODE: bool = false;
 
 struct LoadedGLTF {
     gltf: gltf::GLTFModel,
@@ -209,7 +212,7 @@ impl Engine {
                             block_registry,
                             entities,
                             entity_type_registry,
-                            ..
+                            client_player,
                         }) => {
                             tracing::info!("Init received:");
                             tracing::info!("Loaded level of size {:?}", blocks.size());
@@ -229,20 +232,36 @@ impl Engine {
                                     .call2(&JsValue::NULL, &block_registry, &entity_type_registry)
                                     .expect("Unable to call on_init!");
                             }
+                            let camera = FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0);
 
-                            self.state = GameState::Editing {
-                                blocks,
-                                block_registry,
-                                entities,
-                                entity_type_registry,
-                                camera: FlyCamera::new([0.0, 10.0, 0.0].into(), -135.0, -45.0),
-                                target_raycast: None,
-                                selected_block_id: None,
-                                preview_entity: None,
-                            };
+                            if START_IN_EDIT_MODE {
+                                self.state = GameState::Editing {
+                                    blocks,
+                                    block_registry,
+                                    entities,
+                                    entity_type_registry,
+                                    camera,
+                                    target_raycast: None,
+                                    selected_block_id: None,
+                                    preview_entity: None,
+                                };
 
-                            // When we've connected, tell the server we want to switch to edit mode.
-                            self.send_packet(net_types::ClientPacket::Edit);
+                                // When we've connected, tell the server we want to switch to edit mode.
+                                self.send_packet(net_types::ClientPacket::Edit);
+                            } else {
+                                self.state = GameState::Playing {
+                                    blocks,
+                                    block_registry,
+                                    entities,
+                                    _entity_type_registry: entity_type_registry,
+                                    camera,
+                                    client_player,
+                                    players: Default::default(),
+                                };
+
+                                // When we've connected, tell the server we want to switch to play mode
+                                self.send_packet(net_types::ClientPacket::Start);
+                            }
                         }
                         ServerPacket::ClientShouldSwitchMode(new_mode) => {
                             tracing::debug!("LOADING: Server wants us to switch modes");
@@ -294,6 +313,13 @@ impl Engine {
                             tracing::debug!("PLAYING: Server wants us to switch modes");
                             mode_switch = Some(new_mode)
                         }
+                        ServerPacket::SetDebugLines(server_debug_lines) => {
+                            // ally-oop
+                            self.debug_lines = server_debug_lines
+                                .into_iter()
+                                .map(DebugLine::from)
+                                .collect();
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
                         }
@@ -302,6 +328,13 @@ impl Engine {
                         ServerPacket::ClientShouldSwitchMode(new_mode) => {
                             tracing::debug!("EDITING: Server wants us to switch modes");
                             mode_switch = Some(new_mode)
+                        }
+                        ServerPacket::SetDebugLines(server_debug_lines) => {
+                            // ally-oop
+                            self.debug_lines = server_debug_lines
+                                .into_iter()
+                                .map(DebugLine::from)
+                                .collect();
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -468,11 +501,6 @@ impl Engine {
         self.controls.mouse_movement = (0, 0);
         self.controls.mouse_left = false;
         self.controls.mouse_right = false;
-
-        self.debug_lines.push(render::DebugLine::new(
-            Vec3::new(0.0, 3.0, 0.0),
-            Vec3::new(0.0, 3.0, 10.0),
-        ));
 
         if let GameState::Playing { players, .. } = &mut self.state {
             for player in players.values_mut() {

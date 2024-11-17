@@ -33,6 +33,7 @@ pub struct GameServer {
     incoming_connections: Arc<SegQueue<(ClientMessageReceiver, ServerMessageSender)>>,
     storage_dir: PathBuf,
     js_context: JSContext,
+    timer: util::FrameTimer,
 }
 
 impl GameServer {
@@ -71,10 +72,14 @@ impl GameServer {
             state: initial_state,
             storage_dir,
             js_context,
+            timer: Default::default(),
         }
     }
 
     pub async fn tick(&mut self) {
+        self.timer.stop();
+        self.timer.start();
+
         // Handle new connections
         while let Some(channels) = self.incoming_connections.pop() {
             match &mut self.state {
@@ -234,11 +239,12 @@ struct Player {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlayerState {
     position: glam::Vec3,
     velocity: glam::Vec3,
-    #[serde(rename = "animationState")]
     animation_state: String,
+    is_on_ground: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -253,8 +259,11 @@ pub struct PlayerCollision {
 
 impl Player {
     pub fn new(id: PlayerId, physics_world: &mut PhysicsWorld, position: glam::Vec3) -> Self {
+        // obtained by creating rulers in Blender and comparing them against the Player model
+        let player_height = 3.04 / 2.0; // because we scale the model down in the client
+        let player_width = 1.6 / 2.0;
         let physics_body =
-            physics_world.add_player_body(id.inner(), position, glam::Vec3::new(0.5, 2.0, 0.5));
+            physics_world.add_player_body(id.inner(), position, player_width, player_height);
         Self {
             state: PlayerState {
                 position,

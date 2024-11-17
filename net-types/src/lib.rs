@@ -91,6 +91,18 @@ pub struct UpdateEntity {
     pub anchor: Option<Anchor>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DebugLine {
+    pub start: glam::Vec3,
+    pub end: glam::Vec3,
+}
+
+impl DebugLine {
+    pub fn new(start: glam::Vec3, end: glam::Vec3) -> Self {
+        Self { start, end }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
@@ -102,4 +114,5 @@ pub enum ServerPacket {
     AddEntity(AddEntity),
     UpdateEntity(UpdateEntity),
     RemoveEntity(RemoveEntity),
+    SetDebugLines(Vec<DebugLine>),
 }

@@ -25,5 +25,6 @@ net-types.workspace = true
 blocks.workspace = true
 physics.workspace = true
 entities.workspace = true
+util.workspace = true
 
 [dependencies]

@@ -2,7 +2,7 @@
 set -xe
 
 # Build the scripts
-(cd kibble_ctf && npm install && npx tsc)
+(cd kibble_ctf && npx tsc)
 
 # Start the server
-RUST_LOG=debug RUST_BACKTRACE=1 cargo run --bin server kibble_ctf
+RUST_BACKTRACE=1 cargo run --release --bin server kibble_ctf

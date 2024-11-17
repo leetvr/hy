@@ -1,23 +1,25 @@
-use {
-    nalgebra::{point, Vector3},
-    rapier3d::{
-        dynamics::RigidBodyHandle,
-        geometry::{Group, InteractionGroups},
-        math::Vector,
-        na::vector,
-        parry::query::ShapeCastOptions,
-        pipeline::QueryFilter,
-        prelude::{
-            CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DefaultBroadPhase,
-            ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-            PhysicsPipeline, QueryPipeline, RigidBodyBuilder, RigidBodySet,
-        },
+use glam::Vec3Swizzles;
+use nalgebra::{point, vector, Vector3};
+use rapier3d::{
+    dynamics::RigidBodyHandle,
+    geometry::{Group, InteractionGroups},
+    math::{Point, Vector},
+    parry::query::ShapeCastOptions,
+    pipeline::QueryFilter,
+    prelude::{
+        CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
+        DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
+        ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
+        PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
     },
-    std::collections::HashMap,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 const TERRAIN_GROUP: Group = Group::GROUP_1;
 const PLAYER_GROUP: Group = Group::GROUP_2;
+pub const TICK_RATE: u32 = 60;
+pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
 pub struct PhysicsWorld {
     // Parameters
@@ -40,6 +42,8 @@ pub struct PhysicsWorld {
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
     pub player_handles: HashMap<u64, RigidBodyHandle>,
+    debug: DebugRenderPipeline,
+    debug_lines: Vec<net_types::DebugLine>,
 }
 
 impl PhysicsWorld {
@@ -80,10 +84,13 @@ impl PhysicsWorld {
             physics_hooks,
             event_handler,
             player_handles: Default::default(),
+            debug: DebugRenderPipeline::new(Default::default(), DebugRenderMode::COLLIDER_SHAPES),
+            debug_lines: Default::default(),
         }
     }
 
     pub fn step(&mut self) {
+        self.debug_lines.clear();
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -125,18 +132,22 @@ impl PhysicsWorld {
         &mut self,
         player_id: u64, // evil
         position: glam::Vec3,
-        size: glam::Vec3,
+        player_width: f32,
+        player_height: f32,
     ) -> PhysicsBody {
         let rigid_body = RigidBodyBuilder::kinematic_position_based()
-            .translation(vector![position.x, position.y, position.z])
+            .translation(glam_to_na(position))
             .enabled_rotations(false, false, false)
             .enabled_translations(false, false, false)
             .user_data(player_id as _)
             .ccd_enabled(true)
             .build();
-        let collider = ColliderBuilder::cuboid(size.x, size.y / 2.0, size.z)
+        let radius = player_width / 2.0;
+        let half_height = player_height / 2.0;
+        tracing::debug!("Creating player with half height of {half_height} and radius {radius}");
+        let collider = ColliderBuilder::capsule_y(half_height - radius, radius)
             .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
-            .position(vector![0.0, -(size.y / 2.0), 0.0].into())
+            .position(vector![0.0, half_height, 0.0].into())
             .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
@@ -228,7 +239,7 @@ impl PhysicsWorld {
         let indices: Vec<_> = indices.collect();
         let collider = ColliderBuilder::trimesh(vertices, indices)
             .collision_groups(InteractionGroups::new(TERRAIN_GROUP, Group::all()))
-            .position(vector![0.0, -1.0, 0.0].into())
+            .position(vector![0.0, 0.0, 0.0].into())
             .build();
         let handle = self.colliders.insert(collider);
         PhysicsCollider {
@@ -264,106 +275,184 @@ impl PhysicsWorld {
         );
     }
 
-    /// Checks if a player is standing on the ground
-    pub fn is_player_on_ground(&self, player_id: u64) -> bool {
+    pub fn check_movement_for_collisions(
+        &mut self,
+        player_id: u64,
+        current_position: glam::Vec3,
+        desired_velocity: glam::Vec3,
+    ) -> CollisionResult {
+        let Some((_, player_collider_handle)) = self.get_player_handles(player_id) else {
+            return CollisionResult {
+                corrected_movement: desired_velocity,
+                is_on_ground: false,
+                would_have_collided: false,
+            };
+        };
+
+        let result = check_movement_for_collisions(
+            player_collider_handle,
+            glam_to_na(desired_velocity),
+            &self.query_pipeline,
+            &self.bodies,
+            &self.colliders,
+        );
+
+        self.debug_lines.push(net_types::DebugLine {
+            start: current_position,
+            end: current_position + result.corrected_movement,
+        });
+
+        if desired_velocity.xz().length() > 0. {
+            tracing::trace!("Current position: {current_position:?}, desired_velocity: {desired_velocity:?}, result: {result:?}")
+        }
+
+        result
+    }
+
+    fn get_player_handles(&mut self, player_id: u64) -> Option<(RigidBodyHandle, ColliderHandle)> {
         // Extract the player's shape
         let Some(player_body_handle) = self.player_handles.get(&player_id) else {
             tracing::warn!("Couldn't find a player handle for {player_id}");
-            return false;
+            return None;
         };
+
         let player_body_handle = *player_body_handle;
         let player_body = &self.bodies[player_body_handle];
-        let current_position = player_body.position();
         let Some(player_collider_handle) = player_body.colliders().first() else {
             tracing::warn!("Couldn't find a collider for {player_id}");
-            return false;
+            return None;
         };
 
-        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
+        Some((player_body_handle.clone(), player_collider_handle.clone()))
+    }
 
-        // Ground detection
-        let down_direction = -Vector3::y_axis();
-        let ground_check_distance = 0.1;
-        let mut options = ShapeCastOptions::default();
-        options.max_time_of_impact = ground_check_distance;
+    pub fn get_debug_lines(&mut self) -> Vec<net_types::DebugLine> {
+        let mut lines = Vec::new();
 
-        if let Some((collided, _)) = self.query_pipeline.cast_shape(
+        let mut backend = PhysicsRenderer { lines: &mut lines };
+        self.debug.render(
+            &mut backend,
             &self.bodies,
             &self.colliders,
-            &current_position,
-            &down_direction,
-            shape,
-            options,
-            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
+            &self.impulse_joints,
+            &self.multibody_joints,
+            &self.narrow_phase,
+        );
+
+        lines.append(&mut self.debug_lines);
+
+        lines
+    }
+}
+
+fn check_movement_for_collisions(
+    player_collider_handle: ColliderHandle,
+    desired_velocity: Vector3<f32>,
+    physics_pipeline: &QueryPipeline,
+    bodies: &RigidBodySet,
+    colliders: &ColliderSet,
+) -> CollisionResult {
+    let mut corrected_velocity = desired_velocity;
+    let mut remaining_time = TICK_DT;
+    let mut is_on_ground = false;
+    let mut would_have_collided = false;
+    let player_collider = &colliders[player_collider_handle];
+    let character_shape = player_collider.shape();
+    let mut current_position = player_collider.position().translation.vector;
+
+    const GROUND_THRESHOLD: f32 = 0.1; // Positive because ground normals are (0, 1, 0)
+    const CEILING_THRESHOLD: f32 = -0.7; // Negative because ground normals are (0, 1, 0)
+
+    let shape_cast_options = ShapeCastOptions {
+        max_time_of_impact: 1.0,
+        stop_at_penetration: false,
+        ..Default::default()
+    };
+
+    for _ in 0..5 {
+        let displacement = corrected_velocity * remaining_time;
+        let shape_pos = current_position.into();
+
+        if let Some((_handle, hit)) = physics_pipeline.cast_shape(
+            bodies,
+            colliders,
+            &shape_pos,
+            &displacement,
+            character_shape,
+            shape_cast_options,
+            QueryFilter::default().exclude_collider(player_collider_handle),
         ) {
-            let collided = &self.colliders[collided];
-            let collided_position = collided.position();
-            tracing::trace!("Player is on ground: {current_position:?}, {collided_position:?}");
-            true
+            would_have_collided = true;
+            let toi = hit.time_of_impact;
+            let normal = -hit.normal2.into_inner(); // Use normal2
+
+            // Log the collision normal for debugging
+            tracing::trace!("Collision normal: {:?}, status: {:?}", normal, hit.status);
+
+            // Move up to the point of impact
+            current_position += displacement * toi;
+
+            // Sliding effect with separated adjustments
+            let projection_len = corrected_velocity.dot(&normal);
+            if projection_len < 0.0 {
+                let adjustment = normal * projection_len;
+
+                if normal.y >= GROUND_THRESHOLD {
+                    // Collision with the ground
+                    corrected_velocity.y = 0.;
+                } else if normal.y <= CEILING_THRESHOLD {
+                    // Collision with the ceiling
+                    corrected_velocity.y -= adjustment.y;
+                } else {
+                    // Collision with walls
+                    corrected_velocity.x -= adjustment.x;
+                    corrected_velocity.z -= adjustment.z;
+                }
+            }
+
+            remaining_time *= 1.0 - toi;
         } else {
-            tracing::trace!("Player is not on the ground: {current_position:?}");
-            false
+            current_position += displacement;
+            break;
         }
     }
 
-    pub fn check_movement_for_collisions(
-        &self,
-        player_id: u64,
-        movement: glam::Vec3,
-    ) -> Option<glam::Vec3> {
-        // Extract the player's shape
-        let Some(player_body_handle) = self.player_handles.get(&player_id) else {
-            tracing::warn!("Couldn't find a player handle for {player_id}");
-            return None;
-        };
-        let player_body_handle = *player_body_handle;
-        let player_body = &self.bodies[player_body_handle];
-        let current_position = player_body.position();
-        let Some(player_collider_handle) = player_body.colliders().first() else {
-            tracing::warn!("Couldn't find a collider for {player_id}");
-            return None;
-        };
+    // Double check that we're definitely not on the ground
+    let ground_check_distance = 0.1;
+    let down_direction = Vector3::new(0.0, -1.0, 0.0);
+    let shape_cast_options = ShapeCastOptions {
+        max_time_of_impact: 1.0,
+        ..Default::default()
+    };
 
-        let shape = self.colliders.get(*player_collider_handle).unwrap().shape();
+    // No seriously, are we on the ground?
+    if let Some((_handle, _hit)) = physics_pipeline.cast_shape(
+        bodies,
+        colliders,
+        &current_position.into(),
+        &(down_direction * ground_check_distance).into(),
+        character_shape,
+        shape_cast_options,
+        QueryFilter::default().exclude_collider(player_collider_handle),
+    ) {
+        // OH BABY WE'RE ON THE GROUND
+        is_on_ground = true;
+        corrected_velocity.y = 0.;
+        tracing::trace!("Aha!! We are on the ground");
+    }
 
-        // Collision detection
-        let movement = glam_to_na(movement);
-        let max_distance = movement.norm();
-        let movement_normalized = if max_distance > 0.0 {
-            movement / max_distance
-        } else {
-            Vector3::zeros()
-        };
-
-        let options = ShapeCastOptions::with_max_time_of_impact(max_distance);
-
-        let Some((_, hit)) = self.query_pipeline.cast_shape(
-            &self.bodies,
-            &self.colliders,
-            &current_position,
-            &movement_normalized,
-            shape,
-            options,
-            QueryFilter::default().groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP)),
-        ) else {
-            return None;
-        };
-
-        // Collision detected
-        let adjusted_distance = hit.time_of_impact;
-        let safe_movement = movement_normalized * adjusted_distance;
-
-        // Sliding
-        let slide_plane_normal = -*hit.normal2;
-        let remaining_movement = movement - safe_movement;
-        let dot_product = remaining_movement.dot(&slide_plane_normal);
-        let projection_onto_normal = slide_plane_normal * dot_product;
-        let slide_movement = remaining_movement - projection_onto_normal;
-        Some(na_to_glam(slide_movement))
+    CollisionResult {
+        corrected_movement: na_to_glam(corrected_velocity),
+        would_have_collided,
+        is_on_ground,
     }
 }
 
 fn na_to_glam(input: nalgebra::Vector3<f32>) -> glam::Vec3 {
+    glam::vec3(input.x, input.y, input.z)
+}
+
+fn na_point_to_glam(input: Point<f32>) -> glam::Vec3 {
     glam::vec3(input.x, input.y, input.z)
 }
 
@@ -406,4 +495,30 @@ impl Drop for PhysicsCollider {
 
 fn glam_to_na(input: glam::Vec3) -> nalgebra::Vector3<f32> {
     vector![input.x, input.y, input.z]
+}
+struct PhysicsRenderer<'a> {
+    lines: &'a mut Vec<net_types::DebugLine>,
+}
+
+impl<'a> DebugRenderBackend for PhysicsRenderer<'a> {
+    fn draw_line(
+        &mut self,
+        _object: DebugRenderObject,
+        a: Point<Real>,
+        b: Point<Real>,
+        _color: [f32; 4],
+    ) {
+        self.lines.push(net_types::DebugLine::new(
+            na_point_to_glam(a),
+            na_point_to_glam(b),
+        ));
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionResult {
+    corrected_movement: glam::Vec3,
+    would_have_collided: bool,
+    is_on_ground: bool,
 }

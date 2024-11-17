@@ -14,13 +14,14 @@ export interface PlayerState {
   position: Vec3;
   velocity: Vec3;
   animationState: string;
+  isOnGround: boolean;
 }
 
 export interface PlayerControls {
-  move_direction: Vec2;
-  jump: boolean;
-  fire: boolean;
-  camera_yaw: number; // radians
+  readonly move_direction: Vec2;
+  readonly jump: boolean;
+  readonly fire: boolean;
+  readonly camera_yaw: number; // radians
 }
 
 export interface EntityData {
@@ -70,13 +71,22 @@ export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
   getEntities: () => Map<String, EntityData[]>;
-  isPlayerOnGround: (id: number) => boolean;
   spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => String;
   despawnEntity: (entityId: String) => void;
-  checkMovementForCollisions: (playerID: number, movement: Vec3) => Vec3 | null;
+  checkMovementForCollisions: (
+    playerID: number,
+    currentPosition: Vec3,
+    movement: Vec3,
+  ) => CollisionResult;
   anchorEntity: (entityId: String, anchorId: number, anchorName: String) => void;
   detachEntity: (entityId: String, position: Vec3) => void;
   interactEntity: (entityId: String, playerId: number, position: Vec3, facingAngle: number) => void;
+}
+
+interface CollisionResult {
+  readonly correctedMovement: Vec3;
+  readonly wouldHaveCollided: boolean;
+  readonly isOnGround: boolean;
 }
 
 declare global {

@@ -16,18 +16,32 @@ pub struct DebugLine {
 }
 
 impl DebugLine {
+    #[allow(unused)]
     pub fn new(start: glam::Vec3, end: glam::Vec3) -> Self {
         // Default to a yellow-ish orange color.
         let color = glam::Vec4::new(1.0, 0.8, 0.2, 1.0);
         Self::new_with_color(start, end, color)
     }
 
+    #[allow(unused)]
     pub fn new_with_color(start: glam::Vec3, end: glam::Vec3, color: glam::Vec4) -> Self {
         Self {
             start: start.into(),
             start_color: color.into(),
             end: end.into(),
             end_color: color.into(),
+        }
+    }
+}
+
+impl From<net_types::DebugLine> for DebugLine {
+    fn from(value: net_types::DebugLine) -> Self {
+        let color = [1.0, 0.8, 0.2, 1.0];
+        Self {
+            start: value.start.to_array(),
+            start_color: color,
+            end: value.end.to_array(),
+            end_color: color,
         }
     }
 }
