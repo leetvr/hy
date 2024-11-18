@@ -2,6 +2,7 @@ use {
     crate::game::{network::KnownEntityState, world::spawn_entity},
     anyhow::Result,
     entities::{Anchor, PlayerId},
+    serde_json::Map,
     std::{
         mem,
         sync::{Arc, Mutex},
@@ -34,6 +35,8 @@ const DEBUG_LINES: bool = false;
 
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
+    // world script state
+    pub custom_world_state: serde_json::Value,
     _game_state: GameState,
     next_client_id: ClientId,
     pub clients: HashMap<ClientId, Client>,
@@ -63,6 +66,7 @@ impl GameInstance {
 
         Self {
             world,
+            custom_world_state: serde_json::Value::Object(Map::new()),
             player_spawn_point,
             physics_world,
             colliders,
@@ -72,6 +76,12 @@ impl GameInstance {
             next_player_id: 0,
             players: Default::default(),
         }
+    }
+
+    pub fn init(&mut self, js_context: &mut JSContext) -> anyhow::Result<()> {
+        js_context.run_world_init(&mut self.custom_world_state)?;
+
+        Ok(())
     }
 
     pub async fn from_transition(
@@ -113,13 +123,19 @@ impl GameInstance {
             }
         }
 
+        // Init the world after entities are spawned but before players are added
+        game_instance
+            .init(js_context)
+            .expect("Error during world init");
+
         // Create a player for the editor client and also spawn that into the new physics world
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
         let player = match spawn_player(
+            js_context,
+            &mut game_instance.custom_world_state,
             new_player_id,
             game_instance.player_spawn_point,
-            js_context,
             &game_instance.physics_world,
         ) {
             Ok(p) => p,
@@ -160,6 +176,11 @@ impl GameInstance {
     }
 
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
+        // World script update
+        if let Err(err) = js_context.run_world_update(&mut self.custom_world_state) {
+            tracing::error!("Error running scripted world update: {err:#}");
+        }
+
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
 
@@ -264,9 +285,10 @@ impl GameInstance {
         self.next_player_id += 1;
         {
             let player = match spawn_player(
+                js_context,
+                &mut self.custom_world_state,
                 player_id,
                 self.player_spawn_point,
-                js_context,
                 &self.physics_world,
             ) {
                 Ok(p) => p,
@@ -574,16 +596,25 @@ async fn sync_entities_to_client(
 }
 
 pub fn spawn_player(
+    js_context: &mut JSContext,
+    custom_world_state: &mut serde_json::Value,
     id: PlayerId,
     position: glam::Vec3,
-    js_context: &mut JSContext,
     physics_world: &Arc<Mutex<PhysicsWorld>>,
 ) -> Result<Player> {
     let mut physics_world = physics_world.lock().expect("Deadlock!");
     let mut player = Player::new(id, &mut physics_world, position);
-    // Call the entity's onSpawn function, if it has one
-    let spawn_state = js_context.get_player_spawn_state(id, &player.state)?;
-    player.state = spawn_state;
+
+    // First let the world mutate the spawned player
+    player.state =
+        js_context.run_world_spawn_player_script(custom_world_state, id, &player.state)?;
+
+    // Note(ll): Consider that this lets the world script push any data from itself to the player
+    // script. We should think about whether we want to allow this.
+
+    // Then let the player script mutate itself
+    player.state = js_context.get_player_spawn_state(id, &player.state)?;
+
     Ok(player)
 }
 

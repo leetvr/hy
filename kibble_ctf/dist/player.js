@@ -3,9 +3,6 @@ const MOVE_SPEED = 5.0; // Movement speed (units per second)
 const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 export const onSpawn = (playerID, currentState) => {
-    // Give this man a gun
-    let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
-    hy.anchorEntity(gun, playerID, "hand_right_anchor");
     return currentState;
 };
 export const update = (playerID, currentState, controls) => {
@@ -43,9 +40,26 @@ export const update = (playerID, currentState, controls) => {
                     hy.despawnEntity(collision.targetId);
                 }
                 if (entityData.entity_type == BLUE_FLAG_TYPE || entityData.entity_type == RED_FLAG_TYPE) {
-                    // Capture the flag
-                    if (!attachedEntities["hand_left_anchor"]) {
-                        hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+                    // Don't do anything with a flag that is already carried
+                    if (entityData.state.customState.carried) {
+                        return;
+                    }
+                    let flag_team;
+                    if (entityData.entity_type == BLUE_FLAG_TYPE) {
+                        flag_team = "blue";
+                    }
+                    else {
+                        flag_team = "red";
+                    }
+                    if (customState.team == flag_team) {
+                        // Interacting with a flag returns it to its spawn
+                        hy.interactEntity(collision.targetId, playerID, position, controls.camera_yaw);
+                    }
+                    else {
+                        // Pick up the flag if we aren't already holding something in the left hand
+                        if (!attachedEntities["hand_left_anchor"]) {
+                            hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+                        }
                     }
                 }
             }

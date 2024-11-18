@@ -34,6 +34,7 @@ fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
 pub struct JSContext {
     runtime: deno_core::JsRuntime,
     // Safe to hold onto as long as the runtime is alive (probably)
+    world_module_namespace: v8::Global<v8::Object>,
     player_module_namespace: v8::Global<v8::Object>,
     entity_module_namespaces: HashMap<String, v8::Global<v8::Object>>, // indexed by path
     entity_module_paths: Vec<String>,                                  // indexed by entity type ID
@@ -60,9 +61,13 @@ impl JSContext {
         });
 
         let script_root: PathBuf = script_root.into();
-        let player_script = script_root.join("player.js");
+
+        // Load the world module
+        let world_module_namespace =
+            get_module_namespace(script_root.join("world.js"), &mut runtime).await?;
 
         // Load the player module
+        let player_script = script_root.join("player.js");
         let player_module_namespace = get_module_namespace(player_script, &mut runtime).await?;
 
         let mut entity_module_namespaces = HashMap::new();
@@ -88,6 +93,7 @@ impl JSContext {
 
         Ok(Self {
             runtime,
+            world_module_namespace,
             player_module_namespace,
             entity_module_namespaces,
             entity_module_paths,
@@ -144,7 +150,7 @@ impl JSContext {
         };
 
         if !update_fn.is_function() {
-            anyhow::bail!("ERROR: Module has a member named update, but it's not a function!");
+            anyhow::bail!("ERROR: Module has a member named onSpawn, but it's not a function!");
         }
 
         let player_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
@@ -273,6 +279,88 @@ impl JSContext {
         entity_data.name = name;
         entity_data.model_path = model_path;
         entity_data.state = state;
+    }
+
+    pub fn run_world_init(
+        &mut self,
+        custom_world_state: &mut serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.run_world_state_function(custom_world_state, "init")
+    }
+
+    pub fn run_world_update(
+        &mut self,
+        custom_world_state: &mut serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.run_world_state_function(custom_world_state, "update")
+    }
+
+    pub(crate) fn run_world_spawn_player_script(
+        &mut self,
+        custom_world_state: &mut serde_json::Value,
+        player_id: PlayerId,
+        current_state: &PlayerState,
+    ) -> anyhow::Result<PlayerState> {
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = self.world_module_namespace.open(scope);
+
+        let function_name = v8::String::new(scope, "onAddPlayer").unwrap();
+        let Some(update_fn) = module_namespace.get(scope, function_name.into()) else {
+            anyhow::bail!("ERROR: Module has no function named onAddPlayer!");
+        };
+
+        if !update_fn.is_function() {
+            anyhow::bail!("ERROR: Module has a member named onAddPlayer, but it's not a function!");
+        }
+
+        let player_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
+
+        let undefined = deno_core::v8::undefined(scope).into();
+        let world_state = serde_v8::to_v8(scope, &*custom_world_state).unwrap();
+        let player_id = serde_v8::to_v8(scope, player_id).unwrap();
+        let current_state = serde_v8::to_v8(scope, current_state).unwrap();
+        let args = [world_state.into(), player_id.into(), current_state.into()];
+
+        let result = player_update.call(scope, undefined, &args).unwrap();
+        let (next_world_state, next_player_state): (serde_json::Value, PlayerState) =
+            serde_v8::from_v8(scope, result)?;
+
+        *custom_world_state = next_world_state;
+
+        Ok(next_player_state)
+    }
+
+    fn run_world_state_function(
+        &mut self,
+        custom_world_state: &mut serde_json::Value,
+        function_name: &str,
+    ) -> anyhow::Result<()> {
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = self.world_module_namespace.open(scope);
+
+        let fn_name = v8::String::new(scope, function_name).unwrap();
+        let Some(init_fn) = module_namespace.get(scope, fn_name.into()) else {
+            anyhow::bail!("ERROR: Module has no function named {function_name}!");
+        };
+
+        if !init_fn.is_function() {
+            anyhow::bail!(
+                "ERROR: Module has a member named {function_name}, but it's not a function!"
+            );
+        }
+
+        let world_init = v8::Local::<v8::Function>::try_from(init_fn).unwrap(); // we know it's a function
+
+        let undefined = deno_core::v8::undefined(scope).into();
+        let world_state = serde_v8::to_v8(scope, &*custom_world_state).unwrap();
+        let args = [world_state.into()];
+
+        let result = world_init.call(scope, undefined, &args).unwrap();
+        let next_world_state: serde_json::Value = serde_v8::from_v8(scope, result)?;
+
+        *custom_world_state = next_world_state;
+
+        Ok(())
     }
 }
 

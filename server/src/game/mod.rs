@@ -49,7 +49,7 @@ impl GameServer {
             World::load(&storage_dir).expect("Failed to load world"),
         ));
 
-        let game_instance = GameInstance::new(world.clone());
+        let mut game_instance = GameInstance::new(world.clone());
 
         tracing::info!("Starting JS context..");
         let script_root = storage_dir.join("dist/");
@@ -62,6 +62,11 @@ impl GameServer {
         .expect("Failed to load JS Context");
 
         game_instance.spawn_entities(&mut js_context).await;
+
+        // Init the world after entities are spawned but before players are added
+        game_instance
+            .init(&mut js_context)
+            .expect("Error during world init");
 
         // Set the initial state
         let initial_state = ServerState::Paused(game_instance);
