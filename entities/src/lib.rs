@@ -1,3 +1,6 @@
+/// This crate contains data types relevant to entities
+///
+/// It is designed to be used on both the server and the client
 use {
     serde::{Deserialize, Serialize},
     std::collections::HashMap,

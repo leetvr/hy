@@ -9,6 +9,7 @@ function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
   const [currentMode, setModeState] = useState(initialEngineMode);
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
+  const [selectedEntity, setSelectedEntity] = useState(false);
   const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
   const setMode = (newMode: EngineMode) => {
@@ -38,9 +39,10 @@ function App({ engine }: { engine: Engine }) {
           currentMode={currentMode}
           blockRegistry={blockRegistry}
           entityTypeRegistry={entityTypeRegistry}
+          setSelectedEntity={setSelectedEntity}
         />
       )}
-      <RightBar selectedEntity={false} />
+      <RightBar selectedEntity={selectedEntity} />
     </div>
   );
 }

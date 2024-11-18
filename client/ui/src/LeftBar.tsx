@@ -13,11 +13,13 @@ export default function LeftBar({
   engine,
   blockRegistry,
   entityTypeRegistry,
+  setSelectedEntity,
 }: {
   engine: Engine;
   currentMode: EngineMode;
   blockRegistry: BlockRegistry;
   entityTypeRegistry: EntityTypeRegistry;
+  setSelectedEntity: (bool) => void;
 }) {
   const [currentTab, setCurrentTab] = useState(LeftBarTab.Blocks);
   let theContent;
