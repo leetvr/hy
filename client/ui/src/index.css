@@ -79,7 +79,7 @@ a:hover {
     border: 1px solid #a9a9a9;
     background-color: #a9a9a9;
 }
-.block-button {
+.block-button, .entity-button {
     line-height: 32px;
     border: 3px solid #f9f9f9;
     margin: 4px 4px 4px 0px;
@@ -87,11 +87,11 @@ a:hover {
     box-sizing: border-box;
     text-align: left;
 }
-.block-button img {
+.block-button img, .entity-button img {
     display: inline-block;
     vertical-align: middle;
 }
-.block-button.button-on {
+.block-button.button-on, .entity-button.button-on {
     background-color: #a9a9a9;
     border: 3px solid #ff7538;
 }
