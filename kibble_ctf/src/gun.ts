@@ -11,7 +11,7 @@ export const update: EntityUpdate = (
 
 // BALLS
 const moreBalls = (interaction: Interaction) => {
-  let speed = 100;
+  let speed = 50;
 
   // If the angle is wrong, don't find out why, just bash it into place
   let angle = interaction.facingAngle - Math.PI / 2;

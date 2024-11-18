@@ -441,7 +441,10 @@ impl PhysicsWorld {
 
         // If the entity is dynamic, we set its position from the physics engine
         if physics_body.body_type().is_dynamic() {
-            entity_data.state.position = na_to_glam(physics_body.position().translation.vector);
+            let state = &mut entity_data.state;
+            let position = physics_body.position();
+            state.position = na_to_glam(position.translation.vector);
+            state.rotation = na_quat_to_glam(position.rotation);
             entity_data.state.velocity = na_to_glam(physics_body.linvel().clone());
 
             // Nothing more to do.
@@ -463,6 +466,11 @@ impl PhysicsWorld {
     }
 }
 
+fn na_quat_to_glam(rotation: nalgebra::Unit<nalgebra::Quaternion<f32>>) -> glam::Quat {
+    // jesus, nalgebra
+    glam::Quat::from_array(rotation.into_inner().coords.data.0[0])
+}
+
 fn build_rigid_body_for_entity(
     id: &str,
     physics_properties: &EntityPhysicsProperties,
@@ -478,6 +486,7 @@ fn build_rigid_body_for_entity(
         .parse()
         .expect("Entity ID is not a number - this should be impossible");
     let builder = RigidBodyBuilder::new(body_type)
+        .ccd_enabled(true)
         .user_data(user_data)
         .linvel(glam_to_na(state.velocity))
         .position(glam_to_na(state.position).into());
