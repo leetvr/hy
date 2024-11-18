@@ -52,6 +52,15 @@ pub struct PhysicsWorld {
     pub entity_bodies: HashMap<EntityID, PhysicsBody>,
 }
 
+impl Drop for PhysicsWorld {
+    fn drop(&mut self) {
+        // Silence warnings on dropping `PhysicsBody`s
+        for (_, body) in self.entity_bodies.drain().collect::<Vec<_>>() {
+            self.remove_body(body);
+        }
+    }
+}
+
 impl PhysicsWorld {
     pub fn new() -> Self {
         // Parameters
