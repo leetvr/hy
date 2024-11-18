@@ -148,7 +148,7 @@ impl GameInstance {
         }
 
         // Update players
-        for client in self.clients.values() {
+        for client in self.clients.values_mut() {
             let player = self.players.get_mut(&client.player_id).unwrap();
             player.state = js_context
                 .get_player_next_state(client.player_id, &player.state, &client.last_controls)
@@ -164,6 +164,10 @@ impl GameInstance {
                     player.state.position,
                 );
             }
+
+            // Reset edge trigger controls once per tick
+            client.last_controls.fire = false;
+            client.last_controls.jump = false;
         }
 
         // Update entities
@@ -271,8 +275,22 @@ impl GameInstance {
                 },
             } {
                 match packet {
-                    net_types::ClientPacket::Controls(controls) => {
-                        client.last_controls = controls;
+                    net_types::ClientPacket::Controls(net_types::Controls {
+                        move_direction,
+                        jump,
+                        fire,
+                        camera_yaw,
+                    }) => {
+                        client.last_controls.move_direction = move_direction;
+                        client.last_controls.camera_yaw = camera_yaw;
+
+                        // Only allow the client to trigger jump and fire once per tick
+                        if jump {
+                            client.last_controls.jump = true;
+                        }
+                        if fire {
+                            client.last_controls.fire = true;
+                        }
                     }
                     net_types::ClientPacket::Start => {
                         maybe_next_state = Some(NextServerState::Playing)
