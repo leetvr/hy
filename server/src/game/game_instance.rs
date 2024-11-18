@@ -78,6 +78,12 @@ impl GameInstance {
         }
     }
 
+    pub fn init(&mut self, js_context: &mut JSContext) -> anyhow::Result<()> {
+        js_context.run_world_init(&mut self.custom_world_state)?;
+
+        Ok(())
+    }
+
     pub async fn from_transition(
         js_context: &mut JSContext,
         editor_instance: EditorInstance,
@@ -116,6 +122,11 @@ impl GameInstance {
                 );
             }
         }
+
+        // Init the world after entities are spawned but before players are added
+        game_instance
+            .init(js_context)
+            .expect("Error during world init");
 
         // Create a player for the editor client and also spawn that into the new physics world
         let new_player_id = PlayerId::new(game_instance.next_player_id);

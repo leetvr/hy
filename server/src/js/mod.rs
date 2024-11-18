@@ -281,6 +281,36 @@ impl JSContext {
         entity_data.state = state;
     }
 
+    pub(crate) fn run_world_init(
+        &mut self,
+        custom_world_state: &mut serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = self.world_module_namespace.open(scope);
+
+        let function_name = v8::String::new(scope, "init").unwrap();
+        let Some(init_fn) = module_namespace.get(scope, function_name.into()) else {
+            anyhow::bail!("ERROR: Module has no function named init!");
+        };
+
+        if !init_fn.is_function() {
+            anyhow::bail!("ERROR: Module has a member named init, but it's not a function!");
+        }
+
+        let world_init = v8::Local::<v8::Function>::try_from(init_fn).unwrap(); // we know it's a function
+
+        let undefined = deno_core::v8::undefined(scope).into();
+        let world_state = serde_v8::to_v8(scope, &*custom_world_state).unwrap();
+        let args = [world_state.into()];
+
+        let result = world_init.call(scope, undefined, &args).unwrap();
+        let next_world_state: serde_json::Value = serde_v8::from_v8(scope, result)?;
+
+        *custom_world_state = next_world_state;
+
+        Ok(())
+    }
+
     pub(crate) fn run_world_spawn_player_script(
         &mut self,
         custom_world_state: &mut serde_json::Value,

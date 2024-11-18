@@ -66,6 +66,7 @@ export interface Interaction {
   facingAngle: number;
 }
 
+// Player script hooks
 
 type PlayerUpdate = (
   playerID: number,
@@ -78,11 +79,18 @@ type OnPlayerSpawn = (
   currentState: PlayerState,
 ) => PlayerState;
 
-type OnAddPlayer = (
+
+// World script hooks
+
+type WorldOnAddPlayer = (
   worldState: CustomState,
   playerID: number,
   currentState: PlayerState,
 ) => [CustomState, PlayerState];
+
+type WorldInit = (
+  worldState: CustomState,
+) => CustomState;
 
 /**
  * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
