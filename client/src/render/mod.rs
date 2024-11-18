@@ -189,6 +189,7 @@ impl Renderer {
                 .viewport(0, 0, SHADOW_SIZE.x as i32, SHADOW_SIZE.y as i32);
             self.gl.cull_face(glow::FRONT);
 
+            self.gl.depth_mask(true);
             self.gl.clear_depth_f32(1.0);
             self.gl.clear(glow::DEPTH_BUFFER_BIT);
 
@@ -199,15 +200,14 @@ impl Renderer {
 
             blend_state.set(&self.gl, false);
 
-            // TODO:
-            // self.render_pass(
-            //     &self.shadow_program,
-            //     draw_calls,
-            //     None,
-            //     shadow_from_world,
-            //     None,
-            //     light_direction,
-            // );
+            self.render_pass(
+                &self.shadow_program,
+                draw_calls,
+                None,
+                shadow_from_world,
+                None,
+                light_direction,
+            );
 
             // --------------------
             // --- Forward Pass ---
