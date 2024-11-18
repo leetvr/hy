@@ -18,6 +18,7 @@ use {
     physics::PhysicsWorld,
     serde::{Deserialize, Serialize},
     std::{
+        collections::HashMap,
         fmt::Display,
         path::PathBuf,
         sync::{Arc, Mutex},
@@ -249,6 +250,8 @@ pub struct PlayerState {
     velocity: glam::Vec3,
     animation_state: String,
     is_on_ground: bool,
+    #[serde(default)]
+    pub custom_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

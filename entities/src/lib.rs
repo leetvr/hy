@@ -1,5 +1,6 @@
 use {
     serde::{Deserialize, Serialize},
+    std::collections::HashMap,
     tsify::Tsify,
     wasm_bindgen::prelude::wasm_bindgen,
 };
@@ -98,12 +99,15 @@ pub struct Interaction {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct EntityState {
     pub position: glam::Vec3,
     pub rotation: glam::Quat,
     pub velocity: glam::Vec3,
     pub anchor: Option<Anchor>,
     pub interactions: Vec<Interaction>,
+    #[serde(default)]
+    pub custom_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

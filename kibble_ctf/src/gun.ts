@@ -6,6 +6,16 @@ export const update: EntityUpdate = (
   interactions: Interaction[],
 ): EntityState => {
   interactions.forEach(moreBalls);
+
+  // Look, custom state!
+  let currentCount = currentState.customState.counter;
+  if (typeof currentCount !== "number") {
+    currentCount = 0;
+  } else {
+  }
+
+  currentState.customState.counter = currentCount + 1;
+
   return currentState;
 };
 

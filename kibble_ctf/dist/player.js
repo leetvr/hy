@@ -3,7 +3,7 @@ const MOVE_SPEED = 5.0; // Movement speed (units per second)
 const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 export const update = (playerID, currentState, controls) => {
-    const { position, velocity, animationState, isOnGround: wasOnGround } = currentState;
+    const { position, velocity, animationState, isOnGround: wasOnGround, customState } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
@@ -62,10 +62,17 @@ export const update = (playerID, currentState, controls) => {
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;
     newPosition[2] += newVelocity[2] * DT;
+    // Look, custom state!
+    let currentCount = customState.counter;
+    if (typeof currentCount !== "number") {
+        currentCount = 0;
+    }
+    customState.counter = currentCount + 1;
     return {
         position: newPosition,
         velocity: newVelocity,
         animationState: newAnimationState,
         isOnGround,
+        customState,
     };
 };

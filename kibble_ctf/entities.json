@@ -1,1 +1,54 @@
-{"11237758889203990267":{"id":"11237758889203990267","name":"We should let you set entity names in the editor","entity_type":4,"model_path":"kibble_ctf/red_flag.gltf","state":{"position":[26.0,1.0,17.0],"rotation":[0.0,0.0,0.0,1.0],"velocity":[0.0,0.0,0.0],"anchor":null,"interactions":[]}},"8897348668263876315":{"id":"8897348668263876315","name":"We should let you set entity names in the editor","entity_type":3,"model_path":"kibble_ctf/blue_flag.gltf","state":{"position":[4.0,1.0,9.0],"rotation":[0.0,0.0,0.0,1.0],"velocity":[0.0,0.0,0.0],"anchor":null,"interactions":[]}},"7222011851581229401":{"id":"7222011851581229401","name":"Red Flag","entity_type":4,"model_path":"kibble_ctf/red_flag.gltf","state":{"position":[25.0,1.0,13.0],"rotation":[0.0,0.0,0.0,1.0],"velocity":[0.0,0.0,0.0],"anchor":null,"interactions":[]}},"13226639232172070358":{"id":"13226639232172070358","name":"We should let you set entity names in the editor","entity_type":3,"model_path":"kibble_ctf/blue_flag.gltf","state":{"position":[9.0,1.0,26.0],"rotation":[0.0,0.0,0.0,1.0],"velocity":[0.0,0.0,0.0],"anchor":null,"interactions":[]}}}
+{
+  "11237758889203990267": {
+    "id": "11237758889203990267",
+    "name": "We should let you set entity names in the editor",
+    "entity_type": 4,
+    "model_path": "kibble_ctf/red_flag.gltf",
+    "state": {
+      "position": [26.0, 1.0, 17.0],
+      "rotation": [0.0, 0.0, 0.0, 1.0],
+      "velocity": [0.0, 0.0, 0.0],
+      "anchor": null,
+      "interactions": []
+    }
+  },
+  "8897348668263876315": {
+    "id": "8897348668263876315",
+    "name": "We should let you set entity names in the editor",
+    "entity_type": 3,
+    "model_path": "kibble_ctf/blue_flag.gltf",
+    "state": {
+      "position": [4.0, 1.0, 9.0],
+      "rotation": [0.0, 0.0, 0.0, 1.0],
+      "velocity": [0.0, 0.0, 0.0],
+      "anchor": null,
+      "interactions": []
+    }
+  },
+  "7222011851581229401": {
+    "id": "7222011851581229401",
+    "name": "Red Flag",
+    "entity_type": 4,
+    "model_path": "kibble_ctf/red_flag.gltf",
+    "state": {
+      "position": [25.0, 1.0, 13.0],
+      "rotation": [0.0, 0.0, 0.0, 1.0],
+      "velocity": [0.0, 0.0, 0.0],
+      "anchor": null,
+      "interactions": []
+    }
+  },
+  "13226639232172070358": {
+    "id": "13226639232172070358",
+    "name": "We should let you set entity names in the editor",
+    "entity_type": 3,
+    "model_path": "kibble_ctf/blue_flag.gltf",
+    "state": {
+      "position": [9.0, 1.0, 26.0],
+      "rotation": [0.0, 0.0, 0.0, 1.0],
+      "velocity": [0.0, 0.0, 0.0],
+      "anchor": null,
+      "interactions": []
+    }
+  }
+}

@@ -155,11 +155,13 @@ impl JSContext {
         let undefined = deno_core::v8::undefined(scope).into();
 
         #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
         // CRIMES(ll): I don't want to deal with anchored entity positions in the script right now,
         // so make this separate struct that only handles Vec3 positions
         struct ScriptEntityState {
             position: glam::Vec3,
             velocity: glam::Vec3,
+            custom_state: HashMap<String, serde_json::Value>,
         }
 
         let (current_state, interactions) = {
@@ -174,6 +176,7 @@ impl JSContext {
             let script_state = ScriptEntityState {
                 position: entity_data.state.position,
                 velocity: entity_data.state.velocity,
+                custom_state: entity_data.state.custom_state.clone(),
             };
             (
                 serde_v8::to_v8(scope, &script_state).unwrap(),
@@ -200,6 +203,7 @@ impl JSContext {
             let entity = world.entities.get_mut(entity_id).unwrap();
             entity.state.position = next_state.position;
             entity.state.velocity = next_state.velocity;
+            entity.state.custom_state = next_state.custom_state;
         }
 
         Ok(())

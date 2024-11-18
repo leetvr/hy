@@ -4,6 +4,10 @@
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
 
+type CustomState = {
+  [key: string]: any;
+};
+
 export interface BlockPos {
   x: number;
   y: number;
@@ -15,6 +19,7 @@ export interface PlayerState {
   velocity: Vec3;
   animationState: string;
   isOnGround: boolean;
+  customState: CustomState;
 }
 
 export interface PlayerControls {
@@ -34,6 +39,7 @@ export interface EntityData {
 export interface EntityState {
   position: Vec3;
   velocity: Vec3;
+  customState: CustomState;
 }
 
 export interface PlayerCollision {
@@ -74,7 +80,7 @@ type EntityUpdate = (
 export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
-  getEntities: () => Map<String, EntityData[]>;
+  getEntities: () => { [key: string]: EntityState };
   spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => String;
   despawnEntity: (entityId: String) => void;
   checkMovementForCollisions: (
