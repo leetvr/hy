@@ -65,7 +65,11 @@ type PlayerUpdate = (
  */
 type OnEntitySpawn = (entityData: EntityData) => EntityData;
 
-type EntityUpdate = (currentState: EntityState, interactions: Interaction[]) => EntityState;
+type EntityUpdate = (
+  id: string,
+  currentState: EntityState,
+  interactions: Interaction[],
+) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 
@@ -81,12 +85,22 @@ interface GlobalHy {
   anchorEntity: (entityId: String, anchorId: number, anchorName: String) => void;
   detachEntity: (entityId: String, position: Vec3) => void;
   interactEntity: (entityId: String, playerId: number, position: Vec3, facingAngle: number) => void;
+  getCollisionsForEntity: (entityId: String) => Collision[];
+  getCollisionsForPlayer: (playerID: number) => Collision[];
 }
 
 interface CollisionResult {
   readonly correctedMovement: Vec3;
   readonly wouldHaveCollided: boolean;
   readonly isOnGround: boolean;
+}
+
+interface Collision {
+  readonly collisionKind: "contact" | "intersection";
+  readonly collisionTarget: "block" | "entity" | "player";
+  /**
+  The ID of the thing this entity collided with  */
+  readonly targetId: string;
 }
 
 declare global {

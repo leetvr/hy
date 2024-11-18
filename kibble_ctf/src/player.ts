@@ -1,4 +1,4 @@
-import { Vec3, PlayerUpdate, PlayerControls, PlayerState, PlayerCollision, Vec2 } from "../lib/hy";
+import { Vec3, PlayerUpdate, PlayerControls, PlayerState, Vec2 } from "../lib/hy";
 
 const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 5.0; // Movement speed (units per second)
@@ -9,7 +9,6 @@ export const update: PlayerUpdate = (
   playerID: number,
   currentState: PlayerState,
   controls: PlayerControls,
-  collisions: PlayerCollision[],
 ): PlayerState => {
   const { position, velocity, animationState, isOnGround: wasOnGround } = currentState;
   let newPosition: Vec3 = [...position];
@@ -21,6 +20,18 @@ export const update: PlayerUpdate = (
     hy.anchorEntity(gun, playerID, "hand_right_anchor");
     hy.interactEntity(gun, playerID, position, controls.camera_yaw);
   }
+
+  const collisions = hy.getCollisionsForPlayer(playerID);
+
+  collisions.forEach((collision) => {
+    if (collision.collisionKind == "contact" && collision.collisionTarget == "entity") {
+      hy.despawnEntity(collision.targetId);
+    }
+
+    if (collision.collisionKind == "intersection" && collision.collisionTarget == "entity") {
+      console.log("Walked through a ball!");
+    }
+  });
 
   // Handle horizontal movement
   const inputX = controls.move_direction[0];

@@ -77,7 +77,6 @@ impl GameServer {
     }
 
     pub async fn tick(&mut self) {
-        self.timer.stop();
         self.timer.start();
 
         // Handle new connections
@@ -100,11 +99,16 @@ impl GameServer {
         };
 
         // Do we need to transition to a different state?
-        let Some(next_state) = next_state else { return };
+        let Some(next_state) = next_state else {
+            self.timer.stop();
+            return;
+        };
 
         self.state
             .transition(&self.storage_dir, next_state, &mut self.js_context)
             .await;
+
+        self.timer.stop();
     }
 }
 

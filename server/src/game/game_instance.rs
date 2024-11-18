@@ -8,7 +8,7 @@ use {
 };
 
 use {
-    crate::game::{network::ClientPlayerState, player, PlayerState},
+    crate::game::{network::ClientPlayerState, PlayerState},
     entities::{EntityData, EntityID},
     std::collections::{HashMap, HashSet},
 };
@@ -25,11 +25,11 @@ use crate::js::JSContext;
 use super::{
     editor_instance::EditorInstance,
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
-    world::World,
+    world::{self, World},
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
-const DEBUG_LINES: bool = true;
+const DEBUG_LINES: bool = false;
 
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
@@ -81,19 +81,13 @@ impl GameInstance {
         } = editor_instance;
         let mut game_instance = GameInstance::new(world.clone());
 
-        let world = world.lock().expect("DEADLOCK!!");
-
+        // Patch up the PhysicsWorld Arc
         {
-            let mut physics_world = physics_world.lock().expect("Deadlock");
-            // Rebuild the terrain
-            bake_terrain_colliders(
-                &mut physics_world,
-                &world.blocks,
-                &mut game_instance.colliders,
-            );
+            let mut old_physics_world = physics_world.lock().expect("Deadlock");
+            let mut new_physics_world = game_instance.physics_world.lock().expect("Deadlock");
 
-            // Remove any old player handles
-            physics_world.player_handles.clear();
+            // sick mem::swap bro
+            std::mem::swap(&mut *old_physics_world, &mut *new_physics_world);
         }
 
         // IMPORTANT: We need the client to forget any previous world state
@@ -131,7 +125,7 @@ impl GameInstance {
             )
             .await;
 
-        // Make sure that the newly created game instance points to the existing physics world
+        // Make sure that the newly created game instance points to the existing physics world Arc
         game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
@@ -156,18 +150,8 @@ impl GameInstance {
         // Update players
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            let collisions = {
-                let world = self.world.lock().expect("Deadlock!");
-                player::player_aabb_block_collisions(player.state.position, &world.blocks)
-            };
-
             player.state = js_context
-                .get_player_next_state(
-                    client.player_id,
-                    &player.state,
-                    &client.last_controls,
-                    collisions,
-                )
+                .get_player_next_state(client.player_id, &player.state, &client.last_controls)
                 .await
                 .unwrap();
 
@@ -195,7 +179,11 @@ impl GameInstance {
         // Step physics
         {
             let mut physics_world = self.physics_world.lock().expect("Deadlock!");
-            physics_world.step();
+            let mut world = self.world.lock().expect("Deadlock!");
+
+            // borrowing is hard
+            let entity_type_registry = world.entity_type_registry.clone();
+            physics_world.step(&mut world.entities, &entity_type_registry);
 
             if DEBUG_LINES {
                 let debug_lines = physics_world.get_debug_lines();
@@ -210,7 +198,7 @@ impl GameInstance {
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
-        world.apply_queued_updates();
+        world.apply_queued_updates(js_context, self.physics_world.clone());
 
         maybe_next_state
     }
@@ -322,8 +310,18 @@ impl GameInstance {
 
     pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
         let mut world = self.world.lock().expect("Deadlock!");
-        for entity_data in world.entities.values_mut() {
-            js_context.spawn_entity(entity_data);
+
+        // work around borrowing issues? no time, baby
+        let entity_type_registry = world.entity_type_registry.clone();
+
+        let entities = &mut world.entities;
+        for entity_data in entities.values_mut() {
+            world::spawn_entity(
+                entity_data,
+                js_context,
+                self.physics_world.clone(),
+                &entity_type_registry,
+            );
         }
     }
 
@@ -505,9 +503,12 @@ pub fn bake_terrain_colliders(
     blocks: &BlockGrid,
     colliders: &mut Vec<PhysicsCollider>,
 ) {
-    // Remove old colliders
-    for collider in colliders.drain(..) {
-        physics_world.remove_collider(collider);
+    for (position, block_type_id) in blocks.iter_non_empty() {
+        physics_world.add_block_collider(position.into(), block_type_id);
+    }
+
+    if true {
+        return;
     }
 
     // Vertices can be shared between many faces, store indices for each unique vertex

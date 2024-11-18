@@ -1,24 +1,26 @@
 import type { EntityState, EntityUpdate, Vec3, Interaction } from "../lib/hy";
 
-export const update: EntityUpdate = (currentState: EntityState, interactions: Interaction[]): EntityState => {
-    interactions.forEach(moreKanes);
-    return currentState;
+export const update: EntityUpdate = (
+  id: string,
+  currentState: EntityState,
+  interactions: Interaction[],
+): EntityState => {
+  interactions.forEach(moreBalls);
+  return currentState;
 };
 
-// more kanes
-const moreKanes = (interaction: Interaction) => {
-    let speed = 10. + Math.random() * 25.;
+// BALLS
+const moreBalls = (interaction: Interaction) => {
+  let speed = 50;
 
-    // If the angle is wrong, don't find out why, just bash it into place
-    let angle = interaction.facingAngle - Math.PI / 2;
-    hy.spawnEntity(
-        0,
-        interaction.position,
-        [0., 0., 0.],
-        [
-            -Math.cos(angle) * speed,
-            0.,
-            Math.sin(angle) * speed
-        ]
-    );
-}
+  // If the angle is wrong, don't find out why, just bash it into place
+  let angle = interaction.facingAngle - Math.PI / 2;
+
+  const initialVelocity: Vec3 = [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed];
+  const initialPosition: Vec3 = [
+    interaction.position[0] + -Math.cos(angle),
+    interaction.position[1],
+    interaction.position[2] + Math.sin(angle),
+  ];
+  hy.spawnEntity(2, initialPosition, [0, 0, 0], initialVelocity);
+};

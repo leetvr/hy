@@ -1,10 +1,13 @@
 use {
+    crate::js::JSContext,
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
     entities::{Anchor, EntityData, EntityTypeRegistry, Interaction, PlayerId},
+    physics::PhysicsWorld,
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
+        sync::{Arc, Mutex},
     },
 };
 
@@ -18,7 +21,6 @@ pub struct World {
     pub block_registry: BlockRegistry,
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
-
     command_queue: Vec<WorldCommand>,
 }
 
@@ -61,13 +63,24 @@ impl World {
         });
     }
 
-    pub fn apply_queued_updates(&mut self) {
+    pub fn apply_queued_updates(
+        &mut self,
+        js_context: &mut JSContext,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
+    ) {
         for command in self.command_queue.drain(..) {
             match command {
-                WorldCommand::SpawnEntity(entity_id, entity_data) => {
+                WorldCommand::SpawnEntity(entity_id, mut entity_data) => {
+                    spawn_entity(
+                        &mut entity_data,
+                        js_context,
+                        physics_world.clone(),
+                        &self.entity_type_registry,
+                    );
                     self.entities.insert(entity_id, entity_data);
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
+                    despawn_entity(&entity_id, physics_world.clone());
                     self.entities.remove(&entity_id);
                 }
                 WorldCommand::AnchorEntity {
@@ -139,6 +152,27 @@ impl World {
         std::fs::write(entities_path, entities)?;
         Ok(())
     }
+}
+
+pub fn spawn_entity(
+    entity_data: &mut EntityData,
+    js_context: &mut JSContext,
+    physics_world: Arc<Mutex<PhysicsWorld>>,
+    entity_type_registry: &EntityTypeRegistry,
+) {
+    // Call the entity's onSpawn function, if it has one
+    js_context.spawn_entity(entity_data);
+    physics_world
+        .lock()
+        .expect("Deadlock!")
+        .spawn_entity(entity_data, entity_type_registry);
+}
+
+fn despawn_entity(entity_id: &str, physics_world: Arc<Mutex<PhysicsWorld>>) {
+    physics_world
+        .lock()
+        .expect("Deadlock!")
+        .despawn_entity(entity_id)
 }
 
 enum WorldCommand {

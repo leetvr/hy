@@ -1,5 +1,9 @@
 use {
-    crate::game::{network::Client, world::World, NextServerState},
+    crate::game::{
+        network::Client,
+        world::{self, World},
+        NextServerState,
+    },
     entities::PlayerId,
     net_types::{ClientShouldSwitchMode, ServerPacket, SetBlock},
     physics::PhysicsWorld,
@@ -42,8 +46,14 @@ impl EditorInstance {
         // Respawn all the entities
         {
             let mut world = world.lock().expect("Deadlock!");
+            let entity_type_registry = world.entity_type_registry.clone();
             for entity_data in world.entities.values_mut() {
-                js_context.spawn_entity(entity_data);
+                world::spawn_entity(
+                    entity_data,
+                    js_context,
+                    physics_world.clone(),
+                    &entity_type_registry,
+                );
             }
         }
 
