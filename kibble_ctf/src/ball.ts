@@ -1,6 +1,6 @@
 import { EntityState, EntityUpdate, Interaction } from "../lib/hy";
 
-const update: EntityUpdate = (
+export const update: EntityUpdate = (
   id: string,
   entityState: EntityState,
   interactions: Interaction[],
