@@ -29,7 +29,7 @@ use super::{
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
-const DEBUG_LINES: bool = true;
+const DEBUG_LINES: bool = false;
 
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
@@ -96,7 +96,7 @@ impl GameInstance {
             physics_world.player_handles.clear();
         }
 
-        // IMPORTANT: We need the client to forget any previous world state
+        // IMPORTANT: We need the false to forget any previous world state
         editor_client.awareness = Default::default();
 
         // Create a player for the editor client
@@ -210,7 +210,7 @@ impl GameInstance {
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
-        world.apply_queued_updates();
+        world.apply_queued_updates(js_context);
 
         maybe_next_state
     }

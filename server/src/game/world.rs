@@ -1,4 +1,5 @@
 use {
+    crate::js::JSContext,
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
     entities::{Anchor, EntityData, EntityTypeRegistry, Interaction, PlayerId},
@@ -18,7 +19,6 @@ pub struct World {
     pub block_registry: BlockRegistry,
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
-
     command_queue: Vec<WorldCommand>,
 }
 
@@ -61,10 +61,12 @@ impl World {
         });
     }
 
-    pub fn apply_queued_updates(&mut self) {
+    pub fn apply_queued_updates(&mut self, js_context: &mut JSContext) {
         for command in self.command_queue.drain(..) {
             match command {
-                WorldCommand::SpawnEntity(entity_id, entity_data) => {
+                WorldCommand::SpawnEntity(entity_id, mut entity_data) => {
+                    // Call the entity's spawn function, if one exists
+                    js_context.spawn_entity(&mut entity_data);
                     self.entities.insert(entity_id, entity_data);
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
