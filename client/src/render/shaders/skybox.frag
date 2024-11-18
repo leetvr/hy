@@ -18,8 +18,5 @@ void main() {
 
     vec3 background = texture(tex, world_dir).rgb;
 
-    // lol basic tonemapping
-    background = background / (background + vec3(1.0));
-
     fragColor = vec4(background, 1.0);
 }

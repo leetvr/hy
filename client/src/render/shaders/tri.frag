@@ -5,8 +5,8 @@ precision highp int;
 precision highp sampler2D;
 precision highp sampler2DShadow;
 
-const float LIGHT_INTENSITY = 1.5;
-const float AMBIENT_INTENSITY = 0.2;
+const float LIGHT_INTENSITY = 1.0;
+const float AMBIENT_INTENSITY = 0.08;
 
 in vec3 worldSpaceInterpolant;
 in vec3 normalInterpolant;

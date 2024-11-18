@@ -2,6 +2,7 @@ mod cube_vao;
 mod debug_renderer;
 mod grid_renderer;
 mod skybox;
+mod tonemapping;
 mod vertex;
 
 // Re-exports
@@ -19,7 +20,7 @@ use bytemuck::{offset_of, Pod, Zeroable};
 use glam::{Mat4, UVec2, UVec3, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
+use web_sys::{js_sys, HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::{
     gltf::{GLTFPrimitive, TransparencyType},
@@ -69,6 +70,7 @@ pub struct Renderer {
     forward_program: PrimaryProgram,
     shadow_program: PrimaryProgram,
 
+    hdr_target: HdrFramebuffer,
     shadow_target: ShadowTarget,
 
     pub camera: Camera,
@@ -77,15 +79,23 @@ pub struct Renderer {
     grid_renderer: grid_renderer::GridRenderer,
     debug_renderer: debug_renderer::DebugRenderer,
     skybox_renderer: skybox::SkyboxRenderer,
+    tonemapping_renderer: tonemapping::TonemappingRenderer,
 
     light_buffer: glow::Buffer,
 }
 
 impl Renderer {
     pub fn new(canvas: HtmlCanvasElement) -> Result<Self, JsValue> {
+        let context_options = js_sys::Object::new();
+        js_sys::Reflect::set(
+            &context_options,
+            &"antialias".into(),
+            &JsValue::from_bool(false),
+        )?;
+
         // Get the WebGL2 rendering context
         let webgl2_context = canvas
-            .get_context("webgl2")?
+            .get_context_with_context_options("webgl2", &context_options)?
             .ok_or("WebGL2 not supported")?
             .dyn_into::<WebGl2RenderingContext>()?;
 
@@ -106,12 +116,14 @@ impl Renderer {
 
         let skybox_renderer = skybox::SkyboxRenderer::new(&gl);
 
+        let hdr_target = HdrFramebuffer::new(&gl, UVec2::new(canvas.width(), canvas.height()));
         let shadow_target = ShadowTarget::new(&gl, SHADOW_SIZE);
 
         let camera = Camera::default();
 
         let grid_renderer = grid_renderer::GridRenderer::new(&gl);
         let debug_renderer = debug_renderer::DebugRenderer::new(&gl);
+        let tonemapping_renderer = tonemapping::TonemappingRenderer::new(&gl);
 
         let resolution = UVec2::new(canvas.width(), canvas.height());
 
@@ -122,18 +134,23 @@ impl Renderer {
             canvas,
             forward_program,
             shadow_program,
+            hdr_target,
             shadow_target,
             camera,
             resolution,
             grid_renderer,
             debug_renderer,
             skybox_renderer,
+            tonemapping_renderer,
             light_buffer,
         })
     }
 
     pub fn resize(&mut self, dimension: UVec2) {
         self.resolution = dimension;
+
+        self.hdr_target.dispose(&self.gl);
+        self.hdr_target = HdrFramebuffer::new(&self.gl, dimension);
     }
 
     pub fn render(
@@ -213,7 +230,8 @@ impl Renderer {
             // --- Forward Pass ---
             // --------------------
 
-            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            self.gl
+                .bind_framebuffer(glow::FRAMEBUFFER, Some(self.hdr_target.framebuffer));
             self.gl
                 .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
             self.gl.cull_face(glow::BACK);
@@ -253,6 +271,15 @@ impl Renderer {
 
             self.debug_renderer
                 .render(&self.gl, clip_from_world, debug_lines);
+
+            // ------------------------
+            // --- Tonemapping Pass ---
+            // ------------------------
+
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+
+            self.tonemapping_renderer
+                .render(&self.gl, self.hdr_target.color_texture);
 
             self.gl.flush();
         }
@@ -509,6 +536,133 @@ impl ShadowTarget {
         }
     }
 }
+
+struct HdrFramebuffer {
+    framebuffer: glow::Framebuffer,
+    color_texture: glow::Texture,
+    depth_texture: glow::Texture,
+}
+
+impl HdrFramebuffer {
+    fn new(gl: &glow::Context, size: UVec2) -> Self {
+        let color_texture = unsafe {
+            let color_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(color_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA16F as i32,
+                size.x as i32,
+                size.y as i32,
+                0,
+                glow::RGBA,
+                glow::HALF_FLOAT,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            color_texture
+        };
+
+        let depth_texture = unsafe {
+            let depth_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(depth_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::DEPTH_COMPONENT32F as i32,
+                size.x as i32,
+                size.y as i32,
+                0,
+                glow::DEPTH_COMPONENT,
+                glow::FLOAT,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+
+            depth_texture
+        };
+
+        let framebuffer = unsafe {
+            let framebuffer = gl
+                .create_framebuffer()
+                .expect("Failed to create framebuffer");
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::TEXTURE_2D,
+                Some(color_texture),
+                0,
+            );
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::DEPTH_ATTACHMENT,
+                glow::TEXTURE_2D,
+                Some(depth_texture),
+                0,
+            );
+            gl.draw_buffers(&[glow::COLOR_ATTACHMENT0]);
+            gl.read_buffer(glow::COLOR_ATTACHMENT0);
+            tracing::error!("{:X?}", gl.check_framebuffer_status(glow::FRAMEBUFFER));
+
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            framebuffer
+        };
+
+        Self {
+            framebuffer,
+            color_texture,
+            depth_texture,
+        }
+    }
+
+    fn dispose(&mut self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_framebuffer(self.framebuffer);
+            gl.delete_texture(self.color_texture);
+            gl.delete_texture(self.depth_texture);
+        }
+    }
+}
+
 // CRIME(cw): This isn't really a crime but minecraft has this exact class and I feel nasty.
 struct EnableState {
     kind: u32,
@@ -845,7 +999,7 @@ impl Texture {
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA as i32,
+                glow::SRGB8_ALPHA8 as i32,
                 width as i32,
                 height as i32,
                 0,
