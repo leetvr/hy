@@ -43,9 +43,11 @@ impl World {
         });
     }
 
-    pub fn detach_entity(&mut self, entity_id: String) {
-        self.command_queue
-            .push(WorldCommand::DetachEntity { entity_id });
+    pub fn detach_entity(&mut self, entity_id: String, position: glam::Vec3) {
+        self.command_queue.push(WorldCommand::DetachEntity {
+            entity_id,
+            position,
+        });
     }
 
     pub fn interact_entity(
@@ -96,8 +98,12 @@ impl World {
                         });
                     }
                 }
-                WorldCommand::DetachEntity { entity_id } => {
+                WorldCommand::DetachEntity {
+                    entity_id,
+                    position,
+                } => {
                     if let Some(entity) = self.entities.get_mut(&entity_id) {
+                        entity.state.position = position;
                         entity.state.anchor = None;
                     }
                 }
@@ -186,6 +192,7 @@ enum WorldCommand {
     },
     DetachEntity {
         entity_id: String,
+        position: glam::Vec3,
     },
     InteractEntity {
         entity_id: String,

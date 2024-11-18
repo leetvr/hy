@@ -120,12 +120,12 @@ fn anchor_entity(
     world.anchor_entity(entity_id, player_id, anchor_name);
 }
 
-#[op2(fast)]
-fn detach_entity(state: &mut OpState, #[string] entity_id: String) {
+#[op2]
+fn detach_entity(state: &mut OpState, #[string] entity_id: String, #[serde] position: Vec3) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    world.detach_entity(entity_id);
+    world.detach_entity(entity_id, position);
 }
 
 #[op2]
