@@ -10,7 +10,7 @@
       "id": 1,
       "name": "Gun",
       "scriptPath": "gun.js",
-      "defaultModelPath": "kibble_ctf/test_entity.gltf"
+      "defaultModelPath": "kibble_ctf/gun.gltf"
     },
     {
       "id": 2,
@@ -22,6 +22,30 @@
         "colliderWidth": 1.0,
         "colliderHeight": 1.0,
         "dynamic": true
+      }
+    },
+    {
+      "id": 3,
+      "name": "Blue Flag",
+      "scriptPath": "flag.js",
+      "defaultModelPath": "kibble_ctf/blue_flag.gltf",
+      "physicsProperties": {
+        "colliderKind": "cube",
+        "colliderWidth": 1.0,
+        "colliderHeight": 1.0,
+        "dynamic": false
+      }
+    },
+    {
+      "id": 4,
+      "name": "Red Flag",
+      "scriptPath": "flag.js",
+      "defaultModelPath": "kibble_ctf/red_flag.gltf",
+      "physicsProperties": {
+        "colliderKind": "cube",
+        "colliderWidth": 1.0,
+        "colliderHeight": 1.0,
+        "dynamic": false
       }
     }
   ]
