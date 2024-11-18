@@ -8,7 +8,7 @@ use {
 };
 
 use {
-    crate::game::{network::ClientPlayerState, player, PlayerState},
+    crate::game::{network::ClientPlayerState, PlayerState},
     entities::{EntityData, EntityID},
     std::collections::{HashMap, HashSet},
 };
@@ -81,22 +81,16 @@ impl GameInstance {
         } = editor_instance;
         let mut game_instance = GameInstance::new(world.clone());
 
-        let world = world.lock().expect("DEADLOCK!!");
-
+        // Patch up the PhysicsWorld Arc
         {
-            let mut physics_world = physics_world.lock().expect("Deadlock");
-            // Rebuild the terrain
-            bake_terrain_colliders(
-                &mut physics_world,
-                &world.blocks,
-                &mut game_instance.colliders,
-            );
+            let mut old_physics_world = physics_world.lock().expect("Deadlock");
+            let mut new_physics_world = game_instance.physics_world.lock().expect("Deadlock");
 
-            // Remove any old player handles
-            physics_world.player_handles.clear();
+            // sick mem::swap bro
+            std::mem::swap(&mut *old_physics_world, &mut *new_physics_world);
         }
 
-        // IMPORTANT: We need the false to forget any previous world state
+        // IMPORTANT: We need the client to forget any previous world state
         editor_client.awareness = Default::default();
 
         // Create a player for the editor client
@@ -131,7 +125,7 @@ impl GameInstance {
             )
             .await;
 
-        // Make sure that the newly created game instance points to the existing physics world
+        // Make sure that the newly created game instance points to the existing physics world Arc
         game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
@@ -156,18 +150,8 @@ impl GameInstance {
         // Update players
         for client in self.clients.values() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            let collisions = {
-                let world = self.world.lock().expect("Deadlock!");
-                player::player_aabb_block_collisions(player.state.position, &world.blocks)
-            };
-
             player.state = js_context
-                .get_player_next_state(
-                    client.player_id,
-                    &player.state,
-                    &client.last_controls,
-                    collisions,
-                )
+                .get_player_next_state(client.player_id, &player.state, &client.last_controls)
                 .await
                 .unwrap();
 
@@ -192,7 +176,7 @@ impl GameInstance {
                 .unwrap();
         }
 
-        // Step physics, update entities
+        // Step physics
         {
             let mut physics_world = self.physics_world.lock().expect("Deadlock!");
             let mut world = self.world.lock().expect("Deadlock!");
@@ -519,9 +503,12 @@ pub fn bake_terrain_colliders(
     blocks: &BlockGrid,
     colliders: &mut Vec<PhysicsCollider>,
 ) {
-    // Remove old colliders
-    for collider in colliders.drain(..) {
-        physics_world.remove_collider(collider);
+    for (position, block_type_id) in blocks.iter_non_empty() {
+        physics_world.add_block_collider(position.into(), block_type_id);
+    }
+
+    if true {
+        return;
     }
 
     // Vertices can be shared between many faces, store indices for each unique vertex

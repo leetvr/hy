@@ -1,3 +1,4 @@
+use blocks::BlockTypeID;
 use entities::{EntityData, EntityID, EntityPhysicsProperties, EntityState, EntityTypeRegistry};
 use glam::Vec3Swizzles;
 use nalgebra::{point, vector, Vector3};
@@ -18,7 +19,7 @@ use rapier3d::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-const TERRAIN_GROUP: Group = Group::GROUP_1;
+const BLOCK_GROUP: Group = Group::GROUP_1;
 const PLAYER_GROUP: Group = Group::GROUP_2;
 const ENTITY_GROUP: Group = Group::GROUP_3;
 
@@ -188,7 +189,7 @@ impl PhysicsWorld {
         let half_height = player_height / 2.0;
         tracing::debug!("Creating player with half height of {half_height} and radius {radius}");
         let collider = ColliderBuilder::capsule_y(half_height - radius, radius)
-            .collision_groups(InteractionGroups::new(PLAYER_GROUP, TERRAIN_GROUP))
+            .collision_groups(InteractionGroups::new(PLAYER_GROUP, BLOCK_GROUP))
             .position(vector![0.0, half_height, 0.0].into())
             .build();
         let handle = self.bodies.insert(rigid_body);
@@ -280,7 +281,7 @@ impl PhysicsWorld {
         let vertices: Vec<_> = vertices.map(|v| point![v.x, v.y, v.z]).collect();
         let indices: Vec<_> = indices.collect();
         let collider = ColliderBuilder::trimesh(vertices, indices)
-            .collision_groups(InteractionGroups::new(TERRAIN_GROUP, Group::all()))
+            .collision_groups(InteractionGroups::new(BLOCK_GROUP, Group::all()))
             .position(vector![0.0, 0.0, 0.0].into())
             .build();
         let handle = self.colliders.insert(collider);
@@ -288,6 +289,17 @@ impl PhysicsWorld {
             handle,
             removed: false,
         }
+    }
+
+    /// Adds a block collider
+    pub fn add_block_collider(&mut self, position: glam::Vec3, block_type_id: BlockTypeID) {
+        let position = position + glam::Vec3::new(0.5, 0.5, 0.5);
+        let collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5)
+            .translation(vector![position.x, position.y, position.z])
+            .collision_groups(InteractionGroups::new(BLOCK_GROUP, Group::all()))
+            .user_data(block_type_id.into())
+            .build();
+        self.colliders.insert(collider);
     }
 
     /// Adds a cuboid static collider
@@ -464,6 +476,79 @@ impl PhysicsWorld {
 
         self.remove_body(body);
     }
+
+    pub fn get_collisions_for_entity(&self, entity_id: &EntityID) -> Vec<Collision> {
+        let Some(collider) = self
+            .entity_bodies
+            .get(entity_id)
+            .and_then(|body| self.bodies.get(body.handle))
+            .and_then(|body| body.colliders().first().cloned())
+        else {
+            tracing::warn!("Tried to get collisions for entity {entity_id} but it has no body!");
+            return Vec::new();
+        };
+
+        self.get_collisions_for_collider(collider)
+    }
+
+    pub fn get_collisions_for_player(&self, player_id: u64) -> Vec<Collision> {
+        let Some(collider) = self
+            .player_handles
+            .get(&player_id)
+            .and_then(|body| self.bodies.get(*body))
+            .and_then(|body| body.colliders().first().cloned())
+        else {
+            tracing::warn!("Tried to get collisions for entity {player_id} but it has no body!");
+            return Vec::new();
+        };
+
+        self.get_collisions_for_collider(collider)
+    }
+
+    fn get_collisions_for_collider(&self, collider: ColliderHandle) -> Vec<Collision> {
+        let mut collisions = Vec::new();
+
+        for contact_pair in self.narrow_phase.contact_pairs_with(collider) {
+            // You should see the other guy!
+            let other_collider_handle = if contact_pair.collider1 == collider {
+                contact_pair.collider2
+            } else {
+                contact_pair.collider1
+            };
+
+            let other_collider = &self.colliders[other_collider_handle];
+            let Some(collision_target) = get_entity_collision_target(other_collider) else {
+                continue;
+            };
+
+            let target_id = other_collider.user_data.to_string();
+
+            collisions.push(Collision {
+                collision_kind: CollisionKind::Contact,
+                collision_target,
+                target_id,
+            });
+        }
+
+        collisions
+    }
+}
+
+fn get_entity_collision_target(other_collider: &Collider) -> Option<CollisionTarget> {
+    let membership = other_collider.collision_groups().memberships;
+    if membership.contains(BLOCK_GROUP) {
+        return Some(CollisionTarget::Block);
+    }
+
+    if membership.contains(PLAYER_GROUP) {
+        return Some(CollisionTarget::Player);
+    }
+
+    if membership.contains(ENTITY_GROUP) {
+        return Some(CollisionTarget::Entity);
+    }
+
+    None
 }
 
 fn na_quat_to_glam(rotation: nalgebra::Unit<nalgebra::Quaternion<f32>>) -> glam::Quat {
@@ -521,6 +606,10 @@ fn build_collider_for_entity(
     };
 
     let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
+    collider.set_collision_groups(InteractionGroups::new(
+        ENTITY_GROUP,
+        BLOCK_GROUP | PLAYER_GROUP | ENTITY_GROUP,
+    ));
     collider.user_data = entity_id;
     collider.set_position(vector![0., half_height, 0.].into());
 
@@ -712,4 +801,27 @@ pub struct CollisionResult {
     corrected_movement: glam::Vec3,
     would_have_collided: bool,
     is_on_ground: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Collision {
+    collision_kind: CollisionKind,
+    collision_target: CollisionTarget,
+    target_id: String, // player ID if player, block type ID if block, entity ID if entity
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum CollisionKind {
+    Contact,
+    Intersection,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum CollisionTarget {
+    Block,
+    Entity,
+    Player,
 }

@@ -29,20 +29,6 @@ export interface EntityData {
   entity_type: number;
   model_path: string;
   state: EntityState;
-  physics_properties?: EntityPhysicsProperties;
-}
-
-export interface EntityPhysicsProperties {
-  collider_kind: EntityColliderKind;
-  collider_height: number;
-  collider_width: number;
-  dynamic: boolean;
-}
-
-export enum EntityColliderKind {
-  Capsule,
-  Cube,
-  Ball,
 }
 
 export interface EntityState {
@@ -99,12 +85,22 @@ interface GlobalHy {
   anchorEntity: (entityId: String, anchorId: number, anchorName: String) => void;
   detachEntity: (entityId: String, position: Vec3) => void;
   interactEntity: (entityId: String, playerId: number, position: Vec3, facingAngle: number) => void;
+  getCollisionsForEntity: (entityId: String) => Collision[];
+  getCollisionsForPlayer: (playerID: number) => Collision[];
 }
 
 interface CollisionResult {
   readonly correctedMovement: Vec3;
   readonly wouldHaveCollided: boolean;
   readonly isOnGround: boolean;
+}
+
+interface Collision {
+  readonly collisionKind: "Contact" | "Intersection";
+  readonly collisionTarget: "Block" | "Entity" | "Player";
+  /**
+  The ID of the thing this entity collided with  */
+  readonly targetId: string;
 }
 
 declare global {

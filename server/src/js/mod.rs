@@ -8,7 +8,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use {
-    crate::game::{PlayerCollision, PlayerState, World},
+    crate::game::{PlayerState, World},
     deno_core::{
         op2, serde_v8,
         v8::{self},
@@ -94,7 +94,6 @@ impl JSContext {
         player_id: PlayerId,
         current_state: &PlayerState,
         controls: &Controls,
-        collisions: Vec<PlayerCollision>,
     ) -> anyhow::Result<PlayerState> {
         let scope = &mut self.runtime.handle_scope();
         let module_namespace = self.player_module_namespace.open(scope);
@@ -114,13 +113,7 @@ impl JSContext {
         let player_id = serde_v8::to_v8(scope, player_id).unwrap();
         let current_state = serde_v8::to_v8(scope, current_state).unwrap();
         let controls = serde_v8::to_v8(scope, controls).unwrap();
-        let colliding = serde_v8::to_v8(scope, collisions).unwrap();
-        let args = [
-            player_id.into(),
-            current_state.into(),
-            controls.into(),
-            colliding.into(),
-        ];
+        let args = [player_id.into(), current_state.into(), controls.into()];
 
         let result = player_update.call(scope, undefined, &args).unwrap();
         let next_state: PlayerState = serde_v8::from_v8(scope, result)?;

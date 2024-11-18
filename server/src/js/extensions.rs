@@ -5,7 +5,7 @@ use {
     entities::{EntityData, EntityID, EntityState, PlayerId},
     glam::{EulerRot, Vec3},
     nanorand::Rng,
-    physics::{CollisionResult, PhysicsWorld},
+    physics::{Collision, CollisionResult, PhysicsWorld},
     std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -35,6 +35,24 @@ fn check_movement_for_collisions(
     let mut physics_world = physics_world.lock().expect("Deadlock!");
 
     physics_world.check_movement_for_collisions(player_id, current_position, movement)
+}
+
+#[op2]
+#[serde]
+fn get_collisions_for_entity(state: &mut OpState, #[string] entity_id: String) -> Vec<Collision> {
+    let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
+    let physics_world = physics_world.lock().expect("Deadlock!");
+
+    physics_world.get_collisions_for_entity(&entity_id)
+}
+
+#[op2]
+#[serde]
+fn get_collisions_for_player(state: &mut OpState, #[bigint] player_id: u64) -> Vec<Collision> {
+    let physics_world = state.borrow::<Arc<Mutex<PhysicsWorld>>>();
+    let physics_world = physics_world.lock().expect("Deadlock!");
+
+    physics_world.get_collisions_for_player(player_id)
 }
 
 #[op2]
@@ -126,6 +144,8 @@ extension!(
         anchor_entity,
         detach_entity,
         interact_entity,
+        get_collisions_for_entity,
+        get_collisions_for_player,
     ],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],

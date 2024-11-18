@@ -36,4 +36,10 @@ globalThis.hy = {
   interactEntity: (entityId, playerId, position, facingAngle) => {
     return core.ops.interact_entity(entityId, playerId, position, facingAngle);
   },
+  getCollisionsForEntity: (entityId) => {
+    return core.ops.get_collisions_for_entity(entityId);
+  },
+  getCollisionsForPlayer: (playerId) => {
+    return core.ops.get_collisions_for_player(playerId);
+  },
 };

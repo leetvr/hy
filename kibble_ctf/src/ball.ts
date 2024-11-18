@@ -13,5 +13,6 @@ export const update: EntityUpdate = (
   ) {
     hy.despawnEntity(id);
   }
+
   return entityState;
 };

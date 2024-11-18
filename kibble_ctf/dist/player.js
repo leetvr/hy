@@ -2,7 +2,7 @@ const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 5.0; // Movement speed (units per second)
 const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
-export const update = (playerID, currentState, controls, collisions) => {
+export const update = (playerID, currentState, controls) => {
     const { position, velocity, animationState, isOnGround: wasOnGround } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
@@ -12,6 +12,13 @@ export const update = (playerID, currentState, controls, collisions) => {
         hy.anchorEntity(gun, playerID, "hand_right_anchor");
         hy.interactEntity(gun, playerID, position, controls.camera_yaw);
     }
+    const collisions = hy.getCollisionsForPlayer(playerID);
+    console.log(collisions);
+    collisions.forEach((collision) => {
+        if (collision.collisionKind == "Contact" && collision.collisionTarget == "Entity") {
+            console.log("Hit by a ball!");
+        }
+    });
     // Handle horizontal movement
     const inputX = controls.move_direction[0];
     const inputZ = controls.move_direction[1];
