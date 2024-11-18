@@ -85,6 +85,7 @@ impl EntityType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Anchor {
     pub player_id: PlayerId,
     pub parent_anchor: String,

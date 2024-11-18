@@ -3,9 +3,8 @@ import type { EntityState, EntityUpdate, Vec3, Interaction } from "../lib/hy";
 export const update: EntityUpdate = (
   id: string,
   currentState: EntityState,
-  interactions: Interaction[],
 ): EntityState => {
-  interactions.forEach(moreBalls);
+  currentState.interactions.forEach(moreBalls);
 
   // Look, custom state!
   let currentCount = currentState.customState.counter;

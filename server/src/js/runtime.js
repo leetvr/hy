@@ -18,6 +18,9 @@ globalThis.hy = {
   getEntities: () => {
     return core.ops.get_entities();
   },
+  getEntityData: (entityId) => {
+    return core.ops.get_entity_data(entityId);
+  },
   spawnEntity: (entityTypeId, position, rotation, velocity) => {
     return core.ops.spawn_entity(entityTypeId, position, rotation, velocity);
   },

@@ -5,7 +5,7 @@ export const onSpawn = (entityData) => {
     }
     return entityData;
 };
-export const update = (id, currentState, interactions) => {
+export const update = (id, currentState) => {
     const [lastX, lastY, lastZ] = currentState.position;
     const [velX, velY, velZ] = currentState.velocity;
     const nextPosition = [lastX + velX * DT, lastY + velY * DT, lastZ + velZ * DT];

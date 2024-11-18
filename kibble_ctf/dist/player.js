@@ -3,9 +3,9 @@ const MOVE_SPEED = 5.0; // Movement speed (units per second)
 const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 export const update = (playerID, currentState, controls) => {
-    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
-    // It's just a quick way to pass data to the script. It should have a better API.
+    // It's just a quick way to pass data to the script.
+    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
@@ -17,18 +17,36 @@ export const update = (playerID, currentState, controls) => {
             hy.anchorEntity(gun, playerID, "hand_right_anchor");
             handItems = [gun];
         }
-        console.log("Firing gun!", handItems);
         handItems.forEach((item) => {
             hy.interactEntity(item, playerID, position, controls.camera_yaw);
         });
     }
     const collisions = hy.getCollisionsForPlayer(playerID);
     collisions.forEach((collision) => {
-        if (collision.collisionKind == "contact" && collision.collisionTarget == "entity") {
-            hy.despawnEntity(collision.targetId);
-        }
-        if (collision.collisionKind == "intersection" && collision.collisionTarget == "entity") {
-            console.log("Walked through a ball!");
+        if (collision.collisionTarget == "entity") {
+            let entityData = hy.getEntityData(collision.targetId);
+            if (entityData != undefined) {
+                const GUN_TYPE = 1;
+                const BULLET_TYPE = 2;
+                const BLUE_FLAG_TYPE = 3;
+                const RED_FLAG_TYPE = 4;
+                if (entityData.entity_type == GUN_TYPE) {
+                    // Pick up gun if there's nothing in the right hand
+                    if (!attachedEntities["hand_right_anchor"]) {
+                        hy.anchorEntity(collision.targetId, playerID, "hand_right_anchor");
+                    }
+                }
+                if (entityData.entity_type == BULLET_TYPE) {
+                    // Destroy bullet
+                    hy.despawnEntity(collision.targetId);
+                }
+                if (entityData.entity_type == BLUE_FLAG_TYPE || entityData.entity_type == RED_FLAG_TYPE) {
+                    // Capture the flag
+                    if (!attachedEntities["hand_left_anchor"]) {
+                        hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+                    }
+                }
+            }
         }
     });
     // Handle horizontal movement
@@ -68,6 +86,9 @@ export const update = (playerID, currentState, controls) => {
     newVelocity[2] = correctedMovement[2];
     if (isOnGround && controls.jump) {
         newVelocity[1] = JUMP_SPEED;
+        if (attachedEntities["hand_left_anchor"]) {
+            hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+        }
     }
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;
