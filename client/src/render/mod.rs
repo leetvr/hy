@@ -199,14 +199,15 @@ impl Renderer {
 
             blend_state.set(&self.gl, false);
 
-            self.render_pass(
-                &self.shadow_program,
-                draw_calls,
-                None,
-                shadow_from_world,
-                None,
-                light_direction,
-            );
+            // TODO:
+            // self.render_pass(
+            //     &self.shadow_program,
+            //     draw_calls,
+            //     None,
+            //     shadow_from_world,
+            //     None,
+            //     light_direction,
+            // );
 
             // --------------------
             // --- Forward Pass ---
@@ -958,8 +959,6 @@ pub fn compute_shadow_bounding_box(direction: Vec3, grid_size: UVec3) -> Mat4 {
 
     let center = grid_size.as_vec3() * 0.5;
     let size = Vec3::splat(grid_size.as_vec3().max_element() * 1.5);
-
-    tracing::info!("Center: {:?}, Size: {:?}", center, size);
 
     let projection_matrix = Mat4::orthographic_rh_gl(
         -size.x / 2.0,

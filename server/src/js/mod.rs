@@ -38,7 +38,8 @@ pub struct JSContext {
     runtime: deno_core::JsRuntime,
     // Safe to hold onto as long as the runtime is alive (probably)
     player_module_namespace: v8::Global<v8::Object>,
-    entity_module_namespaces: Vec<v8::Global<v8::Object>>,
+    entity_module_namespaces: HashMap<String, v8::Global<v8::Object>>, // indexed by path
+    entity_module_paths: Vec<String>,                                  // indexed by entity type ID
     world: Arc<Mutex<World>>,
 }
 
@@ -67,7 +68,8 @@ impl JSContext {
         // Load the player module
         let player_module_namespace = get_module_namespace(player_script, &mut runtime).await?;
 
-        let mut entity_module_namespaces = Vec::new();
+        let mut entity_module_namespaces = HashMap::new();
+        let mut entity_module_paths = Vec::new();
 
         // Load entity scripts
         // PARANOIA: Ensure we load the entity types in the correct order
@@ -75,16 +77,23 @@ impl JSContext {
         entity_types.sort_by_key(|et| et.id());
 
         for entity_type in entity_type_registry.entity_types().iter() {
-            let module_namespace =
-                get_module_namespace(script_root.join(&entity_type.script_path()), &mut runtime)
-                    .await?;
-            entity_module_namespaces.push(module_namespace);
+            let path = entity_type.script_path();
+
+            // IMPORTANT: Deno will get very mad if we load the same module twice.
+            if !entity_module_namespaces.contains_key(path) {
+                let module_namespace =
+                    get_module_namespace(script_root.join(path), &mut runtime).await?;
+                entity_module_namespaces.insert(path.to_string(), module_namespace);
+            }
+
+            entity_module_paths.push(path.to_string());
         }
 
         Ok(Self {
             runtime,
             player_module_namespace,
             entity_module_namespaces,
+            entity_module_paths,
             world,
         })
     }
@@ -127,7 +136,8 @@ impl JSContext {
         entity_type_id: EntityTypeID,
     ) -> anyhow::Result<()> {
         let scope = &mut self.runtime.handle_scope();
-        let module_namespace = &self.entity_module_namespaces[entity_type_id as usize];
+        let module_path = &self.entity_module_paths[entity_type_id as usize];
+        let module_namespace = &self.entity_module_namespaces[module_path];
         let module_namespace = module_namespace.open(scope);
 
         // Get the update function
@@ -198,7 +208,8 @@ impl JSContext {
     pub(crate) fn spawn_entity(&mut self, entity_data: &mut EntityData) {
         // Load the module for this entity type
         let scope = &mut self.runtime.handle_scope();
-        let module_namespace = &self.entity_module_namespaces[entity_data.entity_type as usize];
+        let module_path = &self.entity_module_paths[entity_data.entity_type as usize];
+        let module_namespace = &self.entity_module_namespaces[module_path];
         let module_namespace = module_namespace.open(scope);
 
         // Check whether this entity type has an onSpawn function

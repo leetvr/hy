@@ -80,6 +80,7 @@ impl World {
                     self.entities.insert(entity_id, entity_data);
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
+                    tracing::debug!("Despawning entity {entity_id}");
                     despawn_entity(&entity_id, physics_world.clone());
                     self.entities.remove(&entity_id);
                 }
