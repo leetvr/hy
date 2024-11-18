@@ -92,6 +92,10 @@ type WorldInit = (
   worldState: CustomState,
 ) => CustomState;
 
+type WorldUpdate = (
+  worldState: CustomState,
+) => CustomState;
+
 /**
  * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
  *
@@ -110,7 +114,7 @@ type EntityUpdate = (
 export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
-  getEntities: () => { [key: EntityId]: EntityState };
+  getEntities: () => { [key: EntityId]: EntityData };
   getEntityData: (entityId: EntityId) => EntityData;
   spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => EntityId;
   despawnEntity: (entityId: EntityId) => void;
