@@ -54,8 +54,14 @@ pub fn connect_to_server(
                     .unwrap();
                 let array = Uint8Array::new(&array_buffer);
                 let data = array.to_vec();
+
+                // Bincode is currently broken, fall back to json for now.
+                // See: https://github.com/leetvr/hy/issues/189
+                // let packet: net_types::ServerPacket =
+                //     bincode::deserialize(&data).expect("Failed to deserialize server packet");
                 let packet: net_types::ServerPacket =
-                    bincode::deserialize(&data).expect("Failed to deserialize server packet");
+                    serde_json::de::from_slice(&data).expect("Failed to deserialize server packet");
+
                 incoming_messages
                     .borrow_mut()
                     .insert(sequence_number, packet);

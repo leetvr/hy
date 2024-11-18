@@ -4,6 +4,7 @@ use {
     crossbeam::queue::SegQueue,
     entities::{Anchor, EntityID, PlayerId},
     futures_util::{SinkExt, StreamExt},
+    net_types::ClientPacket,
     std::{collections::HashMap, ops::Add, sync::Arc},
     tokio::{
         net::TcpListener,
@@ -74,16 +75,22 @@ pub async fn start_client_listener(
                             };
 
                             // Deserialize the message and pass it to the client's incoming channel
-                            let client_packet = match message {
-                                Ok(v) => match bincode::deserialize::<net_types::ClientPacket>(&v.into_data()) {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        tracing::warn!("Error deserializing controls: {}", e);
-                                        break;
-                                    }
-                                },
+                            let message = match message {
+                                Ok(message) => message,
                                 Err(e) => {
                                     tracing::warn!("Error receiving message: {}", e);
+                                    break;
+                                }
+                            };
+
+                            // Bincode is currently broken, fall back to json for now.
+                            // See: https://github.com/leetvr/hy/issues/189
+                            let client_packet: ClientPacket = match serde_json::de::from_slice(
+                                &message.into_data(),
+                            ) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    tracing::warn!("Error deserializing controls: {}", e);
                                     break;
                                 }
                             };
@@ -97,9 +104,12 @@ pub async fn start_client_listener(
                                 break;
                             };
 
-
+                            // Bincode is currently broken, fall back to json for now.
+                            // See: https://github.com/leetvr/hy/issues/189
+                            // let message =
+                            //     bincode::serialize(&message).unwrap();
                             let message =
-                                bincode::serialize(&message).unwrap();
+                                serde_json::ser::to_vec(&message).unwrap();
                             if let Err(e) = write.send(Message::Binary(message)).await {
                                 tracing::info!("Error sending message: {}", e);
                                 break;

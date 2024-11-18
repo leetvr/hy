@@ -512,7 +512,10 @@ impl Engine {
     }
 
     fn send_packet(&mut self, packet: ClientPacket) {
-        let message = bincode::serialize(&packet).unwrap();
+        // Bincode is currently broken, fall back to json for now.
+        // See: https://github.com/leetvr/hy/issues/189
+        // let message = bincode::serialize(&packet).unwrap();
+        let message = serde_json::ser::to_vec(&packet).unwrap();
         self.ws
             .send_with_u8_array(&message)
             .expect("Failed to send controls");
