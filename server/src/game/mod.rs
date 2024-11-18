@@ -84,7 +84,9 @@ impl GameServer {
         while let Some(channels) = self.incoming_connections.pop() {
             match &mut self.state {
                 ServerState::Playing(instance) | ServerState::Paused(instance) => {
-                    instance.handle_new_client(channels).await
+                    instance
+                        .handle_new_client(&mut self.js_context, channels)
+                        .await
                 }
                 _ => {}
             }
@@ -196,12 +198,12 @@ impl ServerState {
             }
             // Editing -> Playing
             (ServerState::Editing(editor_instance), NextServerState::Playing) => {
-                let instance = GameInstance::from_transition(editor_instance).await;
+                let instance = GameInstance::from_transition(js_context, editor_instance).await;
                 *self = ServerState::Playing(instance);
             }
             // Editing -> Paused
             (ServerState::Editing(editor_instance), NextServerState::Paused) => {
-                let instance = GameInstance::from_transition(editor_instance).await;
+                let instance = GameInstance::from_transition(js_context, editor_instance).await;
                 *self = ServerState::Paused(instance);
             }
             // Invalid transition

@@ -1,5 +1,6 @@
 use {
     crate::game::network::KnownEntityState,
+    anyhow::Result,
     entities::{Anchor, PlayerId},
     std::{
         mem,
@@ -73,7 +74,10 @@ impl GameInstance {
         }
     }
 
-    pub async fn from_transition(editor_instance: EditorInstance) -> Self {
+    pub async fn from_transition(
+        js_context: &mut JSContext,
+        editor_instance: EditorInstance,
+    ) -> Self {
         let EditorInstance {
             world,
             mut editor_client,
@@ -97,15 +101,25 @@ impl GameInstance {
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
         {
-            let mut physics_world = physics_world.lock().expect("Deadlock");
-            game_instance.players.insert(
+            let player = match spawn_player(
                 new_player_id,
-                Player::new(
-                    new_player_id,
-                    &mut physics_world,
-                    game_instance.player_spawn_point,
-                ),
-            );
+                game_instance.player_spawn_point,
+                js_context,
+                &physics_world,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error spawning player: {:?}\n", e);
+                    tracing::warn!("Spawning default player");
+                    // make a new player without calling any spawn script
+                    Player::new(
+                        new_player_id,
+                        &mut physics_world.lock().expect("Deadlock"),
+                        game_instance.player_spawn_point,
+                    )
+                }
+            };
+            game_instance.players.insert(new_player_id, player);
         }
 
         // Set the player ID on the editor client
@@ -229,16 +243,26 @@ impl GameInstance {
 
     pub async fn handle_new_client(
         &mut self,
+        js_context: &mut JSContext,
         (incoming_rx, outgoing_tx): (ClientMessageReceiver, ServerMessageSender),
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
         {
-            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
-            self.players.insert(
+            let player = match spawn_player(
                 player_id,
-                Player::new(player_id, &mut physics_world, self.player_spawn_point),
-            );
+                self.player_spawn_point,
+                js_context,
+                &self.physics_world,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error spawning player: {:?}", e);
+                    // Drop player connection
+                    return;
+                }
+            };
+            self.players.insert(player_id, player);
         }
 
         let client_id = self.next_client_id;
@@ -531,6 +555,20 @@ async fn sync_entities_to_client(
             *known_position = entity.state.position.clone();
         }
     }
+}
+
+pub fn spawn_player(
+    id: PlayerId,
+    position: glam::Vec3,
+    js_context: &mut JSContext,
+    physics_world: &Arc<Mutex<PhysicsWorld>>,
+) -> Result<Player> {
+    let mut physics_world = physics_world.lock().expect("Deadlock!");
+    let mut player = Player::new(id, &mut physics_world, position);
+    // Call the entity's onSpawn function, if it has one
+    let spawn_state = js_context.get_player_spawn_state(id, &player.state)?;
+    player.state = spawn_state;
+    Ok(player)
 }
 
 /// Rebuilds the terrain colliders from the block grid

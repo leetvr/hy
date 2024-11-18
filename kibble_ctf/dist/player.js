@@ -2,6 +2,12 @@ const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
 const MOVE_SPEED = 5.0; // Movement speed (units per second)
 const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
+export const onSpawn = (playerID, currentState) => {
+    // Give this man a gun
+    let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
+    hy.anchorEntity(gun, playerID, "hand_right_anchor");
+    return currentState;
+};
 export const update = (playerID, currentState, controls) => {
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
     // It's just a quick way to pass data to the script.
@@ -11,15 +17,11 @@ export const update = (playerID, currentState, controls) => {
     let newAnimationState = animationState;
     if (controls.fire) {
         let handItems = attachedEntities["hand_right_anchor"];
-        let gun;
-        if (handItems == undefined || handItems.length == 0) {
-            gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
-            hy.anchorEntity(gun, playerID, "hand_right_anchor");
-            handItems = [gun];
+        if (handItems != undefined) {
+            handItems.forEach((item) => {
+                hy.interactEntity(item, playerID, position, controls.camera_yaw);
+            });
         }
-        handItems.forEach((item) => {
-            hy.interactEntity(item, playerID, position, controls.camera_yaw);
-        });
     }
     const collisions = hy.getCollisionsForPlayer(playerID);
     collisions.forEach((collision) => {
