@@ -18,11 +18,15 @@ export default function EntityTypeList({ entityTypeRegistry, setEngineEntityInde
     return <div className="entity-button-container">
         {entityTypes.map((entityType: EntityType) => {
             let isOn = entityType.id == selectedEntityIndex;
+            // TODO: at some point these should be real icons
+            let imageUrl = "/client/ui/public/entity-generic-flag.png";
             return (
                 <button
                     className={"entity-button " + (isOn ? "button-on" : "")}
                     onClick={(_) => { setSelectedEntityType(entityType.id); }}
-                >{entityType.name}</button>
+                >
+                    <img src={imageUrl} alt="" width="32" height="32" />{entityType.name}
+                </button>
             );
         })}
     </div>;
