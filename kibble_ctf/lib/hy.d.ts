@@ -96,8 +96,8 @@ interface CollisionResult {
 }
 
 interface Collision {
-  readonly collisionKind: "Contact" | "Intersection";
-  readonly collisionTarget: "Block" | "Entity" | "Player";
+  readonly collisionKind: "contact" | "intersection";
+  readonly collisionTarget: "block" | "entity" | "player";
   /**
   The ID of the thing this entity collided with  */
   readonly targetId: string;

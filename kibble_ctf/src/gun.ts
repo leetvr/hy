@@ -15,15 +15,12 @@ const moreBalls = (interaction: Interaction) => {
 
   // If the angle is wrong, don't find out why, just bash it into place
   let angle = interaction.facingAngle - Math.PI / 2;
+
+  const initialVelocity: Vec3 = [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed];
   const initialPosition: Vec3 = [
-    interaction.position[0] + 0.2,
+    interaction.position[0] + -Math.cos(angle),
     interaction.position[1],
-    interaction.position[2] + 0.2,
+    interaction.position[2] + Math.sin(angle),
   ];
-  hy.spawnEntity(
-    2,
-    initialPosition,
-    [0, 0, 0],
-    [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed],
-  );
+  hy.spawnEntity(2, initialPosition, [0, 0, 0], initialVelocity);
 };

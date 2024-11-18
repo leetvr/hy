@@ -22,11 +22,14 @@ export const update: PlayerUpdate = (
   }
 
   const collisions = hy.getCollisionsForPlayer(playerID);
-  console.log(collisions);
 
   collisions.forEach((collision) => {
-    if (collision.collisionKind == "Contact" && collision.collisionTarget == "Entity") {
-      console.log("Hit by a ball!");
+    if (collision.collisionKind == "contact" && collision.collisionTarget == "entity") {
+      hy.despawnEntity(collision.targetId);
+    }
+
+    if (collision.collisionKind == "intersection" && collision.collisionTarget == "entity") {
+      console.log("Walked through a ball!");
     }
   });
 

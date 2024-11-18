@@ -9,11 +9,11 @@ use rapier3d::{
     parry::query::ShapeCastOptions,
     pipeline::QueryFilter,
     prelude::{
-        CCDSolver, Collider, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
-        DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
-        ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-        PhysicsPipeline, QueryPipeline, Real, RigidBody, RigidBodyBuilder, RigidBodySet,
-        RigidBodyType,
+        ActiveCollisionTypes, CCDSolver, Collider, ColliderBuilder, ColliderHandle, ColliderSet,
+        DebugRenderBackend, DebugRenderMode, DebugRenderObject, DebugRenderPipeline,
+        DefaultBroadPhase, ImpulseJointSet, IntegrationParameters, IslandManager,
+        MultibodyJointSet, NarrowPhase, PhysicsPipeline, QueryPipeline, Real, RigidBody,
+        RigidBodyBuilder, RigidBodySet, RigidBodyType,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -189,8 +189,9 @@ impl PhysicsWorld {
         let half_height = player_height / 2.0;
         tracing::debug!("Creating player with half height of {half_height} and radius {radius}");
         let collider = ColliderBuilder::capsule_y(half_height - radius, radius)
-            .collision_groups(InteractionGroups::new(PLAYER_GROUP, BLOCK_GROUP))
+            .collision_groups(InteractionGroups::new(PLAYER_GROUP, Group::all()))
             .position(vector![0.0, half_height, 0.0].into())
+            .active_collision_types(ActiveCollisionTypes::all())
             .build();
         let handle = self.bodies.insert(rigid_body);
         self.colliders
@@ -508,7 +509,12 @@ impl PhysicsWorld {
     fn get_collisions_for_collider(&self, collider: ColliderHandle) -> Vec<Collision> {
         let mut collisions = Vec::new();
 
+        // Check for contacts
         for contact_pair in self.narrow_phase.contact_pairs_with(collider) {
+            if !contact_pair.has_any_active_contact {
+                continue;
+            }
+
             // You should see the other guy!
             let other_collider_handle = if contact_pair.collider1 == collider {
                 contact_pair.collider2
@@ -516,7 +522,14 @@ impl PhysicsWorld {
                 contact_pair.collider1
             };
 
-            let other_collider = &self.colliders[other_collider_handle];
+            let Some(other_collider) = self.colliders.get(other_collider_handle) else {
+                // NOTE(kmrw)
+                // This can happen. It seems like Rapier doesn't remove colliders fully until the
+                // next step, so if we collide with an entity that was despawned last frame, it
+                // won't be in the collider list.
+                continue;
+            };
+
             let Some(collision_target) = get_entity_collision_target(other_collider) else {
                 continue;
             };
@@ -525,6 +538,41 @@ impl PhysicsWorld {
 
             collisions.push(Collision {
                 collision_kind: CollisionKind::Contact,
+                collision_target,
+                target_id,
+            });
+        }
+
+        // Check for intersections
+        for (collider1, collider2, intersected) in
+            self.narrow_phase.intersection_pairs_with(collider)
+        {
+            if !intersected {
+                continue;
+            }
+
+            let other_collider_handle = if collider1 == collider {
+                collider2
+            } else {
+                collider1
+            };
+
+            let Some(other_collider) = self.colliders.get(other_collider_handle) else {
+                // NOTE(kmrw)
+                // This can happen. It seems like Rapier doesn't remove colliders fully until the
+                // next step, so if we collide with an entity that was despawned last frame, it
+                // won't be in the collider list.
+                continue;
+            };
+
+            let Some(collision_target) = get_entity_collision_target(other_collider) else {
+                continue;
+            };
+
+            let target_id = other_collider.user_data.to_string();
+
+            collisions.push(Collision {
+                collision_kind: CollisionKind::Intersection,
                 collision_target,
                 target_id,
             });
@@ -595,25 +643,26 @@ fn build_collider_for_entity(
 
     let half_height = collider_height / 2.0;
     let half_width = collider_width / 2.0;
-    let mut collider = match collider_kind {
+    let builder = match collider_kind {
         entities::EntityColliderKind::Capsule => {
-            ColliderBuilder::capsule_y(half_height, half_width).build()
+            ColliderBuilder::capsule_y(half_height, half_width)
         }
         entities::EntityColliderKind::Cube => {
-            ColliderBuilder::cuboid(half_width, half_width, half_width).build()
+            ColliderBuilder::cuboid(half_width, half_width, half_width)
         }
-        entities::EntityColliderKind::Ball => ColliderBuilder::ball(half_height).build(),
+        entities::EntityColliderKind::Ball => ColliderBuilder::ball(half_height),
     };
 
     let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
-    collider.set_collision_groups(InteractionGroups::new(
-        ENTITY_GROUP,
-        BLOCK_GROUP | PLAYER_GROUP | ENTITY_GROUP,
-    ));
-    collider.user_data = entity_id;
-    collider.set_position(vector![0., half_height, 0.].into());
-
-    collider
+    builder
+        .active_collision_types(ActiveCollisionTypes::all())
+        .collision_groups(InteractionGroups::new(
+            ENTITY_GROUP,
+            BLOCK_GROUP | PLAYER_GROUP | ENTITY_GROUP,
+        ))
+        .user_data(entity_id)
+        .position(vector![0., half_height, 0.].into())
+        .build()
 }
 
 fn check_movement_for_collisions(
@@ -651,7 +700,12 @@ fn check_movement_for_collisions(
             &displacement,
             character_shape,
             shape_cast_options,
-            QueryFilter::default().exclude_collider(player_collider_handle),
+            QueryFilter::default()
+                .groups(InteractionGroups::new(
+                    PLAYER_GROUP,
+                    BLOCK_GROUP | PLAYER_GROUP,
+                ))
+                .exclude_collider(player_collider_handle),
         ) {
             would_have_collided = true;
             let toi = hit.time_of_impact;
