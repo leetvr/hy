@@ -78,6 +78,12 @@ type OnPlayerSpawn = (
   currentState: PlayerState,
 ) => PlayerState;
 
+type OnAddPlayer = (
+  worldState: CustomState,
+  playerID: number,
+  currentState: PlayerState,
+) => PlayerState;
+
 /**
  * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
  *

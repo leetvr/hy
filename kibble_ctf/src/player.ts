@@ -10,10 +10,6 @@ export const onSpawn: OnPlayerSpawn = (
   currentState: PlayerState,
 ): PlayerState => {
 
-  // Give this man a gun
-  let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
-  hy.anchorEntity(gun, playerID, "hand_right_anchor");
-
   return currentState;
 }
 
