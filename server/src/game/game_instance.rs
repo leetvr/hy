@@ -176,6 +176,11 @@ impl GameInstance {
     }
 
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
+        // World script update
+        if let Err(err) = js_context.run_world_update(&mut self.custom_world_state) {
+            tracing::error!("Error running scripted world update: {err:#}");
+        }
+
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
 
