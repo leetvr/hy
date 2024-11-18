@@ -762,7 +762,6 @@ fn check_movement_for_collisions(
     ) {
         // OH BABY WE'RE ON THE GROUND
         is_on_ground = true;
-        corrected_velocity.y = 0.;
         tracing::trace!("Aha!! We are on the ground");
     }
 
