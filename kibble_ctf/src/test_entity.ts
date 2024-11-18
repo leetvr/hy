@@ -7,7 +7,6 @@ import type {
   EntityData,
 } from "../lib/hy";
 
-const ENTITY_SPEED = 15;
 const DT = 0.01666667;
 
 export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {

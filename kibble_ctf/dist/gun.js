@@ -1,5 +1,15 @@
 export const update = (id, currentState, interactions) => {
     interactions.forEach(moreBalls);
+    // Look, custom state!
+    console.log(currentState);
+    let currentCount = currentState.customState.counter;
+    if (typeof currentCount !== "number") {
+        currentCount = 0;
+    }
+    else {
+        console.log("entity currentCount", currentCount);
+    }
+    currentState.customState.counter = currentCount + 1;
     return currentState;
 };
 // BALLS

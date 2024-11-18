@@ -10,7 +10,7 @@ export const update: PlayerUpdate = (
   currentState: PlayerState,
   controls: PlayerControls,
 ): PlayerState => {
-  const { position, velocity, animationState, isOnGround: wasOnGround } = currentState;
+  const { position, velocity, animationState, isOnGround: wasOnGround, customState } = currentState;
   let newPosition: Vec3 = [...position];
   let newVelocity: Vec3 = [...velocity];
   let newAnimationState: string = animationState;
@@ -89,10 +89,19 @@ export const update: PlayerUpdate = (
   newPosition[1] += newVelocity[1] * DT;
   newPosition[2] += newVelocity[2] * DT;
 
+  // Look, custom state!
+  let currentCount = customState.counter;
+  if (typeof currentCount !== "number") {
+    currentCount = 0;
+  }
+
+  customState.counter = currentCount + 1;
+
   return {
     position: newPosition,
     velocity: newVelocity,
     animationState: newAnimationState,
     isOnGround,
+    customState,
   };
 };

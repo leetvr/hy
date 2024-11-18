@@ -1,4 +1,3 @@
-const ENTITY_SPEED = 15;
 const DT = 0.01666667;
 export const onSpawn = (entityData) => {
     if (Math.random() > 0.5) {
