@@ -20,6 +20,8 @@ use std::collections::HashMap;
 
 const TERRAIN_GROUP: Group = Group::GROUP_1;
 const PLAYER_GROUP: Group = Group::GROUP_2;
+const ENTITY_GROUP: Group = Group::GROUP_3;
+
 pub const TICK_RATE: u32 = 60;
 pub const TICK_DT: f32 = 1. / TICK_RATE as f32;
 
@@ -405,6 +407,10 @@ impl PhysicsWorld {
 
         // If this entity has no physics properties, then there's nothing to do
         let Some(physics_properties) = physics_properties else {
+            tracing::debug!(
+                "Entity {} has no physics properties, doing nothing",
+                &entity_data.id
+            );
             return;
         };
 
@@ -476,6 +482,8 @@ fn build_rigid_body_for_entity(
         .linvel(glam_to_na(state.velocity))
         .position(glam_to_na(state.position).into());
 
+    tracing::debug!("Built rigid body for {id} with properties {physics_properties:?}");
+
     // TODO: Add more properties
     builder.build()
 }
@@ -505,7 +513,7 @@ fn build_collider_for_entity(
 
     let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
     collider.user_data = entity_id;
-    collider.set_translation_wrt_parent(vector![0., half_height, 0.]);
+    collider.set_position(vector![0., half_height, 0.].into());
 
     collider
 }
