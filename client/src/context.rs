@@ -103,6 +103,7 @@ impl Engine {
             entity_type: entity_type_id,
             model_path: entity_type.default_model_path().into(),
             state: EntityState::default(),
+            physics_properties: None,
         });
     }
 }

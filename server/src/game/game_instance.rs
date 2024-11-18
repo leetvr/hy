@@ -25,7 +25,7 @@ use crate::js::JSContext;
 use super::{
     editor_instance::EditorInstance,
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
-    world::World,
+    world::{self, World},
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
@@ -210,7 +210,7 @@ impl GameInstance {
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
-        world.apply_queued_updates(js_context);
+        world.apply_queued_updates(js_context, self.physics_world.clone());
 
         maybe_next_state
     }
@@ -323,7 +323,7 @@ impl GameInstance {
     pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
         let mut world = self.world.lock().expect("Deadlock!");
         for entity_data in world.entities.values_mut() {
-            js_context.spawn_entity(entity_data);
+            world::spawn_entity(entity_data, js_context, self.physics_world.clone());
         }
     }
 

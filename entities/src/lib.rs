@@ -30,6 +30,23 @@ pub struct EntityData {
     pub entity_type: EntityTypeID,
     pub model_path: String,
     pub state: EntityState,
+    pub physics_properties: Option<EntityPhysicsProperties>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EntityPhysicsProperties {
+    pub collider_kind: EntityColliderKind,
+    pub collider_height: f32,
+    pub collider_width: f32,
+    pub dynamic: bool,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub enum EntityColliderKind {
+    #[default]
+    Capsule,
+    Cube,
+    Ball,
 }
 
 #[wasm_bindgen]

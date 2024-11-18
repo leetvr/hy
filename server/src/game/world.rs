@@ -3,9 +3,11 @@ use {
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
     entities::{Anchor, EntityData, EntityTypeRegistry, Interaction, PlayerId},
+    physics::PhysicsWorld,
     std::{
         collections::HashMap,
         path::{Path, PathBuf},
+        sync::{Arc, Mutex},
     },
 };
 
@@ -61,12 +63,15 @@ impl World {
         });
     }
 
-    pub fn apply_queued_updates(&mut self, js_context: &mut JSContext) {
+    pub fn apply_queued_updates(
+        &mut self,
+        js_context: &mut JSContext,
+        physics_world: Arc<Mutex<PhysicsWorld>>,
+    ) {
         for command in self.command_queue.drain(..) {
             match command {
                 WorldCommand::SpawnEntity(entity_id, mut entity_data) => {
-                    // Call the entity's spawn function, if one exists
-                    js_context.spawn_entity(&mut entity_data);
+                    spawn_entity(&mut entity_data, js_context, physics_world.clone());
                     self.entities.insert(entity_id, entity_data);
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
@@ -141,6 +146,19 @@ impl World {
         std::fs::write(entities_path, entities)?;
         Ok(())
     }
+}
+
+pub fn spawn_entity(
+    entity_data: &mut EntityData,
+    js_context: &mut JSContext,
+    physics_world: Arc<Mutex<PhysicsWorld>>,
+) {
+    // Call the entity's onSpawn function, if it has one
+    js_context.spawn_entity(entity_data);
+    physics_world
+        .lock()
+        .expect("Deadlock!")
+        .spawn_entity(entity_data);
 }
 
 enum WorldCommand {

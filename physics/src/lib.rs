@@ -1,3 +1,4 @@
+use entities::{EntityData, EntityPhysicsProperties};
 use glam::Vec3Swizzles;
 use nalgebra::{point, vector, Vector3};
 use rapier3d::{
@@ -7,7 +8,7 @@ use rapier3d::{
     parry::query::ShapeCastOptions,
     pipeline::QueryFilter,
     prelude::{
-        CCDSolver, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
+        CCDSolver, Collider, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
         DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
         ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
         PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
@@ -342,6 +343,51 @@ impl PhysicsWorld {
         lines.append(&mut self.debug_lines);
 
         lines
+    }
+
+    pub fn spawn_entity(&mut self, entity_data: &EntityData) {
+        let Some(physics_properties) = &entity_data.physics_properties else {
+            return;
+        };
+
+        let collider = get_collider_for_entity(&entity_data.id, physics_properties);
+
+        // If this entity isn't dynamic, then we just stash away the collider and go about our day
+        if !physics_properties.dynamic {
+            self.colliders.insert(collider);
+            return;
+        }
+    }
+}
+
+fn get_collider_for_entity(
+    id: &str,
+    physics_properties: &entities::EntityPhysicsProperties,
+) -> Collider {
+    let EntityPhysicsProperties {
+        collider_kind,
+        collider_height,
+        collider_width,
+        ..
+    } = physics_properties;
+
+    let half_height = collider_height / 2.0;
+    let half_width = collider_width / 2.0;
+    let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
+    match collider_kind {
+        entities::EntityColliderKind::Capsule => {
+            ColliderBuilder::capsule_y(half_height, half_width)
+                .user_data(entity_id)
+                .build()
+        }
+        entities::EntityColliderKind::Cube => {
+            ColliderBuilder::cuboid(half_width, half_width, half_width)
+                .user_data(entity_id)
+                .build()
+        }
+        entities::EntityColliderKind::Ball => ColliderBuilder::ball(half_height)
+            .user_data(entity_id)
+            .build(),
     }
 }
 

@@ -29,6 +29,20 @@ export interface EntityData {
   entity_type: number;
   model_path: string;
   state: EntityState;
+  physics_properties?: EntityPhysicsProperties;
+}
+
+export interface EntityPhysicsProperties {
+  collider_kind: EntityColliderKind;
+  collider_height: number;
+  collider_width: number;
+  dynamic: boolean;
+}
+
+export enum EntityColliderKind {
+  Capsule,
+  Cube,
+  Ball,
 }
 
 export interface EntityState {

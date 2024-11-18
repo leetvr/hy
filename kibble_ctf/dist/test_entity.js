@@ -2,6 +2,7 @@ const ENTITY_SPEED = 15;
 const DT = 0.01666667;
 export const onSpawn = (entityData) => {
     if (Math.random() > 0.5) {
+        console.log("Lucky!");
         return Object.assign(Object.assign({}, entityData), { model_path: "kibble_ctf/test_entity_alt.gltf" });
     }
     return entityData;
