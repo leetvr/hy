@@ -12,7 +12,7 @@ use {
     blocks::BlockPos,
     crossbeam::queue::SegQueue,
     editor_instance::EditorInstance,
-    entities::PlayerId,
+    entities::{EntityID, PlayerId},
     game_instance::GameInstance,
     network::ClientId,
     physics::PhysicsWorld,
@@ -252,6 +252,9 @@ pub struct PlayerState {
     is_on_ground: bool,
     #[serde(default)]
     pub custom_state: HashMap<String, serde_json::Value>,
+    // Map of anchor name to entity id for attached entities
+    #[serde(default)]
+    pub attached_entities: HashMap<String, Vec<EntityID>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

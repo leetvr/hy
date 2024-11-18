@@ -150,6 +150,26 @@ impl GameInstance {
         // Update players
         for client in self.clients.values_mut() {
             let player = self.players.get_mut(&client.player_id).unwrap();
+
+            // Update the list of attached entities
+            {
+                let world = self.world.lock().expect("Deadlock!");
+
+                player.state.attached_entities.clear();
+                for (entity_id, entity) in &world.entities {
+                    let Some(anchor) = &entity.state.anchor else {
+                        continue;
+                    };
+
+                    let entity_list = player
+                        .state
+                        .attached_entities
+                        .entry(anchor.parent_anchor.clone())
+                        .or_insert_with(Default::default);
+                    entity_list.push(entity_id.clone());
+                }
+            }
+
             player.state = js_context
                 .get_player_next_state(client.player_id, &player.state, &client.last_controls)
                 .await

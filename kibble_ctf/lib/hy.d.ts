@@ -8,6 +8,13 @@ type CustomState = {
   [key: string]: any;
 };
 
+type AnchorName = string;
+type EntityId = string;
+
+type AttachedEntities = {
+  [key: AnchorName]: EntityId[];
+};
+
 export interface BlockPos {
   x: number;
   y: number;
@@ -20,6 +27,7 @@ export interface PlayerState {
   animationState: string;
   isOnGround: boolean;
   customState: CustomState;
+  attachedEntities: AttachedEntities;
 }
 
 export interface PlayerControls {
@@ -42,11 +50,6 @@ export interface EntityState {
   customState: CustomState;
 }
 
-export interface PlayerCollision {
-  block: BlockPos;
-  normal: Vec3;
-  resolution: Vec3;
-}
 
 export interface Interaction {
   player: number;
@@ -54,11 +57,11 @@ export interface Interaction {
   facingAngle: number;
 }
 
+
 type PlayerUpdate = (
   playerID: number,
   currentState: PlayerState,
   controls: PlayerControls,
-  collisions: PlayerCollision[],
 ) => PlayerState;
 
 /**
@@ -81,17 +84,17 @@ export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
   getEntities: () => { [key: string]: EntityState };
-  spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => String;
-  despawnEntity: (entityId: String) => void;
+  spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => EntityId;
+  despawnEntity: (entityId: EntityId) => void;
   checkMovementForCollisions: (
     playerID: number,
     currentPosition: Vec3,
     movement: Vec3,
   ) => CollisionResult;
-  anchorEntity: (entityId: String, anchorId: number, anchorName: String) => void;
-  detachEntity: (entityId: String, position: Vec3) => void;
-  interactEntity: (entityId: String, playerId: number, position: Vec3, facingAngle: number) => void;
-  getCollisionsForEntity: (entityId: String) => Collision[];
+  anchorEntity: (entityId: EntityId, anchorId: number, anchorName: AnchorName) => void;
+  detachEntity: (entityId: EntityId, position: Vec3) => void;
+  interactEntity: (entityId: EntityId, playerId: number, position: Vec3, facingAngle: number) => void;
+  getCollisionsForEntity: (entityId: EntityId) => Collision[];
   getCollisionsForPlayer: (playerID: number) => Collision[];
 }
 
