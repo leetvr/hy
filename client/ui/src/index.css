@@ -32,8 +32,13 @@
 .mode-Edit #stop-button,
 .mode-Play #play-button,
 .mode-Pause #pause-button {
-    text-shadow: 0 0 8px #ff7538;
     background-color: #a9a9a9;
+}
+.mode-Edit #stop-button img,
+.mode-Play #play-button img,
+.mode-Pause #pause-button img {
+    text-shadow: 0 0 8px #ff7538;
+    filter: drop-shadow(0 0 8px #ff7538);
 }
 
 .editor-panel {
@@ -41,6 +46,9 @@
     border-radius: 8px;
     padding: 8px;
     box-shadow: 0 0 20px #222;
+}
+#editorcontrols .editor-panel {
+    padding: 0;
 }
 
 a {

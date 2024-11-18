@@ -11,7 +11,7 @@ export default function TopBar({ setMode }: { setMode: (mode: EngineMode) => voi
             setMode(EngineMode.Play);
           }}
         >
-          ⏵
+          <img src="/client/ui/public/icon-play.svg" width="64" height="64" alt="⏵" />
         </span>
         <span
           id="pause-button"
@@ -19,7 +19,7 @@ export default function TopBar({ setMode }: { setMode: (mode: EngineMode) => voi
             alert("not implemented");
           }}
         >
-          ⏸
+          <img src="/client/ui/public/icon-pause.svg" width="64" height="64" alt="⏸" />
         </span>
         <span
           id="stop-button"
@@ -27,7 +27,7 @@ export default function TopBar({ setMode }: { setMode: (mode: EngineMode) => voi
             setMode(EngineMode.Edit);
           }}
         >
-          ⏹
+          <img src="/client/ui/public/icon-stop.svg" width="64" height="64" alt="⏹" />
         </span>
       </div>
     </div>
