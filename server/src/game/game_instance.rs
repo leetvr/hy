@@ -1,5 +1,5 @@
 use {
-    crate::game::network::KnownEntityState,
+    crate::game::{network::KnownEntityState, world::spawn_entity},
     anyhow::Result,
     entities::{Anchor, PlayerId},
     std::{
@@ -85,7 +85,7 @@ impl GameInstance {
         } = editor_instance;
         let mut game_instance = GameInstance::new(world.clone());
 
-        // Patch up the PhysicsWorld Arc
+        // Put the fresh physics world in the old shared Arc<Mutex<PhysicsWorld>>
         {
             let mut old_physics_world = physics_world.lock().expect("Deadlock");
             let mut new_physics_world = game_instance.physics_world.lock().expect("Deadlock");
@@ -94,36 +94,53 @@ impl GameInstance {
             std::mem::swap(&mut *old_physics_world, &mut *new_physics_world);
         }
 
-        // IMPORTANT: We need the client to forget any previous world state
-        editor_client.awareness = Default::default();
+        // The old Arc is the one shared with the script context, and now contains the fresh
+        // physics world. That's the one we want to use in the game instance.
+        // The new old physics world is dropped here
+        game_instance.physics_world = physics_world;
 
-        // Create a player for the editor client
+        // Entities need to be spawned into the new physics world
+        {
+            let mut world = game_instance.world.lock().unwrap();
+            let entity_type_registry = world.entity_type_registry.clone();
+            for entity_data in world.entities.values_mut() {
+                spawn_entity(
+                    entity_data,
+                    js_context,
+                    game_instance.physics_world.clone(),
+                    &entity_type_registry,
+                );
+            }
+        }
+
+        // Create a player for the editor client and also spawn that into the new physics world
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
-        {
-            let player = match spawn_player(
-                new_player_id,
-                game_instance.player_spawn_point,
-                js_context,
-                &physics_world,
-            ) {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::error!("Error spawning player: {:?}\n", e);
-                    tracing::warn!("Spawning default player");
-                    // make a new player without calling any spawn script
-                    Player::new(
-                        new_player_id,
-                        &mut physics_world.lock().expect("Deadlock"),
-                        game_instance.player_spawn_point,
-                    )
-                }
-            };
-            game_instance.players.insert(new_player_id, player);
-        }
+        let player = match spawn_player(
+            new_player_id,
+            game_instance.player_spawn_point,
+            js_context,
+            &game_instance.physics_world,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("Error spawning player: {:?}\n", e);
+                tracing::warn!("Spawning default player");
+                // make a new player without calling any spawn script
+                Player::new(
+                    new_player_id,
+                    &mut game_instance.physics_world.lock().expect("Deadlock"),
+                    game_instance.player_spawn_point,
+                )
+            }
+        };
+        game_instance.players.insert(new_player_id, player);
 
         // Set the player ID on the editor client
         editor_client.player_id = new_player_id;
+
+        // IMPORTANT: We need the client to forget any previous world state
+        editor_client.awareness = Default::default();
 
         let client_id = game_instance.next_client_id;
         game_instance.next_client_id = game_instance.next_client_id + 1;
@@ -138,9 +155,6 @@ impl GameInstance {
                 .into(),
             )
             .await;
-
-        // Make sure that the newly created game instance points to the existing physics world Arc
-        game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
