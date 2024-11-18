@@ -115,6 +115,11 @@ a:hover {
     position: relative;
     transform-style: preserve-3d;
     transform: translateY(30px) translateX(15px) rotateY(33deg) rotateX(-45deg) translateZ(-32px);
+    transition: transform 0.2s;
+}
+.block-button:hover .block-cube-cube {
+    transform: translateY(30px) translateX(15px) rotateY(33deg) rotateX(-45deg) translateZ(-32px) scale(115%);
+    transition: transform 1.5s;
 }
 .block-button .cube-face {
     width: 32px;
