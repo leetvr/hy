@@ -1,6 +1,7 @@
 mod extensions;
 
-use net_types::Controls;
+use entities::{EntityData, EntityTypeID};
+use extensions::hy;
 use physics::PhysicsWorld;
 use std::{
     path::PathBuf,
@@ -17,11 +18,7 @@ use {
     entities::{EntityID, PlayerId},
     std::collections::HashMap,
 };
-use {
-    entities::{EntityData, EntityTypeID},
-    serde::Serialize,
-};
-use {extensions::hy, serde::Deserialize};
+use {entities::EntityState, net_types::Controls};
 
 #[op2]
 #[serde]
@@ -154,56 +151,48 @@ impl JSContext {
 
         let undefined = deno_core::v8::undefined(scope).into();
 
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        // CRIMES(ll): I don't want to deal with anchored entity positions in the script right now,
-        // so make this separate struct that only handles Vec3 positions
-        struct ScriptEntityState {
-            position: glam::Vec3,
-            velocity: glam::Vec3,
-            custom_state: HashMap<String, serde_json::Value>,
-        }
-
-        let (current_state, interactions) = {
+        let current_state = {
             let mut world = self.world.lock().expect("Deadlock!");
             let Some(entity_data) = world.entities.get_mut(entity_id) else {
                 tracing::error!("Attempted to update entity that does not exist: {entity_id}.");
                 return Ok(());
             };
 
-            let interactions = entity_data.state.interactions.drain(..).collect::<Vec<_>>();
+            let state = serde_v8::to_v8(scope, &entity_data.state).unwrap();
+            entity_data.state.interactions.clear();
 
-            let script_state = ScriptEntityState {
-                position: entity_data.state.position,
-                velocity: entity_data.state.velocity,
-                custom_state: entity_data.state.custom_state.clone(),
-            };
-            (
-                serde_v8::to_v8(scope, &script_state).unwrap(),
-                serde_v8::to_v8(scope, &interactions).unwrap(),
-            )
+            state
         };
 
         let entity_id_arg = serde_v8::to_v8(scope, entity_id).unwrap();
-        let args = [
-            entity_id_arg.into(),
-            current_state.into(),
-            interactions.into(),
-        ];
+        let args = [entity_id_arg.into(), current_state.into()];
 
         // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();
 
         // Get the entity's next state
-        let next_state: ScriptEntityState = serde_v8::from_v8(scope, result)?;
+        let next_state = serde_v8::from_v8(scope, result)?;
 
         // Update the entity
         {
             let mut world = self.world.lock().expect("Deadlock!");
             let entity = world.entities.get_mut(entity_id).unwrap();
-            entity.state.position = next_state.position;
-            entity.state.velocity = next_state.velocity;
-            entity.state.custom_state = next_state.custom_state;
+
+            let EntityState {
+                position,
+                rotation,
+                velocity,
+                custom_state,
+
+                // Not mutable from JS
+                anchor: _,
+                interactions: _,
+            } = next_state;
+
+            entity.state.position = position;
+            entity.state.rotation = rotation;
+            entity.state.velocity = velocity;
+            entity.state.custom_state = custom_state;
         }
 
         Ok(())

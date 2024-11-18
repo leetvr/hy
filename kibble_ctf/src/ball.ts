@@ -3,7 +3,6 @@ import { EntityState, EntityUpdate, Interaction } from "../lib/hy";
 export const update: EntityUpdate = (
   id: string,
   entityState: EntityState,
-  interactions: Interaction[],
 ): EntityState => {
   // If we've travelled a long way, it's time to say goodbye
   if (

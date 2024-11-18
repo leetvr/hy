@@ -3,6 +3,7 @@
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
+export type Quat = [number, number, number, number];
 
 type CustomState = {
   [key: string]: any;
@@ -44,9 +45,17 @@ export interface EntityData {
   state: EntityState;
 }
 
+export interface Anchor {
+  playerId: number;
+  parentAnchor: AnchorName;
+}
+
 export interface EntityState {
   position: Vec3;
   velocity: Vec3;
+  rotation: Quat;
+  anchor: Anchor | null;
+  interactions: Interaction[],
   customState: CustomState;
 }
 
@@ -77,13 +86,13 @@ type OnEntitySpawn = (entityData: EntityData) => EntityData;
 type EntityUpdate = (
   id: string,
   currentState: EntityState,
-  interactions: Interaction[],
 ) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 
 interface GlobalHy {
-  getEntities: () => { [key: string]: EntityState };
+  getEntities: () => { [key: EntityId]: EntityState };
+  getEntityData: (entityId: EntityId) => EntityData;
   spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => EntityId;
   despawnEntity: (entityId: EntityId) => void;
   checkMovementForCollisions: (

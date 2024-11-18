@@ -25,7 +25,6 @@ export const update: PlayerUpdate = (
       hy.anchorEntity(gun, playerID, "hand_right_anchor");
       handItems = [gun];
     }
-    console.log("Firing gun!", handItems);
     handItems.forEach((item) => {
       hy.interactEntity(item, playerID, position, controls.camera_yaw);
     });
@@ -34,12 +33,34 @@ export const update: PlayerUpdate = (
   const collisions = hy.getCollisionsForPlayer(playerID);
 
   collisions.forEach((collision) => {
-    if (collision.collisionKind == "contact" && collision.collisionTarget == "entity") {
-      hy.despawnEntity(collision.targetId);
-    }
+    if (collision.collisionTarget == "entity") {
 
-    if (collision.collisionKind == "intersection" && collision.collisionTarget == "entity") {
-      console.log("Walked through a ball!");
+      let entityData = hy.getEntityData(collision.targetId);
+      if (entityData != undefined) {
+        const GUN_TYPE = 1;
+        const BULLET_TYPE = 2;
+        const BLUE_FLAG_TYPE = 3;
+        const RED_FLAG_TYPE = 4;
+
+        if (entityData.entity_type == GUN_TYPE) {
+          // Pick up gun if there's nothing in the right hand
+          if (!attachedEntities["hand_right_anchor"]) {
+            hy.anchorEntity(collision.targetId, playerID, "hand_right_anchor");
+          }
+        }
+
+        if (entityData.entity_type == BULLET_TYPE) {
+          // Destroy bullet
+          hy.despawnEntity(collision.targetId);
+        }
+
+        if (entityData.entity_type == BLUE_FLAG_TYPE || entityData.entity_type == RED_FLAG_TYPE) {
+          // Capture the flag
+          if (!attachedEntities["hand_left_anchor"]) {
+            hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+          }
+        }
+      }
     }
   });
 
@@ -93,6 +114,10 @@ export const update: PlayerUpdate = (
 
   if (isOnGround && controls.jump) {
     newVelocity[1] = JUMP_SPEED;
+
+    if (attachedEntities["hand_left_anchor"]) {
+      hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+    }
   }
 
   newPosition[0] += newVelocity[0] * DT;

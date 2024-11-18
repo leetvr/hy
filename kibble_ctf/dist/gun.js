@@ -1,5 +1,5 @@
-export const update = (id, currentState, interactions) => {
-    interactions.forEach(moreBalls);
+export const update = (id, currentState) => {
+    currentState.interactions.forEach(moreBalls);
     // Look, custom state!
     let currentCount = currentState.customState.counter;
     if (typeof currentCount !== "number") {

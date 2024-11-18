@@ -24,6 +24,15 @@ fn get_entities(state: &mut OpState) -> HashMap<EntityID, EntityData> {
 
 #[op2]
 #[serde]
+fn get_entity_data(state: &mut OpState, #[string] entity_id: String) -> Option<EntityData> {
+    let world = state.borrow::<Arc<Mutex<World>>>();
+    let world = world.lock().unwrap();
+
+    world.entities.get(&entity_id).cloned()
+}
+
+#[op2]
+#[serde]
 // NOTE(kmrw: serde is apparently slow but who cares)
 fn check_movement_for_collisions(
     state: &mut OpState,
@@ -138,6 +147,7 @@ extension!(
     hy,
     ops = [
         get_entities,
+        get_entity_data,
         check_movement_for_collisions,
         spawn_entity,
         despawn_entity,

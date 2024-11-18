@@ -2,7 +2,6 @@ import type {
   EntityState,
   EntityUpdate,
   Vec3,
-  Interaction,
   OnEntitySpawn,
   EntityData,
 } from "../lib/hy";
@@ -23,7 +22,6 @@ export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
 export const update: EntityUpdate = (
   id: string,
   currentState: EntityState,
-  interactions: Interaction[],
 ): EntityState => {
   const [lastX, lastY, lastZ] = currentState.position;
   const [velX, velY, velZ] = currentState.velocity;
