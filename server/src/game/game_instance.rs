@@ -567,6 +567,8 @@ async fn sync_entities_to_client(
                 )
                 .await;
             *known_position = entity.state.position.clone();
+            *known_rotation = entity.state.rotation.clone();
+            *known_anchor = entity.state.anchor.clone();
         }
     }
 }

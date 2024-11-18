@@ -33,8 +33,8 @@ globalThis.hy = {
   anchorEntity: (entityId, anchorId, anchorName) => {
     return core.ops.anchor_entity(entityId, anchorId, anchorName);
   },
-  detachEntity: (entityId) => {
-    return core.ops.detach_entity(entityId);
+  detachEntity: (entityId, position) => {
+    return core.ops.detach_entity(entityId, position);
   },
   interactEntity: (entityId, playerId, position, facingAngle) => {
     return core.ops.interact_entity(entityId, playerId, position, facingAngle);
