@@ -127,6 +127,39 @@ impl JSContext {
         Ok(next_state)
     }
 
+    pub(crate) fn get_player_spawn_state(
+        &mut self,
+        player_id: PlayerId,
+        current_state: &PlayerState,
+    ) -> anyhow::Result<PlayerState> {
+        // This is the same as get_player_next_state, but with a different function name, and no
+        // controls parameter
+        // Laziness made this happen
+        let scope = &mut self.runtime.handle_scope();
+        let module_namespace = self.player_module_namespace.open(scope);
+
+        let function_name = v8::String::new(scope, "onSpawn").unwrap();
+        let Some(update_fn) = module_namespace.get(scope, function_name.into()) else {
+            anyhow::bail!("ERROR: Module has no function named onSpawn!");
+        };
+
+        if !update_fn.is_function() {
+            anyhow::bail!("ERROR: Module has a member named update, but it's not a function!");
+        }
+
+        let player_update = v8::Local::<v8::Function>::try_from(update_fn).unwrap(); // we know it's a function
+
+        let undefined = deno_core::v8::undefined(scope).into();
+        let player_id = serde_v8::to_v8(scope, player_id).unwrap();
+        let current_state = serde_v8::to_v8(scope, current_state).unwrap();
+        let args = [player_id.into(), current_state.into()];
+
+        let result = player_update.call(scope, undefined, &args).unwrap();
+        let next_state: PlayerState = serde_v8::from_v8(scope, result)?;
+
+        Ok(next_state)
+    }
+
     pub async fn run_script_for_entity(
         &mut self,
         entity_id: &str,

@@ -73,6 +73,11 @@ type PlayerUpdate = (
   controls: PlayerControls,
 ) => PlayerState;
 
+type OnPlayerSpawn = (
+  playerID: number,
+  currentState: PlayerState,
+) => PlayerState;
+
 /**
  * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
  *
