@@ -46,8 +46,14 @@ impl EditorInstance {
         // Respawn all the entities
         {
             let mut world = world.lock().expect("Deadlock!");
+            let entity_type_registry = world.entity_type_registry.clone();
             for entity_data in world.entities.values_mut() {
-                world::spawn_entity(entity_data, js_context, physics_world.clone());
+                world::spawn_entity(
+                    entity_data,
+                    js_context,
+                    physics_world.clone(),
+                    &entity_type_registry,
+                );
             }
         }
 

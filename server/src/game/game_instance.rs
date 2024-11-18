@@ -192,10 +192,14 @@ impl GameInstance {
                 .unwrap();
         }
 
-        // Step physics
+        // Step physics, update entities
         {
             let mut physics_world = self.physics_world.lock().expect("Deadlock!");
-            physics_world.step();
+            let mut world = self.world.lock().expect("Deadlock!");
+
+            // borrowing is hard
+            let entity_type_registry = world.entity_type_registry.clone();
+            physics_world.step(&mut world.entities, &entity_type_registry);
 
             if DEBUG_LINES {
                 let debug_lines = physics_world.get_debug_lines();
@@ -322,8 +326,18 @@ impl GameInstance {
 
     pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
         let mut world = self.world.lock().expect("Deadlock!");
-        for entity_data in world.entities.values_mut() {
-            world::spawn_entity(entity_data, js_context, self.physics_world.clone());
+
+        // work around borrowing issues? no time, baby
+        let entity_type_registry = world.entity_type_registry.clone();
+
+        let entities = &mut world.entities;
+        for entity_data in entities.values_mut() {
+            world::spawn_entity(
+                entity_data,
+                js_context,
+                self.physics_world.clone(),
+                &entity_type_registry,
+            );
         }
     }
 

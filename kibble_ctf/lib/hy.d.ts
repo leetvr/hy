@@ -79,7 +79,11 @@ type PlayerUpdate = (
  */
 type OnEntitySpawn = (entityData: EntityData) => EntityData;
 
-type EntityUpdate = (currentState: EntityState, interactions: Interaction[]) => EntityState;
+type EntityUpdate = (
+  id: string,
+  currentState: EntityState,
+  interactions: Interaction[],
+) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 

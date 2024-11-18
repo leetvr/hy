@@ -30,18 +30,19 @@ pub struct EntityData {
     pub entity_type: EntityTypeID,
     pub model_path: String,
     pub state: EntityState,
-    pub physics_properties: Option<EntityPhysicsProperties>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct EntityPhysicsProperties {
     pub collider_kind: EntityColliderKind,
-    pub collider_height: f32,
     pub collider_width: f32,
+    pub collider_height: f32,
     pub dynamic: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum EntityColliderKind {
     #[default]
     Capsule,
@@ -51,11 +52,13 @@ pub enum EntityColliderKind {
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Tsify)]
+#[serde(rename_all = "camelCase")]
 pub struct EntityType {
     pub id: EntityTypeID,
     name: String,
     script_path: String,
     default_model_path: String,
+    physics_properties: Option<EntityPhysicsProperties>,
 }
 
 impl EntityType {
@@ -73,6 +76,10 @@ impl EntityType {
 
     pub fn default_model_path(&self) -> &str {
         &self.default_model_path
+    }
+
+    pub fn physics_properties(&self) -> Option<&EntityPhysicsProperties> {
+        self.physics_properties.as_ref()
     }
 }
 

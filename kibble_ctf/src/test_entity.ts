@@ -22,6 +22,7 @@ export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
 };
 
 export const update: EntityUpdate = (
+  id: string,
   currentState: EntityState,
   interactions: Interaction[],
 ): EntityState => {

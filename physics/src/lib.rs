@@ -1,4 +1,4 @@
-use entities::{EntityData, EntityPhysicsProperties};
+use entities::{EntityData, EntityID, EntityPhysicsProperties, EntityState, EntityTypeRegistry};
 use glam::Vec3Swizzles;
 use nalgebra::{point, vector, Vector3};
 use rapier3d::{
@@ -11,7 +11,8 @@ use rapier3d::{
         CCDSolver, Collider, ColliderBuilder, ColliderHandle, ColliderSet, DebugRenderBackend,
         DebugRenderMode, DebugRenderObject, DebugRenderPipeline, DefaultBroadPhase,
         ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-        PhysicsPipeline, QueryPipeline, Real, RigidBodyBuilder, RigidBodySet,
+        PhysicsPipeline, QueryPipeline, Real, RigidBody, RigidBodyBuilder, RigidBodySet,
+        RigidBodyType,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -45,6 +46,7 @@ pub struct PhysicsWorld {
     pub player_handles: HashMap<u64, RigidBodyHandle>,
     debug: DebugRenderPipeline,
     debug_lines: Vec<net_types::DebugLine>,
+    pub entity_bodies: HashMap<EntityID, PhysicsBody>,
 }
 
 impl PhysicsWorld {
@@ -87,11 +89,33 @@ impl PhysicsWorld {
             player_handles: Default::default(),
             debug: DebugRenderPipeline::new(Default::default(), DebugRenderMode::COLLIDER_SHAPES),
             debug_lines: Default::default(),
+            entity_bodies: Default::default(),
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(
+        &mut self,
+        entities: &mut HashMap<EntityID, EntityData>,
+        entity_type_registry: &EntityTypeRegistry,
+    ) {
         self.debug_lines.clear();
+
+        // 1) Update non-dynamic bodies
+        for (_, entity_data) in entities.iter_mut() {
+            let entity_type = entity_type_registry
+                .get(entity_data.entity_type)
+                .expect("Entity type ID doesn't exist?");
+
+            let Some(physics_properties) = entity_type.physics_properties() else {
+                continue;
+            };
+
+            if !physics_properties.dynamic {
+                self.sync_entity(entity_data);
+            }
+        }
+
+        // 2) Step simulation
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -107,6 +131,21 @@ impl PhysicsWorld {
             &self.physics_hooks,
             &self.event_handler,
         );
+
+        // 3) Update dynamic bodies
+        for (_, entity_data) in entities.iter_mut() {
+            let entity_type = entity_type_registry
+                .get(entity_data.entity_type)
+                .expect("Entity type ID doesn't exist?");
+
+            let Some(physics_properties) = entity_type.physics_properties() else {
+                continue;
+            };
+
+            if physics_properties.dynamic {
+                self.sync_entity(entity_data);
+            }
+        }
     }
 
     /// Adds a ball rigidbody
@@ -345,22 +384,103 @@ impl PhysicsWorld {
         lines
     }
 
-    pub fn spawn_entity(&mut self, entity_data: &EntityData) {
-        let Some(physics_properties) = &entity_data.physics_properties else {
+    pub fn spawn_entity(
+        &mut self,
+        entity_data: &EntityData,
+        entity_type_registry: &EntityTypeRegistry,
+    ) {
+        // Check to see if there's an existing body
+        if let Some(body) = self.entity_bodies.remove(&entity_data.id) {
+            tracing::warn!(
+                "Attempted to spawn entity {}, but it has an old handle lying around. We'll clean it up, but you should fix this.",
+                &entity_data.id
+            );
+            self.remove_body(body);
+        };
+
+        let physics_properties = entity_type_registry
+            .get(entity_data.entity_type)
+            .unwrap()
+            .physics_properties();
+
+        // If this entity has no physics properties, then there's nothing to do
+        let Some(physics_properties) = physics_properties else {
             return;
         };
 
-        let collider = get_collider_for_entity(&entity_data.id, physics_properties);
+        let rigid_body =
+            build_rigid_body_for_entity(&entity_data.id, physics_properties, &entity_data.state);
+        let handle = self.bodies.insert(rigid_body);
+        let collider = build_collider_for_entity(&entity_data.id, physics_properties);
+        self.colliders
+            .insert_with_parent(collider, handle, &mut self.bodies);
 
-        // If this entity isn't dynamic, then we just stash away the collider and go about our day
-        if !physics_properties.dynamic {
-            self.colliders.insert(collider);
+        self.entity_bodies
+            .insert(entity_data.id.clone(), PhysicsBody::new(handle));
+
+        return;
+    }
+
+    pub fn sync_entity(&mut self, entity_data: &mut EntityData) {
+        // Extract the physics body
+        let Some(body) = self.entity_bodies.get(&entity_data.id) else {
+            tracing::warn!("Attempted to sync {} but it has no body!", &entity_data.id);
+            return;
+        };
+
+        let Some(physics_body) = self.bodies.get_mut(body.handle) else {
+            tracing::warn!("Attempted to sync {} but it has no body!", &entity_data.id);
+            return;
+        };
+
+        // If the entity is dynamic, we set its position from the physics engine
+        if physics_body.body_type().is_dynamic() {
+            entity_data.state.position = na_to_glam(physics_body.position().translation.vector);
+            entity_data.state.velocity = na_to_glam(physics_body.linvel().clone());
+
+            // Nothing more to do.
             return;
         }
+
+        // If the entity is *not* dynamic, we set the body's position and velocity from the entity
+        physics_body.set_linvel(glam_to_na(entity_data.state.velocity), true);
+        physics_body.set_next_kinematic_position(glam_to_na(entity_data.state.velocity).into());
+    }
+
+    pub fn despawn_entity(&mut self, entity_id: &str) {
+        let Some(body) = self.entity_bodies.remove(entity_id) else {
+            tracing::warn!("Attempted to despawn entity {entity_id} but it has no handles");
+            return;
+        };
+
+        self.remove_body(body);
     }
 }
 
-fn get_collider_for_entity(
+fn build_rigid_body_for_entity(
+    id: &str,
+    physics_properties: &EntityPhysicsProperties,
+    state: &EntityState,
+) -> RigidBody {
+    let body_type = if physics_properties.dynamic {
+        RigidBodyType::Dynamic
+    } else {
+        RigidBodyType::KinematicVelocityBased
+    };
+
+    let user_data: u128 = id
+        .parse()
+        .expect("Entity ID is not a number - this should be impossible");
+    let builder = RigidBodyBuilder::new(body_type)
+        .user_data(user_data)
+        .linvel(glam_to_na(state.velocity))
+        .position(glam_to_na(state.position).into());
+
+    // TODO: Add more properties
+    builder.build()
+}
+
+fn build_collider_for_entity(
     id: &str,
     physics_properties: &entities::EntityPhysicsProperties,
 ) -> Collider {
@@ -373,22 +493,21 @@ fn get_collider_for_entity(
 
     let half_height = collider_height / 2.0;
     let half_width = collider_width / 2.0;
-    let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
-    match collider_kind {
+    let mut collider = match collider_kind {
         entities::EntityColliderKind::Capsule => {
-            ColliderBuilder::capsule_y(half_height, half_width)
-                .user_data(entity_id)
-                .build()
+            ColliderBuilder::capsule_y(half_height, half_width).build()
         }
         entities::EntityColliderKind::Cube => {
-            ColliderBuilder::cuboid(half_width, half_width, half_width)
-                .user_data(entity_id)
-                .build()
+            ColliderBuilder::cuboid(half_width, half_width, half_width).build()
         }
-        entities::EntityColliderKind::Ball => ColliderBuilder::ball(half_height)
-            .user_data(entity_id)
-            .build(),
-    }
+        entities::EntityColliderKind::Ball => ColliderBuilder::ball(half_height).build(),
+    };
+
+    let entity_id: u128 = id.parse().expect("entity ID is not a number, impossible");
+    collider.user_data = entity_id;
+    collider.set_translation_wrt_parent(vector![0., half_height, 0.]);
+
+    collider
 }
 
 fn check_movement_for_collisions(
@@ -506,9 +625,18 @@ fn na_point_to_glam(input: Point<f32>) -> glam::Vec3 {
 #[derive(Debug)]
 pub struct PhysicsBody {
     handle: RigidBodyHandle,
-    // Keep track of whether this hnadle has been removed from the physics world to warn the user
+    // Keep track of whether this handle has been removed from the physics world to warn the user
     // if a handle is dropped without being removed
     removed: bool,
+}
+
+impl PhysicsBody {
+    pub fn new(handle: RigidBodyHandle) -> Self {
+        Self {
+            handle,
+            removed: false,
+        }
+    }
 }
 
 impl Drop for PhysicsBody {

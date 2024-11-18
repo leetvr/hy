@@ -178,7 +178,12 @@ impl JSContext {
             )
         };
 
-        let args = [current_state.into(), interactions.into()];
+        let entity_id_arg = serde_v8::to_v8(scope, entity_id).unwrap();
+        let args = [
+            entity_id_arg.into(),
+            current_state.into(),
+            interactions.into(),
+        ];
 
         // Call the function
         let result = entity_update.call(scope, undefined, &args).unwrap();

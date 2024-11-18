@@ -71,10 +71,16 @@ impl World {
         for command in self.command_queue.drain(..) {
             match command {
                 WorldCommand::SpawnEntity(entity_id, mut entity_data) => {
-                    spawn_entity(&mut entity_data, js_context, physics_world.clone());
+                    spawn_entity(
+                        &mut entity_data,
+                        js_context,
+                        physics_world.clone(),
+                        &self.entity_type_registry,
+                    );
                     self.entities.insert(entity_id, entity_data);
                 }
                 WorldCommand::DespawnEntity(entity_id) => {
+                    despawn_entity(&entity_id, physics_world.clone());
                     self.entities.remove(&entity_id);
                 }
                 WorldCommand::AnchorEntity {
@@ -152,13 +158,21 @@ pub fn spawn_entity(
     entity_data: &mut EntityData,
     js_context: &mut JSContext,
     physics_world: Arc<Mutex<PhysicsWorld>>,
+    entity_type_registry: &EntityTypeRegistry,
 ) {
     // Call the entity's onSpawn function, if it has one
     js_context.spawn_entity(entity_data);
     physics_world
         .lock()
         .expect("Deadlock!")
-        .spawn_entity(entity_data);
+        .spawn_entity(entity_data, entity_type_registry);
+}
+
+fn despawn_entity(entity_id: &str, physics_world: Arc<Mutex<PhysicsWorld>>) {
+    physics_world
+        .lock()
+        .expect("Deadlock!")
+        .despawn_entity(entity_id)
 }
 
 enum WorldCommand {

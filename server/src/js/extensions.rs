@@ -65,7 +65,6 @@ fn spawn_entity(
             velocity: velocity.into(),
             ..Default::default()
         },
-        physics_properties: None,
     };
 
     world.spawn_entity(entity_id.clone(), entity_data);
