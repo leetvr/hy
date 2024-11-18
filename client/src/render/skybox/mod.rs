@@ -2,7 +2,7 @@ use glow::HasContext;
 
 use crate::render::compile_shaders;
 
-const RAW_SKYBOX: &[u8] = include_bytes!("autumn_field_puresky_4k_cubemap.ktx2");
+const RAW_SKYBOX: &[u8] = include_bytes!("kloofendal_43d_clear_puresky_4k_cubemap.ktx2");
 
 pub struct SkyboxRenderer {
     program: glow::Program,
