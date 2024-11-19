@@ -21,6 +21,7 @@ export const init = (worldState) => {
     worldState.blueTeam = [];
     worldState.redScore = 0;
     worldState.blueScore = 0;
+    worldState.scoreCooldown = 0;
     return worldState;
 };
 export const onAddPlayer = (worldState, playerId, playerState) => {
@@ -39,40 +40,50 @@ export const onAddPlayer = (worldState, playerId, playerState) => {
 export const update = (worldState) => {
     // Flag capturing logic
     let entities = hy.getEntities();
-    Object.keys(entities).forEach((leftId) => {
-        Object.keys(entities).forEach((rightId) => {
-            if (leftId == rightId) {
-                return;
-            }
-            let l = entities[leftId];
-            let r = entities[rightId];
-            if ((l.entity_type == RED_FLAG_TYPE && r.entity_type == BLUE_FLAG_TYPE) ||
-                (l.entity_type == BLUE_FLAG_TYPE && r.entity_type == RED_FLAG_TYPE)) {
-                // One of the flags should be carried and the other not carried
-                if (l.state.customState.carried == r.state.customState.carried) {
+    let scoredFlags = {};
+    worldState.scoreCooldown = Math.max(worldState.scoreCooldown - 1, 0);
+    if (worldState.scoreCooldown <= 0) {
+        Object.keys(entities).forEach((leftId) => {
+            Object.keys(entities).forEach((rightId) => {
+                if (leftId == rightId) {
                     return;
                 }
-                if (distance(l.state.absolutePosition, r.state.absolutePosition) < 1) {
-                    let carriedType;
-                    if (l.state.customState.carried) {
-                        carriedType = l.entity_type;
-                    }
-                    else {
-                        carriedType = r.entity_type;
-                    }
-                    if (carriedType == RED_FLAG_TYPE) {
-                        worldState.blueScore += 1;
-                    }
-                    else {
-                        worldState.redScore += 1;
-                    }
-                    // Interacting with flags respawns them
-                    hy.interactEntity(leftId, 0, [0, 0, 0], 0, 0);
-                    hy.interactEntity(rightId, 0, [0, 0, 0], 0, 0);
+                if (scoredFlags[leftId] || scoredFlags[rightId]) {
+                    return;
                 }
-            }
+                let l = entities[leftId];
+                let r = entities[rightId];
+                if ((l.entity_type == RED_FLAG_TYPE && r.entity_type == BLUE_FLAG_TYPE) ||
+                    (l.entity_type == BLUE_FLAG_TYPE && r.entity_type == RED_FLAG_TYPE)) {
+                    // One of the flags should be carried and the other not carried
+                    if (l.state.customState.carried == r.state.customState.carried) {
+                        return;
+                    }
+                    if (distance(l.state.absolutePosition, r.state.absolutePosition) < 1) {
+                        let carriedType;
+                        if (l.state.customState.carried) {
+                            carriedType = l.entity_type;
+                        }
+                        else {
+                            carriedType = r.entity_type;
+                        }
+                        if (carriedType == RED_FLAG_TYPE) {
+                            worldState.blueScore += 1;
+                        }
+                        else {
+                            worldState.redScore += 1;
+                        }
+                        // Interacting with flags respawns them
+                        scoredFlags[leftId] = true;
+                        scoredFlags[rightId] = true;
+                        hy.interactEntity(leftId, 0, [0, 0, 0], 0, 0);
+                        hy.interactEntity(rightId, 0, [0, 0, 0], 0, 0);
+                        worldState.scoreCooldown = 60;
+                    }
+                }
+            });
         });
-    });
+    }
     return worldState;
 };
 const distance = (l, r) => {
