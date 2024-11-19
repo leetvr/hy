@@ -61,10 +61,10 @@ export const update = (worldState) => {
                         carriedType = r.entity_type;
                     }
                     if (carriedType == RED_FLAG_TYPE) {
-                        worldState.redScore += 1;
+                        worldState.blueScore += 1;
                     }
                     else {
-                        worldState.blueScore += 1;
+                        worldState.redScore += 1;
                     }
                     // Interacting with flags respawns them
                     hy.interactEntity(leftId, 0, [0, 0, 0], 0);

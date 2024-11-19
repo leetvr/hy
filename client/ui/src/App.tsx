@@ -3,6 +3,7 @@ import init, { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../
 import "./App.css";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
+import CtfGameUi from "./CtfGameUi.tsx";
 import TopBar from "./TopBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
@@ -47,6 +48,9 @@ function App({ engine }: { engine: Engine }) {
         />
       )}
       <RightBar selectedEntity={false} />
+      {currentMode === EngineMode.Play && <CtfGameUi
+          engine={engine}
+      />}
     </div>
   );
 }

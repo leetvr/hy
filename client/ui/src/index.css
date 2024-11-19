@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Rowdies&display=swap');
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -139,6 +140,86 @@ a:hover {
     /* really 'front' if you're thinking in three dimensions */
     background-color: #00f;
     transform: rotateY(0deg) translateZ(16px);
+}
+
+.ctf {
+    font-family: 'Rowdies', sans-serif;
+}
+.ctf .score-ctr {
+    position: absolute;
+    right: 0;
+    width: 148px;
+    height: 192px;
+    top: 50%;
+    margin-top: -96px;
+}
+.ctf .score, .ctf .status {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 64px;
+    line-height: 48px;
+    font-size: 48px;
+    font-weight: bold;
+    padding-left: 8px;
+    background-repeat: no-repeat;
+    background-position: center right;
+    text-shadow: 0px 0px 8px #fff;
+}
+.ctf .status {
+    background-position: center left;
+    text-align: right;
+    padding-right: 16px;
+    line-height: 64px;
+}
+.ctf .score-red {
+    position: relative;
+    top: 96px;
+    border: 8px solid #C51E3A;
+    background-color: #C51E3A88;
+    background-image: url("/client/ui/public/logo-redteam.png")
+}
+.ctf .score-blue {
+    border: 8px solid #6BA4B8;
+    background-color: #6BA4B888;
+    background-image: url("/client/ui/public/logo-blueteam.png")
+}
+.ctf .status-ctr {
+    position: absolute;
+    right: 0;
+    width: 128px;
+    top: 10%;
+    background-color: #fff2;
+    padding: 8px;
+    box-shadow: 0 0 10px #fff2;
+}
+.ctf .status-health {
+    background-image: url("/client/ui/public/logo-health.png")
+}
+.ctf .status-ammo {
+    background-image: url("/client/ui/public/logo-ammo.png")
+}
+.ctf .instructions-ctr {
+    width: 60%;
+    position: absolute;
+    font-size: 22px;
+    bottom: 0;
+    margin-bottom: 5%;
+    left: 50%;
+    margin-left: -25%;
+    color: #fff;
+    text-shadow: 0 0 10px #000;
+}
+.ctf .instruction-whichteam {
+    font-size: 150%;
+}
+.ctf .team-red {
+    text-transform: uppercase;
+    color: #C51E3A;
+}
+.ctf .team-blue {
+    text-transform: uppercase;
+    color: #6BA4B8;
 }
 
 body {
