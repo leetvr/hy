@@ -3,7 +3,7 @@ export const update = (id, currentState) => {
     return currentState;
 };
 // BULLETS
-const fireBullets = ({ playerId, facingAngle, position }) => {
+const fireBullets = ({ playerId, yaw, pitch, position }) => {
     let speed = 50;
     const firingPlayerState = hy.getPlayerState(playerId);
     if (!firingPlayerState) {
@@ -12,12 +12,18 @@ const fireBullets = ({ playerId, facingAngle, position }) => {
     }
     const team = firingPlayerState.customState.team;
     // If the angle is wrong, don't find out why, just bash it into place
-    let angle = facingAngle - Math.PI / 2;
-    const initialVelocity = [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed];
+    let fixedYaw = yaw + Math.PI / 2;
+    // This one is just adjusted to feel better so you don't constantly shoot the ground
+    let fixedPitch = pitch + 0.2;
+    let initialVelocity = [
+        speed * Math.cos(fixedPitch) * Math.cos(fixedYaw),
+        speed * Math.sin(fixedPitch),
+        -(speed * Math.cos(fixedPitch) * Math.sin(fixedYaw))
+    ];
     const initialPosition = [
-        position[0] + -Math.cos(angle),
-        position[1] + 0.5,
-        position[2] + Math.sin(angle),
+        position[0] + Math.cos(fixedPitch) * -Math.cos(fixedYaw),
+        position[1] + Math.sin(fixedPitch) + 0.5,
+        position[2] + -(Math.cos(fixedPitch) * Math.sin(fixedYaw)),
     ];
     hy.spawnEntity(6, initialPosition, [0, 0, 0], initialVelocity, { firedByTeam: team });
 };

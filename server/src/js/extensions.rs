@@ -145,7 +145,8 @@ fn interact_entity(
     #[string] entity_id: String,
     #[bigint] player_id: u64,
     #[serde] position: Vec3,
-    facing_angle: f32,
+    yaw: f32,
+    pitch: f32,
     #[serde] custom_state: Option<HashMap<String, serde_json::Value>>,
 ) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
@@ -155,7 +156,8 @@ fn interact_entity(
         entity_id,
         PlayerId::new(player_id),
         position,
-        facing_angle,
+        yaw,
+        pitch,
         custom_state.unwrap_or_default(),
     );
 }

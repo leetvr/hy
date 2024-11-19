@@ -389,9 +389,11 @@ impl GameInstance {
                         jump,
                         fire,
                         camera_yaw,
+                        camera_pitch,
                     }) => {
                         client.last_controls.move_direction = move_direction;
                         client.last_controls.camera_yaw = camera_yaw;
+                        client.last_controls.camera_pitch = camera_pitch;
 
                         // Only allow the client to trigger jump and fire once per tick
                         if jump {

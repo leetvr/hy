@@ -84,8 +84,8 @@ export const update: WorldInit = (worldState: CustomState): CustomState => {
           }
 
           // Interacting with flags respawns them
-          hy.interactEntity(leftId, 0, [0, 0, 0], 0);
-          hy.interactEntity(rightId, 0, [0, 0, 0], 0);
+          hy.interactEntity(leftId, 0, [0, 0, 0], 0, 0);
+          hy.interactEntity(rightId, 0, [0, 0, 0], 0, 0);
         }
       }
     });

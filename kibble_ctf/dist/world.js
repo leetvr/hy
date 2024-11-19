@@ -67,8 +67,8 @@ export const update = (worldState) => {
                         worldState.redScore += 1;
                     }
                     // Interacting with flags respawns them
-                    hy.interactEntity(leftId, 0, [0, 0, 0], 0);
-                    hy.interactEntity(rightId, 0, [0, 0, 0], 0);
+                    hy.interactEntity(leftId, 0, [0, 0, 0], 0, 0);
+                    hy.interactEntity(rightId, 0, [0, 0, 0], 0, 0);
                 }
             }
         });

@@ -445,6 +445,7 @@ impl Engine {
                     jump: self.controls.keyboard_pressed.contains("Space"),
                     fire: self.controls.mouse_left,
                     camera_yaw: self.controls.yaw,
+                    camera_pitch: self.controls.pitch,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
@@ -518,6 +519,7 @@ impl Engine {
                     jump: false,
                     fire: false,
                     camera_yaw: 0.0,
+                    camera_pitch: 0.0,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
             }
