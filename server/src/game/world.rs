@@ -1,4 +1,5 @@
 use {
+    super::PlayerState,
     crate::js::JSContext,
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
@@ -23,6 +24,7 @@ pub struct World {
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
     command_queue: Vec<WorldCommand>,
+    pub player_data: HashMap<PlayerId, PlayerState>,
 }
 
 impl World {
@@ -163,6 +165,7 @@ impl World {
             entities,
             entity_type_registry,
             command_queue: Vec::new(),
+            player_data: HashMap::new(),
         })
     }
 

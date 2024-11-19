@@ -1,5 +1,5 @@
 use {
-    crate::game::World,
+    crate::game::{PlayerState, World},
     anyhow::bail,
     deno_core::{error::AnyError, extension, op2, OpState},
     entities::{EntityData, EntityID, EntityState, PlayerId},
@@ -11,6 +11,15 @@ use {
         sync::{Arc, Mutex},
     },
 };
+
+#[op2]
+#[serde]
+fn get_player_state(state: &mut OpState, #[bigint] player_id: u64) -> Option<PlayerState> {
+    let world = state.borrow::<Arc<Mutex<World>>>();
+    let world = world.lock().unwrap();
+
+    world.player_data.get(&PlayerId::new(player_id)).cloned()
+}
 
 #[op2]
 #[serde]
@@ -159,6 +168,7 @@ fn play_sound(
 extension!(
     hy,
     ops = [
+        get_player_state,
         get_entities,
         get_entity_data,
         check_movement_for_collisions,

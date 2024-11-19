@@ -60,7 +60,7 @@ export interface EntityState {
 }
 
 export interface Interaction {
-  player: number;
+  playerId: number;
   position: Vec3;
   facingAngle: number;
 }
@@ -101,6 +101,7 @@ type EntityUpdate = (id: string, currentState: EntityState) => EntityState;
 
 interface GlobalHy {
   getEntities: () => { [key: EntityId]: EntityData };
+  getPlayerState: (playerID: number) => PlayerState | undefined;
   getEntityData: (entityId: EntityId) => EntityData;
   spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => EntityId;
   despawnEntity: (entityId: EntityId) => void;

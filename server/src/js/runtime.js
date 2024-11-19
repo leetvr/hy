@@ -15,6 +15,7 @@ globalThis.console = {
 };
 
 globalThis.hy = {
+  getPlayerState: core.ops.get_player_state,
   getEntities: () => {
     return core.ops.get_entities();
   },
