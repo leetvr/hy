@@ -9,9 +9,6 @@ const TONEMAPPING_LUT: &[u8] = include_bytes!("tony_mc_mapface.dds");
 pub struct TonemappingRenderer {
     program: glow::Program,
 
-    hdr_tex_uniform_location: Option<glow::UniformLocation>,
-    lut_tex_uniform_location: Option<glow::UniformLocation>,
-
     lut_tex: glow::Texture,
 }
 
@@ -93,12 +90,7 @@ impl TonemappingRenderer {
                 gl.tex_parameter_i32(glow::TEXTURE_3D, wrap_target, glow::CLAMP_TO_EDGE as _);
             }
 
-            Self {
-                program,
-                hdr_tex_uniform_location,
-                lut_tex_uniform_location,
-                lut_tex,
-            }
+            Self { program, lut_tex }
         }
     }
 

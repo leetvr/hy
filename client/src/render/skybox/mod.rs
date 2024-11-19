@@ -6,7 +6,6 @@ const RAW_SKYBOX: &[u8] = include_bytes!("kloofendal_43d_clear_puresky_4k_cubema
 
 pub struct SkyboxRenderer {
     program: glow::Program,
-    tex_uniform_location: Option<glow::UniformLocation>,
     world_from_clip_uniform_location: Option<glow::UniformLocation>,
 
     texture: glow::Texture,
@@ -95,7 +94,6 @@ impl SkyboxRenderer {
 
             Self {
                 program,
-                tex_uniform_location,
                 world_from_clip_uniform_location,
                 texture,
             }
