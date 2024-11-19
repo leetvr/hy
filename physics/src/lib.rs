@@ -734,15 +734,29 @@ fn check_movement_for_collisions(
             if projection_len < 0.0 {
                 let adjustment = normal * projection_len;
 
-                if normal.y >= GROUND_THRESHOLD {
-                    // Collision with the ground
-                    corrected_velocity.y = 0.;
-                } else if normal.y <= CEILING_THRESHOLD {
-                    // Collision with the ceiling
+                // if normal.y >= GROUND_THRESHOLD {
+                //     // Collision with the ground
+                //     corrected_velocity.y = 0.;
+                // } else if normal.y <= CEILING_THRESHOLD {
+                //     // Collision with the ceiling
+                //     corrected_velocity.y -= adjustment.y;
+                // } else {
+                //     // Collision with walls
+                //     corrected_velocity.x -= adjustment.x;
+                //     corrected_velocity.z -= adjustment.z;
+                // }
+
+                // Note(ll): I'm trying this out because it fixes clipping
+                // The idea to only correct the velocity if it is the opposite direction of the
+                // normal is to always remove energy from the system, but not add any. This fixes
+                // an issue where the player can also jump extra high by grazing a wall.
+                if normal.y * corrected_velocity.y < 0. {
                     corrected_velocity.y -= adjustment.y;
-                } else {
-                    // Collision with walls
+                }
+                if normal.x * corrected_velocity.x < 0. {
                     corrected_velocity.x -= adjustment.x;
+                }
+                if normal.z * corrected_velocity.z < 0. {
                     corrected_velocity.z -= adjustment.z;
                 }
             }
