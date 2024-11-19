@@ -1,4 +1,5 @@
 use {
+    super::PlayerState,
     crate::js::JSContext,
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
@@ -23,6 +24,7 @@ pub struct World {
     pub entities: HashMap<String, EntityData>, // key is EntityID
     pub entity_type_registry: EntityTypeRegistry,
     command_queue: Vec<WorldCommand>,
+    pub player_data: HashMap<PlayerId, PlayerState>,
 }
 
 impl World {
@@ -57,12 +59,14 @@ impl World {
         player_id: PlayerId,
         position: glam::Vec3,
         facing_angle: f32,
+        custom_state: HashMap<String, serde_json::Value>,
     ) {
         self.command_queue.push(WorldCommand::InteractEntity {
             entity_id,
             player_id,
             position,
             facing_angle,
+            custom_state,
         });
     }
 
@@ -122,12 +126,14 @@ impl World {
                     player_id,
                     position,
                     facing_angle,
+                    custom_state,
                 } => {
                     if let Some(entity) = self.entities.get_mut(&entity_id) {
                         entity.state.interactions.push(Interaction {
                             player_id,
                             position,
                             facing_angle,
+                            custom_state,
                         });
                     }
                 }
@@ -163,6 +169,7 @@ impl World {
             entities,
             entity_type_registry,
             command_queue: Vec::new(),
+            player_data: HashMap::new(),
         })
     }
 
@@ -218,6 +225,7 @@ enum WorldCommand {
         player_id: PlayerId,
         position: glam::Vec3,
         facing_angle: f32,
+        custom_state: HashMap<String, serde_json::Value>,
     },
     PlaySound {
         sound_id: String,

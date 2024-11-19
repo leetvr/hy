@@ -92,11 +92,13 @@ pub struct Anchor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Interaction {
     pub player_id: PlayerId,
     pub position: glam::Vec3,
-    #[serde(rename = "facingAngle")]
     pub facing_angle: f32,
+    #[serde(default)]
+    pub custom_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

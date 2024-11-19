@@ -196,6 +196,16 @@ impl GameInstance {
             });
         }
 
+        // Copy player data into world
+        {
+            let mut world = self.world.lock().expect("Deadlock");
+            world.player_data = self
+                .players
+                .iter()
+                .map(|(player_id, player)| (player_id.clone(), player.state.clone()))
+                .collect();
+        }
+
         // Update players
         for client in self.clients.values_mut() {
             let player = self.players.get_mut(&client.player_id).unwrap();

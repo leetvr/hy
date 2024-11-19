@@ -64,6 +64,14 @@ export const update = (playerID, currentState, controls) => {
                     }
                 }
                 if (entityData.entity_type == BALL_TYPE) {
+                    const entityData = hy.getEntityData(collision.targetId);
+                    // No friendly fire!
+                    const firedByTeam = entityData.state.customState.firedByTeam;
+                    console.log("Ball was fired by", firedByTeam, entityData.state.customState, customState);
+                    if (firedByTeam == customState.team) {
+                        console.log("friendly fire!");
+                        return;
+                    }
                     // Destroy bullet and take damage
                     hy.despawnEntity(collision.targetId);
                     hy.playSound("pain", currentState.position, 10);

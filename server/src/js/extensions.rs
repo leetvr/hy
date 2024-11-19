@@ -1,5 +1,5 @@
 use {
-    crate::game::World,
+    crate::game::{PlayerState, World},
     anyhow::bail,
     deno_core::{error::AnyError, extension, op2, OpState},
     entities::{EntityData, EntityID, EntityState, PlayerId},
@@ -11,6 +11,15 @@ use {
         sync::{Arc, Mutex},
     },
 };
+
+#[op2]
+#[serde]
+fn get_player_state(state: &mut OpState, #[bigint] player_id: u64) -> Option<PlayerState> {
+    let world = state.borrow::<Arc<Mutex<World>>>();
+    let world = world.lock().unwrap();
+
+    world.player_data.get(&PlayerId::new(player_id)).cloned()
+}
 
 #[op2]
 #[serde]
@@ -72,6 +81,7 @@ fn spawn_entity(
     #[serde] position: glam::Vec3,
     #[serde] rotation: glam::Vec3,
     #[serde] velocity: glam::Vec3,
+    #[serde] custom_state: Option<HashMap<String, serde_json::Value>>,
 ) -> Result<EntityID, AnyError> {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
@@ -90,6 +100,7 @@ fn spawn_entity(
             position: position.into(),
             rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
             velocity: velocity.into(),
+            custom_state: custom_state.unwrap_or_default(),
             ..Default::default()
         },
     };
@@ -135,11 +146,18 @@ fn interact_entity(
     #[bigint] player_id: u64,
     #[serde] position: Vec3,
     facing_angle: f32,
+    #[serde] custom_state: Option<HashMap<String, serde_json::Value>>,
 ) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    world.interact_entity(entity_id, PlayerId::new(player_id), position, facing_angle);
+    world.interact_entity(
+        entity_id,
+        PlayerId::new(player_id),
+        position,
+        facing_angle,
+        custom_state.unwrap_or_default(),
+    );
 }
 
 #[op2]
@@ -159,6 +177,7 @@ fn play_sound(
 extension!(
     hy,
     ops = [
+        get_player_state,
         get_entities,
         get_entity_data,
         check_movement_for_collisions,
