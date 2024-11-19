@@ -10,6 +10,10 @@ export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
 
   newState.timer = 0.;
   newState.spawnPosition = newPosition;
+  newState.wasAnchored = false;
+  if (entityData.state.anchor !== null) {
+    newState.wasAnchored = true;
+  }
 
   return {
     ...entityData,
@@ -22,16 +26,24 @@ export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
 };
 
 export const update: EntityUpdate = (id: string, currentState: EntityState): EntityState => {
-  const { position, rotation, customState } = currentState;
+  const { position, rotation, scale, customState } = currentState;
   let newPosition: Vec3 = [...position];
   let newRotation: Quat = [...rotation];
+  let newScale: Vec3 = [...scale];
   let newCustomState = { ...customState };
 
 
-  if (currentState.anchor !== null) {
+  if (currentState.anchor != null) {
     newPosition = [0., 0., 0.];
     newRotation = [0., 0., 0., 1.];
+    newScale = [1., 1., 1.];
+    newCustomState.wasAnchored = true;
   } else {
+    if (newCustomState.wasAnchored) {
+      newCustomState.spawnPosition = newPosition;
+      newCustomState.wasAnchored = false;
+    }
+
     newCustomState.timer = (newCustomState.timer + DT) % 3.0;
     const t = newCustomState.timer / 3.0;
     newPosition[1] = newCustomState.spawnPosition[1] + Math.sin(t * 2 * Math.PI) * 0.15 + 0.75;
@@ -41,6 +53,8 @@ export const update: EntityUpdate = (id: string, currentState: EntityState): Ent
     const sinHalfAngle = Math.sin(angle / 2);
     const cosHalfAngle = Math.cos(angle / 2);
     newRotation = [0, sinHalfAngle, 0, cosHalfAngle];
+
+    newScale = [0.5, 0.5, 0.5];
   }
 
   let reloadTime = newCustomState.reloadTime;
@@ -62,6 +76,7 @@ export const update: EntityUpdate = (id: string, currentState: EntityState): Ent
     ...currentState,
     position: newPosition,
     rotation: newRotation,
+    scale: newScale,
     customState: newCustomState,
   }
 };

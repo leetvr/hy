@@ -61,7 +61,7 @@
       "defaultModelPath": "kibble_ctf/gun.gltf",
       "physicsProperties": {
         "colliderKind": "cube",
-        "colliderWidth": 2.0,
+        "colliderWidth": 0.5,
         "colliderHeight": 0.5,
         "dynamic": false
       }

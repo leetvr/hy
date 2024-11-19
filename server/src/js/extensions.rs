@@ -1,7 +1,7 @@
 use {
     crate::game::{PlayerState, World},
     anyhow::bail,
-    blocks::{BlockPos, BlockTypeID, EMPTY_BLOCK},
+    blocks::{BlockPos, EMPTY_BLOCK},
     deno_core::{error::AnyError, extension, op2, OpState},
     entities::{EntityData, EntityID, EntityState, PlayerId},
     glam::{EulerRot, Vec3},
@@ -92,18 +92,19 @@ fn spawn_entity(
     };
 
     let entity_id = nanorand::tls_rng().generate::<u64>().to_string();
+    let mut state = EntityState::default();
+    state.position = position.into();
+    state.scale = glam::Vec3::new(1.0, 1.0, 1.0);
+    state.rotation = glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z);
+    state.velocity = velocity.into();
+    state.custom_state = custom_state.unwrap_or_default();
+
     let entity_data = EntityData {
         id: entity_id.clone(),
         name: "We should let you set entity names in the editor".into(),
         entity_type: entity_type.id,
         model_path: entity_type.default_model_path().into(),
-        state: EntityState {
-            position: position.into(),
-            rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
-            velocity: velocity.into(),
-            custom_state: custom_state.unwrap_or_default(),
-            ..Default::default()
-        },
+        state,
     };
 
     world.spawn_entity(entity_id.clone(), entity_data);

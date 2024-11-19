@@ -95,6 +95,7 @@ pub struct UpdateEntity {
     pub entity_id: EntityID,
     pub position: glam::Vec3,
     pub rotation: glam::Quat,
+    pub scale: glam::Vec3,
     pub anchor: Option<Anchor>,
 }
 

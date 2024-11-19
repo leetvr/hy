@@ -62,9 +62,7 @@ export const update = (playerID, currentState, controls) => {
         if (collision.collisionTarget == "entity") {
             let entityData = hy.getEntityData(collision.targetId);
             touchedEntities[collision.targetId] = true;
-            console.log("Touched entity", collision.targetId);
             if (newCustomState.itemPickupCooldowns[collision.targetId]) {
-                console.log("Item on cooldown");
                 return;
             }
             if (entityData != undefined) {
@@ -89,7 +87,13 @@ export const update = (playerID, currentState, controls) => {
                     newCustomState.maxAmmo = max_ammo(itemData.entity_type);
                     if (heldItemId) {
                         // Drop the gun that was previously held, in the same position as the picked up gun
-                        hy.detachEntity(heldItemId, itemData.state.customState.spawnPosition);
+                        let dropPosition = [
+                            itemData.state.customState.spawnPosition[0],
+                            itemData.state.customState.spawnPosition[1],
+                            itemData.state.customState.spawnPosition[2]
+                        ];
+                        dropPosition[1] -= 0.75;
+                        hy.detachEntity(heldItemId, dropPosition);
                         newCustomState.itemPickupCooldowns[heldItemId] = 5;
                         touchedEntities[heldItemId] = true;
                     }

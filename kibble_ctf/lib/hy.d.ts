@@ -57,6 +57,7 @@ export interface EntityState {
   position: Vec3;
   velocity: Vec3;
   rotation: Quat;
+  scale: Vec3;
   anchor: Anchor | null;
   absolutePosition: Vec3,
   interactions: Interaction[];
