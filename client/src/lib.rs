@@ -104,8 +104,17 @@ impl Engine {
 
         let connection_state = Rc::new(RefCell::new(ConnectionState::Connecting));
         let incoming_messages = IncomingMessages::default();
+
+        // CRIMES(kmrw)
+        let host = window.location().host().unwrap();
+        let mut host = host.split(":").next().unwrap();
+        if host == "localhost" {
+            host = "127.0.0.1";
+        }
+
+        let server_address = format!("ws://{host}:8889");
         let ws = socket::connect_to_server(
-            "ws://127.0.0.1:8889",
+            &server_address,
             connection_state.clone(),
             incoming_messages.clone(),
         )

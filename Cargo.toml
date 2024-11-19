@@ -23,6 +23,7 @@ web-sys = { version = "0.3.72", features = [
     "WebSocket",
     "MessageEvent",
     "Blob",
+    "Location",
     "MouseEvent",
     "XmlHttpRequest",
     "XmlHttpRequestResponseType",
