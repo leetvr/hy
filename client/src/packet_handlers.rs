@@ -28,6 +28,7 @@ pub fn handle_add_player(
         id,
         position,
         animation_state,
+        script_state,
     }: net_types::AddPlayer,
 ) -> Result<()> {
     let mut model = model.clone();
@@ -38,6 +39,7 @@ pub fn handle_add_player(
             position,
             facing_angle: 0.,
             model: model.clone(),
+            script_state,
         },
     );
     Ok(())
@@ -59,6 +61,7 @@ pub fn handle_update_position(
         id,
         position,
         animation_state,
+        script_state,
     }: net_types::UpdatePlayer,
 ) {
     let Some(player) = players.get_mut(&id) else {
@@ -74,6 +77,9 @@ pub fn handle_update_position(
     player.position = position;
     if let Some(animation_state) = animation_state {
         player.model.play_animation(&animation_state, 0.5);
+    }
+    if let Some(script_state) = script_state {
+        player.script_state = script_state;
     }
 }
 

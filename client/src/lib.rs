@@ -9,7 +9,7 @@ use {
     entities::{Anchor, EntityState, PlayerId},
     glam::{EulerRot, Quat, Vec2, Vec3},
     image::GenericImageView,
-    net_types::ServerPacket,
+    net_types::{ServerPacket, SetWorldScriptState},
     std::{
         cell::RefCell,
         collections::{HashMap, HashSet},
@@ -222,6 +222,7 @@ impl Engine {
                             entities,
                             entity_type_registry,
                             client_player,
+                            world_script_state,
                         }) => {
                             tracing::info!("Init received:");
                             tracing::info!("Loaded level of size {:?}", blocks.size());
@@ -253,6 +254,7 @@ impl Engine {
                                     target_raycast: None,
                                     selected_block_id: None,
                                     preview_entity: None,
+                                    world_script_state,
                                 };
 
                                 // When we've connected, tell the server we want to switch to edit mode.
@@ -266,6 +268,7 @@ impl Engine {
                                     camera,
                                     client_player,
                                     players: Default::default(),
+                                    world_script_state,
                                 };
 
                                 // When we've connected, tell the server we want to switch to play mode
@@ -284,8 +287,12 @@ impl Engine {
                         players,
                         entities,
                         blocks,
+                        world_script_state,
                         ..
                     } => match packet {
+                        ServerPacket::SetWorldScriptState(SetWorldScriptState(new_state)) => {
+                            *world_script_state = new_state;
+                        }
                         ServerPacket::SetBlock(set_block) => {
                             packet_handlers::handle_set_block(blocks, set_block)
                                 .expect("Failed to set block");
@@ -957,6 +964,7 @@ struct Player {
     position: Vec3,
     facing_angle: f32, // radians
     model: GLTFModel,
+    script_state: HashMap<String, serde_json::Value>,
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;
