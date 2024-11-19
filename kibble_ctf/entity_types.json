@@ -81,8 +81,20 @@
     {
       "id": 7,
       "name": "Ammo Box",
-      "scriptPath": "ammo.js",
+      "scriptPath": "pickup.js",
       "defaultModelPath": "kibble_ctf/box.gltf",
+      "physicsProperties": {
+        "colliderKind": "cube",
+        "colliderWidth": 0.5,
+        "colliderHeight": 0.5,
+        "dynamic": false
+      }
+    },
+    {
+      "id": 8,
+      "name": "Bandage",
+      "scriptPath": "pickup.js",
+      "defaultModelPath": "kibble_ctf/bandage.gltf",
       "physicsProperties": {
         "colliderKind": "cube",
         "colliderWidth": 0.5,

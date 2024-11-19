@@ -102,7 +102,7 @@ pub struct Interaction {
     pub custom_state: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntityState {
     pub position: glam::Vec3,
@@ -119,6 +119,21 @@ pub struct EntityState {
     // it's the same as `position`. This is pretty hacky.
     #[serde(default)]
     pub absolute_position: glam::Vec3,
+}
+
+impl Default for EntityState {
+    fn default() -> Self {
+        Self {
+            position: Default::default(),
+            rotation: Default::default(),
+            velocity: Default::default(),
+            scale: default_scale(),
+            anchor: Default::default(),
+            interactions: Default::default(),
+            custom_state: Default::default(),
+            absolute_position: Default::default(),
+        }
+    }
 }
 
 fn default_scale() -> glam::Vec3 {
