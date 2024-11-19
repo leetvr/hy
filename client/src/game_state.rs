@@ -21,6 +21,7 @@ pub enum GameState {
         client_player: PlayerId,
         camera: FlyCamera,
         players: HashMap<PlayerId, Player>,
+        world_script_state: serde_json::Value,
     },
     Editing {
         blocks: BlockGrid,
@@ -31,6 +32,7 @@ pub enum GameState {
         target_raycast: Option<RayHit>,
         selected_block_id: Option<BlockTypeID>,
         preview_entity: Option<EntityData>,
+        world_script_state: serde_json::Value,
     },
 }
 
@@ -57,6 +59,7 @@ impl GameState {
                     target_raycast: None,
                     selected_block_id: None,
                     preview_entity: None,
+                    world_script_state: world.world_script_state,
                 }
             }
             // Editing -> Playing
@@ -67,6 +70,7 @@ impl GameState {
                     camera,
                     entities,
                     entity_type_registry,
+                    world_script_state,
                     ..
                 },
                 ClientShouldSwitchMode::Play { new_player_id },
@@ -80,6 +84,7 @@ impl GameState {
                     camera,
                     client_player: new_player_id,
                     players: Default::default(),
+                    world_script_state,
                 }
             }
             // Invalid or no-op transition

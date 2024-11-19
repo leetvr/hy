@@ -136,6 +136,9 @@ pub struct ClientAwareness {
 
     // The scripted entities that the client is aware of, and their last known position
     pub entities: HashMap<EntityID, KnownEntityState>,
+
+    // The known world script state
+    pub world_state: serde_json::Value,
 }
 
 #[derive(Clone, Debug)]
@@ -150,6 +153,7 @@ pub struct KnownEntityState {
 pub struct ClientPlayerState {
     pub position: glam::Vec3,
     pub animation_state: String,
+    pub script_state: HashMap<String, serde_json::Value>,
 }
 
 impl ClientPlayerState {
@@ -157,6 +161,7 @@ impl ClientPlayerState {
         ClientPlayerState {
             position: state.position,
             animation_state: state.animation_state.clone(),
+            script_state: state.custom_state.clone(),
         }
     }
 }

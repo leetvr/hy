@@ -85,6 +85,7 @@ impl EditorInstance {
                             entities: world.entities.clone(),
                             entity_type_registry: world.entity_type_registry.clone(),
                             client_player: PlayerId::new(0), // ignored by the editor
+                            world_script_state: game_instance.custom_world_state.clone(),
                         },
                     },
                 ))

@@ -1598,6 +1598,7 @@ dependencies = [
  "entities",
  "glam 0.29.2",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

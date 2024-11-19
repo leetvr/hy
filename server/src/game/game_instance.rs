@@ -315,6 +315,7 @@ impl GameInstance {
                     entities: world.entities.clone(),
                     entity_type_registry: world.entity_type_registry.clone(),
                     client_player: player_id,
+                    world_script_state: self.custom_world_state.clone(),
                 }
                 .into(),
             )
@@ -387,6 +388,7 @@ impl GameInstance {
 
             sync_players_to_client(&self.players, &live_players, client).await;
             sync_entities_to_client(&world.entities, &live_entities, client).await;
+            sync_world_script_state_to_client(&self.custom_world_state, client).await;
         }
 
         // Remove disconnected clients, and their associated players
@@ -458,6 +460,7 @@ async fn sync_players_to_client(
                     id: *player_id,
                     position: player.state.position,
                     animation_state: player.state.animation_state.clone(),
+                    script_state: player.state.custom_state.clone(),
                 }
                 .into(),
             )
@@ -488,6 +491,19 @@ async fn sync_players_to_client(
     }
 }
 
+async fn sync_world_script_state_to_client(
+    world_script_state: &serde_json::Value,
+    client: &mut Client,
+) {
+    if world_script_state != &client.awareness.world_state {
+        let _ = client
+            .outgoing_tx
+            .send(net_types::SetWorldScriptState(world_script_state.clone()).into())
+            .await;
+        client.awareness.world_state = world_script_state.clone();
+    }
+}
+
 fn player_update(
     id: PlayerId,
     last_state: &ClientPlayerState,
@@ -498,11 +514,20 @@ fn player_update(
     } else {
         None
     };
-    if animation_change.is_some() || last_state.position != current_state.position {
+    let script_state_change = if last_state.script_state != current_state.custom_state {
+        Some(current_state.custom_state.clone())
+    } else {
+        None
+    };
+    if animation_change.is_some()
+        || script_state_change.is_some()
+        || last_state.position != current_state.position
+    {
         Some(net_types::UpdatePlayer {
             id,
             position: current_state.position,
             animation_state: animation_change,
+            script_state: script_state_change,
         })
     } else {
         None

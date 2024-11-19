@@ -34,6 +34,8 @@ pub struct UpdatePlayer {
     pub position: glam::Vec3,
     // Included if the animation state has changed
     pub animation_state: Option<String>,
+    // Included if the script state has changed
+    pub script_state: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,6 +44,7 @@ pub struct AddPlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
     pub animation_state: String,
+    pub script_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -57,6 +60,7 @@ pub struct Init {
     pub entities: HashMap<String, EntityData>,
     pub entity_type_registry: EntityTypeRegistry,
     pub client_player: PlayerId,
+    pub world_script_state: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -103,9 +107,13 @@ impl DebugLine {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetWorldScriptState(pub serde_json::Value);
+
 #[derive(Clone, Debug, Serialize, Deserialize, From)]
 pub enum ServerPacket {
     Init(Init),
+    SetWorldScriptState(SetWorldScriptState),
     ClientShouldSwitchMode(ClientShouldSwitchMode),
     SetBlock(SetBlock),
     AddPlayer(AddPlayer),
