@@ -150,7 +150,7 @@ a:hover {
     top: 50%;
     margin-top: -96px;
 }
-.ctf .score {
+.ctf .score, .ctf .status {
     box-sizing: border-box;
     position: relative;
     width: 100%;
@@ -162,6 +162,13 @@ a:hover {
     font-family: 'Rowdies', sans-serif;
     background-repeat: no-repeat;
     background-position: center right;
+    text-shadow: 0px 0px 8px #fff;
+}
+.ctf .status {
+    background-position: center left;
+    text-align: right;
+    padding-right: 16px;
+    line-height: 64px;
 }
 .ctf .score-red {
     position: relative;
@@ -174,6 +181,21 @@ a:hover {
     border: 8px solid #6BA4B8;
     background-color: #6BA4B888;
     background-image: url("/client/ui/public/logo-blueteam.png")
+}
+.ctf .status-ctr {
+    position: absolute;
+    right: 0;
+    width: 128px;
+    top: 10%;
+    background-color: #fff2;
+    padding: 8px;
+    box-shadow: 0 0 10px #fff2;
+}
+.ctf .status-health {
+    background-image: url("/client/ui/public/logo-health.png")
+}
+.ctf .status-ammo {
+    background-image: url("/client/ui/public/logo-ammo.png")
 }
 
 body {

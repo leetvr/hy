@@ -51,6 +51,8 @@ function App({ engine }: { engine: Engine }) {
       {currentMode === EngineMode.Play && <CtfGameUi
           redScore="4"
           blueScore="2"
+          health="92"
+          ammo="4"
       />}
     </div>
   );
