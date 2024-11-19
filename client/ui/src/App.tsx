@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
+import init, { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../../pkg/client.js";
 import "./App.css";
-import init, { Engine, EngineMode, BlockRegistry, EntityTypeRegistry } from "../../pkg/client.js";
-import TopBar from "./TopBar.tsx";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
 import CtfGameUi from "./CtfGameUi.tsx";
+import TopBar from "./TopBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;
@@ -13,6 +13,12 @@ function App({ engine }: { engine: Engine }) {
   const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
   const setMode = (newMode: EngineMode) => {
+
+    // WHenever the mode changes print some state data stuff
+    console.log("Changing mode from", currentMode, "to", newMode);
+    console.log("World state:\n", engine.ctx_get_world_state());
+    console.log("Players: ", engine.ctx_get_players());
+
     if (newMode != currentMode) {
       setModeState(newMode);
       engine.ctx_set_engine_mode(newMode);

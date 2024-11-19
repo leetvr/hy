@@ -7,13 +7,13 @@ export const onSpawn = (playerID, currentState) => {
     let newCustomState = Object.assign({}, customState);
     newCustomState.health = MAX_HEALTH;
     newCustomState.spawnPosition = position;
-    newCustomState.respawnTimer = 0.;
+    newCustomState.respawnTimer = 0;
     return Object.assign(Object.assign({}, currentState), { customState: newCustomState });
 };
 export const update = (playerID, currentState, controls) => {
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
     // It's just a quick way to pass data to the script.
-    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
+    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities, } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
@@ -44,9 +44,10 @@ export const update = (playerID, currentState, controls) => {
             let entityData = hy.getEntityData(collision.targetId);
             if (entityData != undefined) {
                 const GUN_TYPE = 1;
-                const BULLET_TYPE = 2;
+                const BALL_TYPE = 2;
                 const BLUE_FLAG_TYPE = 3;
                 const RED_FLAG_TYPE = 4;
+                const BULLET_TYPE = 6;
                 if (entityData.entity_type == GUN_TYPE) {
                     // Pick up gun if there's nothing in the right hand
                     if (!attachedEntities["hand_right_anchor"]) {
@@ -56,7 +57,17 @@ export const update = (playerID, currentState, controls) => {
                 if (entityData.entity_type == BULLET_TYPE) {
                     // Destroy bullet and take damage
                     hy.despawnEntity(collision.targetId);
+                    hy.playSound("pain", currentState.position, 10);
                     newCustomState.health -= 1;
+                    if (newCustomState.health <= 0) {
+                        newCustomState.respawnTimer = RESPAWN_TIME;
+                    }
+                }
+                if (entityData.entity_type == BALL_TYPE) {
+                    // Destroy bullet and take damage
+                    hy.despawnEntity(collision.targetId);
+                    hy.playSound("pain", currentState.position, 10);
+                    newCustomState.health -= 1; // TODO: More damage?
                     if (newCustomState.health <= 0) {
                         newCustomState.respawnTimer = RESPAWN_TIME;
                     }

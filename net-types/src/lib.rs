@@ -101,6 +101,13 @@ pub struct DebugLine {
     pub end: glam::Vec3,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlaySound {
+    pub sound_id: String,
+    pub position: glam::Vec3,
+    pub volume: f32,
+}
+
 impl DebugLine {
     pub fn new(start: glam::Vec3, end: glam::Vec3) -> Self {
         Self { start, end }
@@ -123,4 +130,5 @@ pub enum ServerPacket {
     UpdateEntity(UpdateEntity),
     RemoveEntity(RemoveEntity),
     SetDebugLines(Vec<DebugLine>),
+    PlaySound(PlaySound),
 }

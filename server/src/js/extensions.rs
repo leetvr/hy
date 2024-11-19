@@ -142,6 +142,19 @@ fn interact_entity(
     world.interact_entity(entity_id, PlayerId::new(player_id), position, facing_angle);
 }
 
+#[op2]
+#[serde]
+fn play_sound(
+    state: &mut OpState,
+    #[string] sound_id: String,
+    #[serde] position: glam::Vec3,
+    volume: f32,
+) {
+    let shared_state = state.borrow::<Arc<Mutex<World>>>();
+    let mut world = shared_state.lock().unwrap();
+    world.play_sound(sound_id, position, volume)
+}
+
 // Exports the extensions as a variable named `hy`
 extension!(
     hy,
@@ -156,6 +169,7 @@ extension!(
         interact_entity,
         get_collisions_for_entity,
         get_collisions_for_player,
+        play_sound,
     ],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],

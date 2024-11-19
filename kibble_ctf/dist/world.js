@@ -1,16 +1,18 @@
+const GUN_TYPE_ID = 1;
+const SHOTGUN_TYPE_ID = 5;
 export const init = (worldState) => {
     let entities = hy.getEntities();
     let redSpawn = null;
     let blueSpawn = null;
-    Object.keys(entities).forEach(entityId => {
+    Object.keys(entities).forEach((entityId) => {
         let entity_data = entities[entityId];
         if (blueSpawn == null && entity_data.entity_type == BLUE_FLAG_TYPE) {
             blueSpawn = entity_data.state.position;
-            blueSpawn[1] += 1.;
+            blueSpawn[1] += 1;
         }
         if (redSpawn == null && entity_data.entity_type == RED_FLAG_TYPE) {
             redSpawn = entity_data.state.position;
-            redSpawn[1] += 1.;
+            redSpawn[1] += 1;
         }
     });
     worldState.blueSpawn = blueSpawn;
@@ -23,7 +25,7 @@ export const init = (worldState) => {
 };
 export const onAddPlayer = (worldState, playerId, playerState) => {
     // Give this man a gun
-    let gun = hy.spawnEntity(1, [0, -0.5, -0.5], [0, 0, 0], [0, 0, 0]);
+    let gun = hy.spawnEntity(GUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
     hy.anchorEntity(gun, playerId, "hand_right_anchor");
     if (worldState.redTeam.length <= worldState.blueTeam.length) {
         playerState.customState.team = "red";
@@ -40,8 +42,8 @@ export const onAddPlayer = (worldState, playerId, playerState) => {
 export const update = (worldState) => {
     // Flag capturing logic
     let entities = hy.getEntities();
-    Object.keys(entities).forEach(leftId => {
-        Object.keys(entities).forEach(rightId => {
+    Object.keys(entities).forEach((leftId) => {
+        Object.keys(entities).forEach((rightId) => {
             if (leftId == rightId) {
                 return;
             }
@@ -53,7 +55,7 @@ export const update = (worldState) => {
                 if (l.state.customState.carried != r.state.customState.carried) {
                     return;
                 }
-                if (distance(l.state.position, r.state.position) < 1.) {
+                if (distance(l.state.position, r.state.position) < 1) {
                     let carriedType;
                     if (l.state.customState.carried) {
                         carriedType = l.entity_type;
