@@ -239,6 +239,20 @@ impl GameInstance {
             client.last_controls.jump = false;
         }
 
+        // Update entities' absolute positions immediately after updating players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            for entity in world.entities.values_mut() {
+                if let Some(anchor) = &entity.state.anchor {
+                    if let Some(player) = self.players.get(&anchor.player_id) {
+                        entity.state.absolute_position = player.state.position;
+                    }
+                } else {
+                    entity.state.absolute_position = entity.state.position;
+                }
+            }
+        }
+
         // Update entities
         let entity_data = self.get_entities_in_world();
 
