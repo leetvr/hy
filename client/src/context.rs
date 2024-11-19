@@ -1,9 +1,12 @@
 use blocks::BlockTypeID;
-use entities::{EntityData, EntityState, EntityTypeID};
 use nanorand::Rng;
 use net_types::ClientPacket;
 use wasm_bindgen::prelude::*;
 use web_sys::js_sys;
+use {
+    entities::{EntityData, EntityState, EntityTypeID},
+    std::collections::HashMap,
+};
 
 use crate::{game_state::GameState, Engine};
 
@@ -104,5 +107,31 @@ impl Engine {
             model_path: entity_type.default_model_path().into(),
             state: EntityState::default(),
         });
+    }
+
+    pub fn ctx_get_players(&self) -> JsValue {
+        match &self.state {
+            GameState::Playing { players, .. } => serde_wasm_bindgen::to_value(
+                &players
+                    .iter()
+                    .map(|(id, player)| (id.clone(), player.script_state.clone()))
+                    .collect::<HashMap<_, _>>(),
+            )
+            .expect("Failed to serialize players"),
+            _ => JsValue::null(),
+        }
+    }
+
+    pub fn ctx_get_world_state(&self) -> JsValue {
+        match &self.state {
+            GameState::Playing {
+                world_script_state, ..
+            }
+            | GameState::Editing {
+                world_script_state, ..
+            } => serde_wasm_bindgen::to_value(&world_script_state)
+                .expect("Failed to serialize world state"),
+            _ => JsValue::null(),
+        }
     }
 }
