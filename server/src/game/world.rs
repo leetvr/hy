@@ -3,6 +3,7 @@ use {
     anyhow::Result,
     blocks::{BlockGrid, BlockRegistry},
     entities::{Anchor, EntityData, EntityTypeRegistry, Interaction, PlayerId},
+    net_types::PlaySound,
     physics::PhysicsWorld,
     std::{
         collections::HashMap,
@@ -65,10 +66,19 @@ impl World {
         });
     }
 
+    pub fn play_sound(&mut self, sound_id: String, position: glam::Vec3, volume: f32) {
+        self.command_queue.push(WorldCommand::PlaySound {
+            sound_id,
+            position,
+            volume,
+        })
+    }
+
     pub fn apply_queued_updates(
         &mut self,
         js_context: &mut JSContext,
         physics_world: Arc<Mutex<PhysicsWorld>>,
+        queued_sounds: &mut Vec<PlaySound>,
     ) {
         for command in self.command_queue.drain(..) {
             match command {
@@ -121,6 +131,15 @@ impl World {
                         });
                     }
                 }
+                WorldCommand::PlaySound {
+                    sound_id,
+                    position,
+                    volume,
+                } => queued_sounds.push(PlaySound {
+                    sound_id,
+                    position,
+                    volume,
+                }),
             }
         }
     }
@@ -199,5 +218,10 @@ enum WorldCommand {
         player_id: PlayerId,
         position: glam::Vec3,
         facing_angle: f32,
+    },
+    PlaySound {
+        sound_id: String,
+        position: glam::Vec3,
+        volume: f32,
     },
 }

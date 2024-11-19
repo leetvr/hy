@@ -271,7 +271,11 @@ impl GameInstance {
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
-        world.apply_queued_updates(js_context, self.physics_world.clone());
+        let mut queued_sounds = Vec::new();
+        world.apply_queued_updates(js_context, self.physics_world.clone(), &mut queued_sounds);
+
+        // NASTY(kmrw)
+        self.send_queued_sounds_to_clients(queued_sounds).await;
 
         maybe_next_state
     }
@@ -432,6 +436,24 @@ impl GameInstance {
             .iter()
             .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
             .collect::<Vec<_>>()
+    }
+
+    async fn send_queued_sounds_to_clients(&self, queued_sounds: Vec<net_types::PlaySound>) {
+        if queued_sounds.is_empty() {
+            return;
+        };
+
+        for client in self.clients.values() {
+            for sound in &queued_sounds {
+                if let Err(_) = client
+                    .outgoing_tx
+                    .send(net_types::ServerPacket::PlaySound(sound.clone()))
+                    .await
+                {
+                    tracing::error!("Error sending play sound packet");
+                }
+            }
+        }
     }
 }
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import init, { BlockRegistry, Engine, EngineMode, EntityTypeRegistry } from "../../pkg/client.js";
 import "./App.css";
-import init, { Engine, EngineMode, BlockRegistry, EntityTypeRegistry } from "../../pkg/client.js";
-import TopBar from "./TopBar.tsx";
 import LeftBar from "./LeftBar.tsx";
 import RightBar from "./RightBar.tsx";
+import TopBar from "./TopBar.tsx";
 
 function App({ engine }: { engine: Engine }) {
   const initialEngineMode = EngineMode.Edit;

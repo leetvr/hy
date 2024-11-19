@@ -7,13 +7,13 @@ export const onSpawn = (playerID, currentState) => {
     let newCustomState = Object.assign({}, customState);
     newCustomState.health = MAX_HEALTH;
     newCustomState.spawnPosition = position;
-    newCustomState.respawnTimer = 0.;
+    newCustomState.respawnTimer = 0;
     return Object.assign(Object.assign({}, currentState), { customState: newCustomState });
 };
 export const update = (playerID, currentState, controls) => {
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
     // It's just a quick way to pass data to the script.
-    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
+    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities, } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
     let newAnimationState = animationState;
@@ -56,6 +56,7 @@ export const update = (playerID, currentState, controls) => {
                 if (entityData.entity_type == BULLET_TYPE) {
                     // Destroy bullet and take damage
                     hy.despawnEntity(collision.targetId);
+                    hy.playSound("pain", currentState.position, 10);
                     newCustomState.health -= 1;
                     if (newCustomState.health <= 0) {
                         newCustomState.respawnTimer = RESPAWN_TIME;

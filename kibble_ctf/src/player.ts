@@ -14,13 +14,13 @@ export const onSpawn: OnPlayerSpawn = (
 
   newCustomState.health = MAX_HEALTH;
   newCustomState.spawnPosition = position;
-  newCustomState.respawnTimer = 0.;
+  newCustomState.respawnTimer = 0;
 
   return {
     ...currentState,
-    customState: newCustomState
+    customState: newCustomState,
   };
-}
+};
 
 export const update: PlayerUpdate = (
   playerID: number,
@@ -29,7 +29,14 @@ export const update: PlayerUpdate = (
 ): PlayerState => {
   // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
   // It's just a quick way to pass data to the script.
-  const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
+  const {
+    position,
+    velocity,
+    animationState,
+    isOnGround: wasOnGround,
+    customState,
+    attachedEntities,
+  } = currentState;
   let newPosition: Vec3 = [...position];
   let newVelocity: Vec3 = [...velocity];
   let newAnimationState: string = animationState;
@@ -38,7 +45,6 @@ export const update: PlayerUpdate = (
 
   let isAlive = newCustomState.health > 0;
   if (!isAlive) {
-
     if (attachedEntities["hand_left_anchor"]) {
       hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
     }
@@ -63,7 +69,6 @@ export const update: PlayerUpdate = (
     }
 
     if (collision.collisionTarget == "entity") {
-
       let entityData = hy.getEntityData(collision.targetId);
       if (entityData != undefined) {
         const GUN_TYPE = 1;
@@ -81,12 +86,12 @@ export const update: PlayerUpdate = (
         if (entityData.entity_type == BULLET_TYPE) {
           // Destroy bullet and take damage
           hy.despawnEntity(collision.targetId);
+          hy.playSound("pain", currentState.position, 10);
           newCustomState.health -= 1;
           if (newCustomState.health <= 0) {
             newCustomState.respawnTimer = RESPAWN_TIME;
           }
         }
-
 
         if (entityData.entity_type == BLUE_FLAG_TYPE || entityData.entity_type == RED_FLAG_TYPE) {
           // Don't do anything with a flag that is already carried
@@ -114,7 +119,6 @@ export const update: PlayerUpdate = (
       }
     }
   });
-
 
   if (newControls.fire) {
     let handItems = attachedEntities["hand_right_anchor"];
@@ -183,7 +187,7 @@ export const update: PlayerUpdate = (
 
   newPosition[0] += newVelocity[0] * DT;
   newPosition[1] += newVelocity[1] * DT;
-  newPosition[2] += newVelocity[2] * DT
+  newPosition[2] += newVelocity[2] * DT;
 
   if (!isAlive) {
     newAnimationState = "sleep";

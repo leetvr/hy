@@ -29,6 +29,7 @@ use glam::{UVec2, UVec3};
 use nanorand::Rng;
 use net_types::ClientPacket;
 use net_types::ClientShouldSwitchMode;
+use net_types::PlaySound;
 use render::DebugLine;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
@@ -39,6 +40,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, KeyboardEvent};
 
 mod assets;
+mod audio;
 mod camera;
 mod context;
 mod game_state;
@@ -49,6 +51,7 @@ mod socket;
 mod transform;
 
 const START_IN_EDIT_MODE: bool = false;
+const RENDER_DEBUG_LINES: bool = false;
 
 struct LoadedGLTF {
     gltf: gltf::GLTFModel,
@@ -82,6 +85,8 @@ pub struct Engine {
 
     assets: assets::Assets,
     state: GameState,
+
+    audio_manager: audio::AudioManager,
 }
 
 #[wasm_bindgen]
@@ -127,6 +132,9 @@ impl Engine {
             LoadedGLTF { gltf, render_model }
         };
 
+        let mut audio_manager = audio::AudioManager::new()?;
+        audio_manager.load_sound_bank();
+
         Ok(Self {
             context: context::Context::new(canvas),
             cube_mesh_data: renderer.create_cube_vao(),
@@ -149,6 +157,7 @@ impl Engine {
 
             assets: Assets::new(),
             state: Default::default(),
+            audio_manager,
         })
     }
 
@@ -336,6 +345,15 @@ impl Engine {
                                 .map(DebugLine::from)
                                 .collect();
                         }
+                        ServerPacket::PlaySound(PlaySound {
+                            sound_id,
+                            position,
+                            volume,
+                        }) => {
+                            if let Err(e) = self.play_sound_at_pos(&sound_id, position, volume) {
+                                tracing::error!("Error playing sound {sound_id}: {e:?}");
+                            }
+                        }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
                         }
@@ -374,6 +392,8 @@ impl Engine {
             }
             _ => {}
         }
+
+        audio::audio_debug_tools::test_audio_manager(self);
 
         // Send packets
         match &mut self.state {
@@ -523,6 +543,8 @@ impl Engine {
                 gltf::animate_model(&mut player.model, self.delta_time);
             }
         }
+
+        self.update_audio_manager();
 
         self.render();
     }
@@ -786,6 +808,11 @@ impl Engine {
             ..Default::default()
         };
 
+        // NASTY(kmrw)
+        if !RENDER_DEBUG_LINES {
+            self.debug_lines.clear();
+        }
+
         self.renderer
             .render(&draw_calls, &self.debug_lines, &[light], block_grid_size);
 
@@ -820,6 +847,201 @@ impl Engine {
             // Stash it in our map
             self.entity_models.insert(model_name.into(), loaded);
         }
+    }
+
+    pub fn stop_sounds(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.stop_all_sounds()
+    }
+
+    pub fn clear_bank(&mut self) -> Result<(), JsValue> {
+        self.audio_manager.clear_sounds_bank()
+    }
+
+    pub fn load_sound(&mut self, sound_id: &str) {
+        self.audio_manager.load_sound_file_from_name(sound_id)
+    }
+
+    pub fn load_url(&mut self, url: &str) {
+        self.audio_manager.load_sound_from_url(url)
+    }
+
+    /// Plays a sound associated with a specific entity.
+    ///
+    /// ## Parameters:
+    ///
+    /// * `sound_id` - the name of the sound to play
+    /// * `entity_id` - The identifier of the entity to associate the sound with.
+    /// * `is_looping` - Loop the track
+    /// * `pitch` - technically, playbackRate which is corresponds to `pitch` in minecraft
+    /// * `reference_distance` - the distance from listener at which the volume starts attenuating
+    ///
+    /// ## Returns
+    /// `Result<u32, JsValue>`:
+    /// - `Ok(u32)`: Returns the sound's unique handle, which can be used to manage or update the sound later.
+    /// - `Err(JsValue)`: Returns a descriptive error message if the sound could not be played.
+    pub fn play_sound_at_entity(
+        &mut self,
+        sound_id: &str,
+        entity_id: entities::EntityID,
+        is_looping: bool,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
+        volume: Option<f32>,
+        enable_distortion: bool,
+    ) -> Result<u32, JsValue> {
+        // Retrieve the entity's current position
+        let position = match &self.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities
+                .get(&entity_id)
+                .map(|entity_data| entity_data.state.position),
+            GameState::Loading => None,
+        }
+        .ok_or_else(|| {
+            let error_msg = format!("Entity ID {} not found", entity_id);
+            tracing::error!(error_msg);
+            JsValue::from_str(&error_msg)
+        })?;
+
+        // Play the sound at the entity's position
+        self.audio_manager.spawn_sound(
+            sound_id,
+            Some(entity_id),
+            Some(position),
+            false,
+            is_looping,
+            pitch,
+            reference_distance,
+            volume,
+            enable_distortion,
+        )
+    }
+
+    // play an ambient sound (spatialisation disabled). Ambient sounds are not played
+    // at a specific location relative to the listener so a position parameter is not
+    // required. While associating an entity with an ambient sound won't result in
+    // position updates it could be used to tether the lifetime of the sound to the entity
+    pub fn play_ambient_sound(
+        &mut self,
+        sound_id: &str,
+        maybe_entity_id: Option<entities::EntityID>,
+        is_looping: bool,
+        pitch: Option<f32>,
+        volume: Option<f32>,
+        enable_distortion: bool,
+    ) -> Result<u32, JsValue> {
+        self.audio_manager.spawn_sound(
+            sound_id,
+            maybe_entity_id,
+            None,
+            true, // disable spatialisation
+            is_looping,
+            pitch,
+            None,
+            volume,
+            enable_distortion,
+        )
+    }
+
+    fn play_sound_at_pos(
+        &mut self,
+        sound_id: &str,
+        sound_position: glam::Vec3,
+        volume: f32,
+    ) -> Result<u32, JsValue> {
+        self.audio_manager.spawn_sound(
+            sound_id,
+            None,
+            Some(sound_position),
+            false,
+            false,
+            None,
+            None,
+            Some(volume),
+            false,
+        )
+    }
+
+    // Update an already active SoundInstance with the specified handle
+    pub fn update_sound_with_handle(
+        &mut self,
+        handle: u32, // Hmmmm, probably should refactor wasm parameters to strings?
+        entity_id: Option<entities::EntityID>,
+        is_ambient: Option<bool>, // not implemented
+        is_looping: Option<bool>,
+        pitch: Option<f32>,
+        reference_distance: Option<f32>,
+        volume: Option<f32>,
+        enable_distortion: Option<bool>, // not implemented
+        // There's gotta be a better way to pass the position?
+        x: Option<f32>,
+        y: Option<f32>,
+        z: Option<f32>,
+    ) -> Result<(), JsValue> {
+        let position: Option<Vec3> = match (x, y, z) {
+            (Some(x), Some(y), Some(z)) => Some(Vec3::new(x, y, z)),
+            _ => None, // Return None if any component is missing
+        };
+        self.audio_manager.update_sound_with_handle(
+            handle,
+            entity_id,
+            position,
+            is_ambient,
+            is_looping,
+            pitch,
+            reference_distance,
+            volume,
+            enable_distortion,
+        )
+    }
+
+    fn update_audio_manager(&mut self) {
+        // Get the camera's position and rotation based on the current game state
+        let (position, rotation) = match &self.state {
+            GameState::Playing { camera, .. } | GameState::Editing { camera, .. } => {
+                camera.position_and_rotation()
+            }
+            GameState::Loading => return,
+        };
+
+        // Update the listener's position and orientation
+        self.audio_manager
+            .set_listener_position(position.x, position.y, position.z);
+
+        let forward = (rotation * Vec3::new(0.0, 0.0, -1.0)).normalize();
+        let up = (rotation * Vec3::new(0.0, 1.0, 0.0)).normalize();
+
+        self.audio_manager
+            .set_listener_orientation(forward.x, forward.y, forward.z, up.x, up.y, up.z);
+
+        // Update the positions of all active sounds and handle cleanup for non-existent entities
+        // Access entities based on the current game state
+        let entities = match &self.state {
+            GameState::Playing { entities, .. } | GameState::Editing { entities, .. } => entities,
+            GameState::Loading => return, // Early exit if the game is loading
+        };
+
+        // Step 1: Collect positions of entities with active sounds
+        let mut positions = HashMap::new();
+
+        for (entity_id, entity_data) in entities.iter() {
+            if self
+                .audio_manager
+                .has_active_sound_with_entity_id(&entity_id.clone())
+            {
+                positions.insert(entity_id.clone(), entity_data.state.position);
+            }
+        }
+
+        // Update sound positions in AudioManager
+        self.audio_manager.synchronise_entity_positions(&positions);
+
+        // Note, I haven't properly tested the cleanup phase in the following code.
+        // TODO: Also need to cleanup one shot (non looping) sounds not associated with an entity
+        // Collect existing entity IDs for cleanup
+        let existing_entity_ids: HashSet<entities::EntityID> = entities.keys().cloned().collect();
+        // Clean up sounds associated with non-existent entities
+        self.audio_manager
+            .cleanup_entity_sounds(&existing_entity_ids);
     }
 }
 
