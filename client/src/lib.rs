@@ -126,7 +126,7 @@ impl Engine {
         .map_err(|e| format!("Failed to connect to server: {e}"))?;
 
         let player_model = {
-            let gltf = gltf::load(include_bytes!("../../assets/NewModel_Anchors_Armor.gltf"))
+            let gltf = gltf::load(include_bytes!("../../kibble_ctf/player_red.gltf"))
                 .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
             let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
             LoadedGLTF { gltf, render_model }
