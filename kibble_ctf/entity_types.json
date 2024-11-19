@@ -65,6 +65,18 @@
         "colliderHeight": 0.1,
         "dynamic": false
       }
+    },
+    {
+      "id": 7,
+      "name": "Ammo Box",
+      "scriptPath": "ammo.js",
+      "defaultModelPath": "kibble_ctf/box.gltf",
+      "physicsProperties": {
+        "colliderKind": "cube",
+        "colliderWidth": 0.5,
+        "colliderHeight": 0.5,
+        "dynamic": false
+      }
     }
   ]
 }
