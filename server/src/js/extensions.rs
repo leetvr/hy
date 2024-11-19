@@ -1,6 +1,7 @@
 use {
     crate::game::{PlayerState, World},
     anyhow::bail,
+    blocks::{BlockPos, BlockTypeID, EMPTY_BLOCK},
     deno_core::{error::AnyError, extension, op2, OpState},
     entities::{EntityData, EntityID, EntityState, PlayerId},
     glam::{EulerRot, Vec3},
@@ -175,6 +176,16 @@ fn play_sound(
     world.play_sound(sound_id, position, volume)
 }
 
+#[op2]
+fn get_block(state: &mut OpState, #[serde] position: Vec3) -> u8 {
+    let world = state.borrow::<Arc<Mutex<World>>>();
+    let world = world.lock().unwrap();
+
+    BlockPos::from_float(position)
+        .and_then(|pos| world.blocks.get(pos).copied())
+        .unwrap_or(EMPTY_BLOCK)
+}
+
 // Exports the extensions as a variable named `hy`
 extension!(
     hy,
@@ -191,6 +202,7 @@ extension!(
         get_collisions_for_entity,
         get_collisions_for_player,
         play_sound,
+        get_block,
     ],
     esm_entry_point = "ext:hy/runtime.js",
     esm = [dir "src/js", "runtime.js"],

@@ -249,6 +249,12 @@ export const update: PlayerUpdate = (
     newVelocity[1] = JUMP_SPEED;
     newCustomState.coyoteTime = 0.;
   }
+
+  // Special jump pad logic
+  if (isOnGround && hy.getBlock([position[0], position[1] - 1.0, position[2]]) == 11) {
+    newVelocity[1] = JUMP_SPEED * 2;
+  }
+
   newPosition[0] += newVelocity[0] * DT;
   newPosition[1] += newVelocity[1] * DT;
   newPosition[2] += newVelocity[2] * DT;

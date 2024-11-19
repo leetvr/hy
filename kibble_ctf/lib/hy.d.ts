@@ -135,6 +135,7 @@ interface GlobalHy {
   getCollisionsForEntity: (entityId: EntityId) => Collision[];
   getCollisionsForPlayer: (playerID: number) => Collision[];
   playSound: (soundId: string, position: Vec3, volume: number) => void;
+  getBlock: (position: Vec3) => number;
 }
 
 interface CollisionResult {
