@@ -99,8 +99,6 @@ type OnEntitySpawn = (entityData: EntityData) => EntityData;
 
 type EntityUpdate = (id: string, currentState: EntityState) => EntityState;
 
-export const DT = 0.01666667; // 60HZ
-
 interface GlobalHy {
   getEntities: () => { [key: EntityId]: EntityData };
   getEntityData: (entityId: EntityId) => EntityData;

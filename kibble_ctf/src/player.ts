@@ -72,9 +72,10 @@ export const update: PlayerUpdate = (
       let entityData = hy.getEntityData(collision.targetId);
       if (entityData != undefined) {
         const GUN_TYPE = 1;
-        const BULLET_TYPE = 2;
+        const BALL_TYPE = 2;
         const BLUE_FLAG_TYPE = 3;
         const RED_FLAG_TYPE = 4;
+        const BULLET_TYPE = 6;
 
         if (entityData.entity_type == GUN_TYPE) {
           // Pick up gun if there's nothing in the right hand
@@ -88,6 +89,16 @@ export const update: PlayerUpdate = (
           hy.despawnEntity(collision.targetId);
           hy.playSound("pain", currentState.position, 10);
           newCustomState.health -= 1;
+          if (newCustomState.health <= 0) {
+            newCustomState.respawnTimer = RESPAWN_TIME;
+          }
+        }
+
+        if (entityData.entity_type == BALL_TYPE) {
+          // Destroy bullet and take damage
+          hy.despawnEntity(collision.targetId);
+          hy.playSound("pain", currentState.position, 10);
+          newCustomState.health -= 1; // TODO: More damage?
           if (newCustomState.health <= 0) {
             newCustomState.respawnTimer = RESPAWN_TIME;
           }

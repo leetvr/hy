@@ -10,7 +10,7 @@
       "id": 1,
       "name": "Gun",
       "scriptPath": "gun.js",
-      "defaultModelPath": "kibble_ctf/gun.gltf"
+      "defaultModelPath": "kibble_ctf/bolter.gltf"
     },
     {
       "id": 2,
@@ -45,6 +45,24 @@
         "colliderKind": "cube",
         "colliderWidth": 1.0,
         "colliderHeight": 1.0,
+        "dynamic": false
+      }
+    },
+    {
+      "id": 5,
+      "name": "Shotgun",
+      "scriptPath": "shotgun.js",
+      "defaultModelPath": "kibble_ctf/gun.gltf"
+    },
+    {
+      "id": 6,
+      "name": "Bullet",
+      "scriptPath": "bullet.js",
+      "defaultModelPath": "kibble_ctf/bullet.gltf",
+      "physicsProperties": {
+        "colliderKind": "ball",
+        "colliderWidth": 0.1,
+        "colliderHeight": 0.1,
         "dynamic": false
       }
     }
