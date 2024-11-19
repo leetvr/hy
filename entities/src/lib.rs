@@ -108,6 +108,8 @@ pub struct EntityState {
     pub position: glam::Vec3,
     pub rotation: glam::Quat,
     pub velocity: glam::Vec3,
+    #[serde(default = "default_scale")]
+    pub scale: glam::Vec3,
     pub anchor: Option<Anchor>,
     pub interactions: Vec<Interaction>,
     #[serde(default)]
@@ -117,6 +119,10 @@ pub struct EntityState {
     // it's the same as `position`. This is pretty hacky.
     #[serde(default)]
     pub absolute_position: glam::Vec3,
+}
+
+fn default_scale() -> glam::Vec3 {
+    glam::Vec3::new(1.0, 1.0, 1.0)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

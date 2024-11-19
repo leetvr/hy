@@ -221,6 +221,7 @@ impl JSContext {
                 position,
                 rotation,
                 velocity,
+                scale,
                 custom_state,
 
                 // Not mutable from JS
@@ -232,6 +233,7 @@ impl JSContext {
             entity.state.position = position;
             entity.state.rotation = rotation;
             entity.state.velocity = velocity;
+            entity.state.scale = scale;
             entity.state.custom_state = custom_state;
         }
 

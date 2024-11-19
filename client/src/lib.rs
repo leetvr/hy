@@ -1121,6 +1121,7 @@ fn get_entity_transform(
         position,
         rotation,
         anchor,
+        scale,
         ..
     }: &EntityState,
 ) -> Transform {
@@ -1157,7 +1158,7 @@ fn get_entity_transform(
             }
 
             let Some(player_model) = player.model.as_ref() else {
-                return Transform::new(*position, *rotation);
+                return Transform::new_with_scale(*position, *rotation, *scale);
             };
             if let Some(node_transform) = build_transform(
                 &player_model,
@@ -1165,7 +1166,8 @@ fn get_entity_transform(
                 parent_anchor,
                 player_transform(player),
             ) {
-                let transform = node_transform * Transform::new(*position, *rotation);
+                let transform =
+                    node_transform * Transform::new_with_scale(*position, *rotation, *scale);
                 return transform;
             } else {
                 tracing::warn!("couldn't find anchor node {parent_anchor}");
@@ -1176,7 +1178,7 @@ fn get_entity_transform(
     }
 
     // No valid, return absolute position and rotation
-    Transform::new(*position, *rotation)
+    Transform::new_with_scale(*position, *rotation, *scale)
 }
 
 fn player_transform(player: &Player) -> Transform {

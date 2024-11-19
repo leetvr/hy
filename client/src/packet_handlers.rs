@@ -1,9 +1,8 @@
 use {
-    crate::{gltf::GLTFModel, LoadedGLTF},
+    crate::LoadedGLTF,
     anyhow::{bail, Result},
     blocks::BlockGrid,
     entities::{EntityData, EntityID, PlayerId},
-    glam::Vec3Swizzles,
     net_types::{AddEntity, RemoveEntity, UpdateEntity},
     std::collections::HashMap,
 };
@@ -102,6 +101,7 @@ pub(crate) fn handle_update_entity(
         position,
         rotation,
         anchor,
+        scale,
     }: UpdateEntity,
 ) -> Result<()> {
     let Some(entity) = entities.get_mut(&entity_id) else {
@@ -110,6 +110,7 @@ pub(crate) fn handle_update_entity(
 
     entity.state.position = position;
     entity.state.rotation = rotation;
+    entity.state.scale = scale;
     entity.state.anchor = anchor;
 
     Ok(())

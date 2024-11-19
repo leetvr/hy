@@ -615,8 +615,9 @@ async fn sync_entities_to_client(
         client.awareness.entities.insert(
             entity_id.clone(),
             KnownEntityState {
-                position: entity.state.position.clone(),
-                rotation: entity.state.rotation.clone(),
+                position: entity.state.position,
+                rotation: entity.state.rotation,
+                scale: entity.state.scale,
                 anchor: entity.state.anchor.clone(),
             },
         );
@@ -642,6 +643,7 @@ async fn sync_entities_to_client(
         KnownEntityState {
             position: known_position,
             rotation: known_rotation,
+            scale: known_scale,
             anchor: known_anchor,
         },
     ) in &mut client.awareness.entities
@@ -649,6 +651,7 @@ async fn sync_entities_to_client(
         let entity = entities.get(entity_id).unwrap();
         if entity.state.position != *known_position
             || entity.state.rotation != *known_rotation
+            || entity.state.scale != *known_scale
             || entity.state.anchor != *known_anchor
         {
             let _ = client
@@ -656,8 +659,9 @@ async fn sync_entities_to_client(
                 .send(
                     net_types::UpdateEntity {
                         entity_id: entity_id.clone(),
-                        position: entity.state.position.clone(),
-                        rotation: entity.state.rotation.clone(),
+                        position: entity.state.position,
+                        rotation: entity.state.rotation,
+                        scale: entity.state.scale,
                         anchor: entity.state.anchor.clone(),
                     }
                     .into(),
@@ -665,6 +669,7 @@ async fn sync_entities_to_client(
                 .await;
             *known_position = entity.state.position.clone();
             *known_rotation = entity.state.rotation.clone();
+            *known_scale = entity.state.scale.clone();
             *known_anchor = entity.state.anchor.clone();
         }
     }
