@@ -40,19 +40,21 @@ export default function CtfGameUi({
         return () => clearInterval(intervalId);
     });
 
-    let task;
     let otherTeam;
     if(playerTeam === "blue") {
         otherTeam = "red";
     } else {
         otherTeam = "blue";
     }
+    let task;
+    let taskClass = "";
     if(iHaveFlag) {
+        taskClass = "has-flag";
         task = "You have the flag — return to base.";
     } else {
         task = "Infiltrate the " + otherTeam + " base and take their flag.";
     }
-    return <div className="ctf">
+    return <div className={"ctf team-" + playerTeam}>
         <div className="status-ctr">
             <div className="status status-health">{playerHealth}</div>
             <div className="status status-ammo">{playerAmmo}</div>
@@ -63,7 +65,7 @@ export default function CtfGameUi({
         </div>
         <div className="instructions-ctr">
             <p className="instruction-whichteam">You are on <span class={"team-" + playerTeam}>{playerTeam}</span> team.</p>
-            <p className="instruction-task">{task}</p>
+            <p className={"instruction-task " + taskClass}>{task}</p>
         </div>
     </div>;
 }

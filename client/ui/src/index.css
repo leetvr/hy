@@ -221,6 +221,28 @@ a:hover {
     text-transform: uppercase;
     color: #6BA4B8;
 }
+.ctf.team-blue .instruction-task.has-flag {
+    animation: 1s infinite normal cubic-bezier(0.7, 0, 0.84, 0) flag-pulse-blue;
+}
+.ctf.team-red .instruction-task.has-flag {
+    animation: 1s infinite normal cubic-bezier(0.7, 0, 0.84, 0) flag-pulse-red;
+}
+@keyframes flag-pulse-blue  {
+    from {
+        color: #fff;
+    }
+    to {
+        color: #77f;
+    }
+}
+@keyframes flag-pulse-red  {
+    from {
+        color: #fff;
+    }
+    to {
+        color: #f77;
+    }
+}
 
 body {
   margin: 0;
