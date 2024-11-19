@@ -234,6 +234,11 @@ export const update: PlayerUpdate = (
     newAnimationState = "sleep";
   }
 
+  // Players die when they are below the map
+  if (newPosition[1] < -10) {
+    newCustomState.health = 0;
+  }
+
   return {
     ...currentState,
     position: newPosition,
