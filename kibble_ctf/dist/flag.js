@@ -8,21 +8,24 @@ export const onSpawn = (entityData) => {
     return Object.assign(Object.assign({}, entityData), { name: "Blue Flag", state: Object.assign(Object.assign({}, entityData.state), { customState: customState }) });
 };
 export const update = (id, currentState) => {
-    const { anchor, customState, position, rotation } = currentState;
+    const { anchor, customState, position, rotation, scale } = currentState;
     let newPosition = [...position];
     let newRotation = [...rotation];
+    let newScale = [...scale];
     let newCustomState = Object.assign({}, customState);
-    if (currentState.anchor != null) {
+    if (anchor != null) {
         // If the flag is attached to a player, move it with the player
-        newPosition = [0, 0.25, 0];
+        newPosition = [0, 0, -0.25];
         // This quaternion brought to you by ChatGPT
         // Why have usable APIs when you have math robuts
-        newRotation = [-0.7071068, 0, 0, 0.7071068];
+        newRotation = [0.2588190451, 0., 0., 0.9659258263];
+        newScale = [2., 3., 2.];
         newCustomState.carried = true;
     }
     else {
         // Reset the rotation when the flag is no longer held
         newRotation = [0, 0, 0, 1];
+        newScale = [1., 1., 1.];
         newCustomState.carried = false;
     }
     // On interaction, return the flag to its spawn position
@@ -30,5 +33,5 @@ export const update = (id, currentState) => {
         newPosition = customState.spawnPosition;
         hy.detachEntity(id, customState.spawnPosition);
     }
-    return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, customState: newCustomState });
+    return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, scale: newScale, customState: newCustomState });
 };

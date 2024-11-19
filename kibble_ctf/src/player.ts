@@ -215,8 +215,8 @@ export const update: PlayerUpdate = (
             newCustomState.hasFlag = false;
           } else {
             // Pick up the flag if we aren't already holding something in the left hand
-            if (!newCustomState.stunned && !attachedEntities["hand_left_anchor"]) {
-              hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+            if (!newCustomState.stunned && !attachedEntities["back_anchor"]) {
+              hy.anchorEntity(collision.targetId, playerID, "back_anchor");
               newCustomState.hasFlag = true;
             }
           }
@@ -226,8 +226,8 @@ export const update: PlayerUpdate = (
   });
 
   if (!isAlive || newCustomState.stunned) {
-    if (attachedEntities["hand_left_anchor"]) {
-      hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+    if (attachedEntities["back_anchor"]) {
+      hy.detachEntity(attachedEntities["back_anchor"][0], newPosition);
     }
 
     // Reset controls when player is dead or stunned
