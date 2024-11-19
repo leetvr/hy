@@ -29,6 +29,7 @@ use glam::{UVec2, UVec3};
 use nanorand::Rng;
 use net_types::ClientPacket;
 use net_types::ClientShouldSwitchMode;
+use net_types::PlaySound;
 use render::DebugLine;
 use render::{Renderer, Texture};
 use socket::IncomingMessages;
@@ -50,6 +51,7 @@ mod socket;
 mod transform;
 
 const START_IN_EDIT_MODE: bool = false;
+const RENDER_DEBUG_LINES: bool = false;
 
 struct LoadedGLTF {
     gltf: gltf::GLTFModel,
@@ -335,6 +337,15 @@ impl Engine {
                                 .into_iter()
                                 .map(DebugLine::from)
                                 .collect();
+                        }
+                        ServerPacket::PlaySound(PlaySound {
+                            sound_id,
+                            position,
+                            volume,
+                        }) => {
+                            if let Err(e) = self.play_sound_at_pos(&sound_id, position, volume) {
+                                tracing::error!("Error playing sound {sound_id}: {e:?}");
+                            }
                         }
                         p => {
                             tracing::error!("Received unexpected packet: {:#?}", p);
@@ -790,6 +801,11 @@ impl Engine {
             ..Default::default()
         };
 
+        // NASTY(kmrw)
+        if !RENDER_DEBUG_LINES {
+            self.debug_lines.clear();
+        }
+
         self.renderer
             .render(&draw_calls, &self.debug_lines, &[light], block_grid_size);
 
@@ -919,30 +935,22 @@ impl Engine {
         )
     }
 
-    pub fn play_sound_at_pos(
+    fn play_sound_at_pos(
         &mut self,
         sound_id: &str,
-        x: f32,
-        y: f32,
-        z: f32,
-        is_ambient: bool,
-        is_looping: bool,
-        pitch: Option<f32>,
-        reference_distance: Option<f32>,
-        volume: Option<f32>,
-        enable_distortion: bool,
+        sound_position: glam::Vec3,
+        volume: f32,
     ) -> Result<u32, JsValue> {
-        let sound_position = [x, y, z].into();
         self.audio_manager.spawn_sound(
             sound_id,
             None,
             Some(sound_position),
-            is_ambient,
-            is_looping,
-            pitch,
-            reference_distance,
-            volume,
-            enable_distortion,
+            false,
+            false,
+            None,
+            None,
+            Some(volume),
+            false,
         )
     }
 
@@ -1018,7 +1026,7 @@ impl Engine {
         }
 
         // Update sound positions in AudioManager
-        self.audio_manager.synchronise_positions(&positions);
+        self.audio_manager.synchronise_entity_positions(&positions);
 
         // Note, I haven't properly tested the cleanup phase in the following code.
         // TODO: Also need to cleanup one shot (non looping) sounds not associated with an entity

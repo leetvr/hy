@@ -45,4 +45,7 @@ globalThis.hy = {
   getCollisionsForPlayer: (playerId) => {
     return core.ops.get_collisions_for_player(playerId);
   },
+  playSound: (soundId, position, volume) => {
+    return core.ops.play_sound(soundId, position, volume);
+  },
 };

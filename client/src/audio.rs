@@ -304,7 +304,7 @@ impl AudioManager {
     }
 
     /// Updates the positions of all active sounds associated with entities.
-    pub fn synchronise_positions(&mut self, positions: &HashMap<EntityID, Vec3>) {
+    pub fn synchronise_entity_positions(&mut self, positions: &HashMap<EntityID, Vec3>) {
         for sound_instance in self.active_sounds.values_mut() {
             if let Some(entity_id) = &sound_instance.entity_id {
                 if let Some(pos) = positions.get(entity_id) {
@@ -678,18 +678,7 @@ pub mod audio_debug_tools {
         };
 
         let pos = ray_hit.position;
-        if let Err(_) = engine.play_sound_at_pos(
-            sound_id,
-            pos.x as f32,
-            pos.y as f32,
-            pos.z as f32,
-            false,
-            true,
-            None,
-            None,
-            Some(10.),
-            false,
-        ) {
+        if let Err(_) = engine.play_sound_at_pos(sound_id, pos.into(), 10.) {
             tracing::error!("Failed to play sound '{}' at position {:?}", sound_id, pos)
         }
     }

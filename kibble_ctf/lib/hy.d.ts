@@ -55,10 +55,9 @@ export interface EntityState {
   velocity: Vec3;
   rotation: Quat;
   anchor: Anchor | null;
-  interactions: Interaction[],
+  interactions: Interaction[];
   customState: CustomState;
 }
-
 
 export interface Interaction {
   player: number;
@@ -74,11 +73,7 @@ type PlayerUpdate = (
   controls: PlayerControls,
 ) => PlayerState;
 
-type OnPlayerSpawn = (
-  playerID: number,
-  currentState: PlayerState,
-) => PlayerState;
-
+type OnPlayerSpawn = (playerID: number, currentState: PlayerState) => PlayerState;
 
 // World script hooks
 
@@ -88,13 +83,9 @@ type WorldOnAddPlayer = (
   currentState: PlayerState,
 ) => [CustomState, PlayerState];
 
-type WorldInit = (
-  worldState: CustomState,
-) => CustomState;
+type WorldInit = (worldState: CustomState) => CustomState;
 
-type WorldUpdate = (
-  worldState: CustomState,
-) => CustomState;
+type WorldUpdate = (worldState: CustomState) => CustomState;
 
 /**
  * Callback function invoked when an entity is spawned. Useful for changing the model of an entity.
@@ -106,10 +97,7 @@ type WorldUpdate = (
  */
 type OnEntitySpawn = (entityData: EntityData) => EntityData;
 
-type EntityUpdate = (
-  id: string,
-  currentState: EntityState,
-) => EntityState;
+type EntityUpdate = (id: string, currentState: EntityState) => EntityState;
 
 export const DT = 0.01666667; // 60HZ
 
@@ -125,9 +113,15 @@ interface GlobalHy {
   ) => CollisionResult;
   anchorEntity: (entityId: EntityId, anchorId: number, anchorName: AnchorName) => void;
   detachEntity: (entityId: EntityId, position: Vec3) => void;
-  interactEntity: (entityId: EntityId, playerId: number, position: Vec3, facingAngle: number) => void;
+  interactEntity: (
+    entityId: EntityId,
+    playerId: number,
+    position: Vec3,
+    facingAngle: number,
+  ) => void;
   getCollisionsForEntity: (entityId: EntityId) => Collision[];
   getCollisionsForPlayer: (playerID: number) => Collision[];
+  playSound: (soundId: string, position: Vec3, volume: number) => void;
 }
 
 interface CollisionResult {
