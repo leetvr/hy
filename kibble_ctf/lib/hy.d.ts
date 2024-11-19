@@ -29,6 +29,7 @@ export interface PlayerState {
   isOnGround: boolean;
   customState: CustomState;
   attachedEntities: AttachedEntities;
+  modelPath: string;
 }
 
 export interface PlayerControls {

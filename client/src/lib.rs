@@ -72,7 +72,6 @@ pub struct Engine {
     last_seen_sequence_number: u64,
 
     controls: Controls,
-    player_model: LoadedGLTF,
 
     cube_mesh_data: render::CubeVao,
     // Textures by block type ID
@@ -125,13 +124,6 @@ impl Engine {
         )
         .map_err(|e| format!("Failed to connect to server: {e}"))?;
 
-        let player_model = {
-            let gltf = gltf::load(include_bytes!("../../kibble_ctf/player_red.gltf"))
-                .map_err(|e| format!("Error loading GLTF: {e:#?}"))?;
-            let render_model = render::RenderModel::from_gltf(&renderer, &gltf);
-            LoadedGLTF { gltf, render_model }
-        };
-
         let mut audio_manager = audio::AudioManager::new()?;
         audio_manager.load_sound_bank();
 
@@ -151,7 +143,6 @@ impl Engine {
             last_seen_sequence_number: 0,
 
             controls: Default::default(),
-            player_model,
 
             debug_lines: Vec::new(),
 
@@ -309,13 +300,13 @@ impl Engine {
                         ServerPacket::AddPlayer(add_player) => {
                             packet_handlers::handle_add_player(
                                 players,
-                                &self.player_model.gltf,
+                                &self.entity_models,
                                 add_player,
                             )
                             .expect("Failed to add player");
                         }
                         ServerPacket::UpdatePlayer(update_position) => {
-                            packet_handlers::handle_update_position(players, update_position);
+                            packet_handlers::handle_update_player(players, update_position);
                         }
                         ServerPacket::RemovePlayer(remove_player) => {
                             packet_handlers::handle_remove_player(players, remove_player)
@@ -540,7 +531,9 @@ impl Engine {
 
         if let GameState::Playing { players, .. } = &mut self.state {
             for player in players.values_mut() {
-                gltf::animate_model(&mut player.model, self.delta_time);
+                if let Some(model) = &mut player.model {
+                    gltf::animate_model(model, self.delta_time);
+                }
             }
         }
 
@@ -741,16 +734,28 @@ impl Engine {
         };
 
         // Gather state-specific extras
-        match &self.state {
+        match &mut self.state {
             // Players
             GameState::Playing { players, .. } => {
                 // HACK: The player model is rotated 90 degrees, also
                 // it rotates the wrong way? I'm just fixing it here but someone
                 // should figure out why it is like this.
-                for player in players.values() {
+                for player in players.values_mut() {
+                    let Some(player_model) = self.entity_models.get(&player.model_path) else {
+                        continue;
+                    };
+                    if player.model.is_none() {
+                        let mut gltf = player_model.gltf.clone();
+                        gltf.play_animation(&player.animation_state, 0.);
+                        player.model = Some(gltf);
+
+                        player.model.as_mut().unwrap();
+                    }
+                    let player_gltf = player.model.as_ref().unwrap();
+
                     draw_calls.extend(render::build_render_plan(
-                        slice::from_ref(&player.model),
-                        slice::from_ref(&self.player_model.render_model),
+                        slice::from_ref(player_gltf),
+                        slice::from_ref(&player_model.render_model),
                         player_transform(player),
                         None,
                     ));
@@ -820,12 +825,22 @@ impl Engine {
     }
 
     fn load_entity_models(&mut self) {
-        let entities = match &self.state {
-            GameState::Editing { entities, .. } | GameState::Playing { entities, .. } => entities,
+        let model_paths: Box<dyn Iterator<Item = &String>> = match &self.state {
+            GameState::Editing { entities, .. } => {
+                Box::new(entities.values().map(|e| &e.model_path))
+            }
+            GameState::Playing {
+                entities, players, ..
+            } => Box::new(
+                entities
+                    .values()
+                    .map(|e| &e.model_path)
+                    .chain(players.values().map(|p| &p.model_path)),
+            ),
             _ => return,
         };
 
-        for model_name in entities.values().map(|e| &e.model_path) {
+        for model_name in model_paths {
             // If we've already loaded this model, continue
             if self.entity_models.contains_key(model_name) {
                 continue;
@@ -1139,9 +1154,12 @@ fn get_entity_transform(
                 None
             }
 
+            let Some(player_model) = player.model.as_ref() else {
+                return Transform::new(*position, *rotation);
+            };
             if let Some(node_transform) = build_transform(
-                &player.model,
-                player.model.root_node_idx,
+                &player_model,
+                player_model.root_node_idx,
                 parent_anchor,
                 player_transform(player),
             ) {
@@ -1185,8 +1203,10 @@ struct Controls {
 struct Player {
     position: Vec3,
     facing_angle: f32, // radians
-    model: GLTFModel,
+    model: Option<GLTFModel>,
     script_state: HashMap<String, serde_json::Value>,
+    animation_state: String,
+    model_path: String,
 }
 
 const MOUSE_SENSITIVITY_X: f32 = 0.005;

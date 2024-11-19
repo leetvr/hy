@@ -12,13 +12,22 @@ export const onSpawn: OnPlayerSpawn = (
   const { customState, position } = currentState;
   let newCustomState = { ...customState };
 
+  let newModelPath;
+  if (customState.team == "red") {
+    newModelPath = "kibble_ctf/player_red.gltf";
+  } else {
+    newModelPath = "kibble_ctf/player_blue.gltf";
+  }
+
   newCustomState.health = MAX_HEALTH;
   newCustomState.spawnPosition = position;
   newCustomState.respawnTimer = 0;
 
+  // NOTE(ll): modelPath *must* be set here, otherwise the model won't be loaded.
   return {
     ...currentState,
     customState: newCustomState,
+    modelPath: newModelPath,
   };
 };
 
@@ -215,6 +224,7 @@ export const update: PlayerUpdate = (
   }
 
   return {
+    ...currentState,
     position: newPosition,
     velocity: newVelocity,
     animationState: newAnimationState,

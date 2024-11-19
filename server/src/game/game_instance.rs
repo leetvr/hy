@@ -507,6 +507,7 @@ async fn sync_players_to_client(
                     position: player.state.position,
                     animation_state: player.state.animation_state.clone(),
                     script_state: player.state.custom_state.clone(),
+                    model_path: player.state.model_path.clone(),
                 }
                 .into(),
             )

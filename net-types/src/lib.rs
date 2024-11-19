@@ -44,6 +44,7 @@ pub struct AddPlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
     pub animation_state: String,
+    pub model_path: String,
     pub script_state: HashMap<String, serde_json::Value>,
 }
 
