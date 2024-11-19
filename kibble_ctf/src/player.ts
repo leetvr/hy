@@ -164,14 +164,15 @@ export const update: PlayerUpdate = (
     }
   });
 
+  let isFiring = false;
   if (newControls.fire) {
-    console.log("fire");
     newFacingAngle = controls.camera_yaw;
 
     let handItems = attachedEntities["hand_right_anchor"];
     if (handItems != undefined) {
       handItems.forEach((item) => {
         if (newCustomState.ammo > 0) {
+          isFiring = true;
           hy.interactEntity(item, playerID, position, newControls.camera_yaw);
           newCustomState.ammo -= 1;
         }
@@ -203,12 +204,10 @@ export const update: PlayerUpdate = (
     newVelocity[0] = moveDirX * MOVE_SPEED;
     newVelocity[2] = -moveDirZ * MOVE_SPEED;
 
-    newAnimationState = "run";
   } else {
     // TODO: Apply damping to horizontal velocity when no input
     newVelocity[0] *= 0.7;
     newVelocity[2] *= 0.7;
-    newAnimationState = "idle";
   }
 
   // Apply gravity
@@ -229,7 +228,9 @@ export const update: PlayerUpdate = (
   newVelocity[1] = correctedMovement[1];
   newVelocity[2] = correctedMovement[2];
 
+  let didJump = false;
   if (isOnGround && newControls.jump) {
+    didJump = true;
     newVelocity[1] = JUMP_SPEED;
   }
 
@@ -239,6 +240,14 @@ export const update: PlayerUpdate = (
 
   if (!isAlive) {
     newAnimationState = "sleep";
+  } else if (isFiring) {
+    newAnimationState = "simple_interact";
+  } else if (didJump) {
+    newAnimationState = "jump_loop";
+  } else if ((inputX !== 0 || inputZ !== 0) && isOnGround) {
+    newAnimationState = "run";
+  } else if (isOnGround) {
+    newAnimationState = "idle";
   }
 
   // Players die when they are below the map

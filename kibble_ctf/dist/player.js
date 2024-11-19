@@ -124,6 +124,7 @@ export const update = (playerID, currentState, controls) => {
             }
         }
     });
+    let isFiring = false;
     if (newControls.fire) {
         console.log("fire");
         newFacingAngle = controls.camera_yaw;
@@ -131,6 +132,7 @@ export const update = (playerID, currentState, controls) => {
         if (handItems != undefined) {
             handItems.forEach((item) => {
                 if (newCustomState.ammo > 0) {
+                    isFiring = true;
                     hy.interactEntity(item, playerID, position, newControls.camera_yaw);
                     newCustomState.ammo -= 1;
                 }
@@ -155,13 +157,11 @@ export const update = (playerID, currentState, controls) => {
         // Update horizontal velocity
         newVelocity[0] = moveDirX * MOVE_SPEED;
         newVelocity[2] = -moveDirZ * MOVE_SPEED;
-        newAnimationState = "run";
     }
     else {
         // TODO: Apply damping to horizontal velocity when no input
         newVelocity[0] *= 0.7;
         newVelocity[2] *= 0.7;
-        newAnimationState = "idle";
     }
     // Apply gravity
     if (!wasOnGround) {
@@ -173,7 +173,9 @@ export const update = (playerID, currentState, controls) => {
     newVelocity[0] = correctedMovement[0];
     newVelocity[1] = correctedMovement[1];
     newVelocity[2] = correctedMovement[2];
+    let didJump = false;
     if (isOnGround && newControls.jump) {
+        didJump = true;
         newVelocity[1] = JUMP_SPEED;
     }
     newPosition[0] += newVelocity[0] * DT;
@@ -181,6 +183,18 @@ export const update = (playerID, currentState, controls) => {
     newPosition[2] += newVelocity[2] * DT;
     if (!isAlive) {
         newAnimationState = "sleep";
+    }
+    else if (isFiring) {
+        newAnimationState = "simple_interact";
+    }
+    else if (didJump) {
+        newAnimationState = "jump_loop";
+    }
+    else if ((inputX !== 0 || inputZ !== 0) && isOnGround) {
+        newAnimationState = "run";
+    }
+    else if (isOnGround) {
+        newAnimationState = "idle";
     }
     // Players die when they are below the map
     if (newPosition[1] < -10) {
