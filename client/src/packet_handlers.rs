@@ -75,7 +75,7 @@ pub fn handle_update_player(
     player.facing_angle = facing_angle;
     if let Some(animation_state) = animation_state {
         if let Some(model) = player.model.as_mut() {
-            model.play_animation(&animation_state, 0.5);
+            model.play_animation(&animation_state, 0.3);
         }
         player.animation_state = animation_state;
     }

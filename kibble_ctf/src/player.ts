@@ -1,8 +1,9 @@
 import { Vec3, PlayerUpdate, PlayerControls, PlayerState, Vec2, OnPlayerSpawn } from "../lib/hy";
 
-const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
-const MOVE_SPEED = 5.0; // Movement speed (units per second)
-const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
+const GRAVITY = -20; // Gravity acceleration (m/s^2)
+const MOVE_SPEED = 7.0; // Movement speed (units per second)
+const JUMP_SPEED = 8.0; // Jump initial velocity (units per second)
+const MIN_FALL_SPEED = -20.;
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
 
 export const onSpawn: OnPlayerSpawn = (
@@ -22,7 +23,10 @@ export const onSpawn: OnPlayerSpawn = (
   newCustomState.maxHealth = MAX_HEALTH;
   newCustomState.health = MAX_HEALTH;
   newCustomState.spawnPosition = position;
-  newCustomState.respawnTimer = 0;
+  newCustomState.respawnTimer = RESPAWN_TIME;
+
+  newCustomState.coyoteTime = 0.;
+  newCustomState.jumpInputTime = 0.;
 
   let gun = hy.spawnEntity(SHOTGUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
   hy.anchorEntity(gun, playerId, "hand_right_anchor");
@@ -211,9 +215,7 @@ export const update: PlayerUpdate = (
   }
 
   // Apply gravity
-  if (!wasOnGround) {
-    newVelocity[1] += GRAVITY * DT;
-  }
+  newVelocity[1] += GRAVITY * DT;
 
   // Update position based on velocity and delta time
   const desiredMovement: Vec3 = [newVelocity[0], newVelocity[1], newVelocity[2]];
@@ -228,12 +230,25 @@ export const update: PlayerUpdate = (
   newVelocity[1] = correctedMovement[1];
   newVelocity[2] = correctedMovement[2];
 
-  let didJump = false;
-  if (isOnGround && newControls.jump) {
-    didJump = true;
-    newVelocity[1] = JUMP_SPEED;
+  newVelocity[1] = Math.max(newVelocity[1], MIN_FALL_SPEED);
+
+  if (isOnGround) {
+    newCustomState.coyoteTime = COYOTE_TIME;
+  } else {
+    newCustomState.coyoteTime = Math.max(0., newCustomState.coyoteTime - DT);
+  }
+  if (controls.jump) {
+    newCustomState.jumpInputTime = JUMP_INPUT_TIME;
+  } else {
+    newCustomState.jumpInputTime = Math.max(0., newCustomState.jumpInputTime - DT);
   }
 
+  let didJump = false;
+  if (newCustomState.coyoteTime > 0. && newCustomState.jumpInputTime > 0.) {
+    didJump = true;
+    newVelocity[1] = JUMP_SPEED;
+    newCustomState.coyoteTime = 0.;
+  }
   newPosition[0] += newVelocity[0] * DT;
   newPosition[1] += newVelocity[1] * DT;
   newPosition[2] += newVelocity[2] * DT;
@@ -287,3 +302,9 @@ function max_ammo(entity_type: number): number {
 
 const MAX_HEALTH = 5;
 const RESPAWN_TIME = 3.0;
+
+// Coyote time is the time after the player has left the ground during which they can still jump
+const COYOTE_TIME = 0.1;
+// The time after the player has pressed the jump button during which they can still jump if they
+// hit the ground
+const JUMP_INPUT_TIME = 0.1;
