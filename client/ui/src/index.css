@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Rowdies&display=swap');
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -139,6 +140,40 @@ a:hover {
     /* really 'front' if you're thinking in three dimensions */
     background-color: #00f;
     transform: rotateY(0deg) translateZ(16px);
+}
+
+.ctf .score-ctr {
+    position: absolute;
+    right: 0;
+    width: 128px;
+    height: 192px;
+    top: 50%;
+    margin-top: -96px;
+}
+.ctf .score {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 64px;
+    line-height: 48px;
+    font-size: 48px;
+    font-weight: bold;
+    padding-left: 8px;
+    font-family: 'Rowdies', sans-serif;
+    background-repeat: no-repeat;
+    background-position: center right;
+}
+.ctf .score-red {
+    position: relative;
+    top: 96px;
+    border: 8px solid #C51E3A;
+    background-color: #C51E3A88;
+    background-image: url("/client/ui/public/logo-redteam.png")
+}
+.ctf .score-blue {
+    border: 8px solid #6BA4B8;
+    background-color: #6BA4B888;
+    background-image: url("/client/ui/public/logo-blueteam.png")
 }
 
 body {
