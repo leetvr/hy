@@ -12,6 +12,12 @@ function App({ engine }: { engine: Engine }) {
   const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
   const setMode = (newMode: EngineMode) => {
+
+    // WHenever the mode changes print some state data stuff
+    console.log("Changing mode from", currentMode, "to", newMode);
+    console.log("World state:\n", engine.ctx_get_world_state());
+    console.log("Players: ", engine.ctx_get_players());
+
     if (newMode != currentMode) {
       setModeState(newMode);
       engine.ctx_set_engine_mode(newMode);
