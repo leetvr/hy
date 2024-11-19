@@ -64,6 +64,14 @@ export const update = (playerID, currentState, controls) => {
                     }
                 }
                 if (entityData.entity_type == BALL_TYPE) {
+                    const entityData = hy.getEntityData(collision.targetId);
+                    // No friendly fire!
+                    const firedByTeam = entityData.state.customState.firedByTeam;
+                    console.log("Ball was fired by", firedByTeam, entityData.state.customState, customState);
+                    if (firedByTeam == customState.team) {
+                        console.log("friendly fire!");
+                        return;
+                    }
                     // Destroy bullet and take damage
                     hy.despawnEntity(collision.targetId);
                     hy.playSound("pain", currentState.position, 10);
@@ -143,9 +151,6 @@ export const update = (playerID, currentState, controls) => {
     newVelocity[2] = correctedMovement[2];
     if (isOnGround && newControls.jump) {
         newVelocity[1] = JUMP_SPEED;
-        if (attachedEntities["hand_left_anchor"]) {
-            hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
-        }
     }
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;

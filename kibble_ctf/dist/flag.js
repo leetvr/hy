@@ -26,8 +26,9 @@ export const update = (id, currentState) => {
         newCustomState.carried = false;
     }
     // On interaction, return the flag to its spawn position
-    if (currentState.interactions.length > 0 && !newCustomState.carried) {
+    if (currentState.interactions.length > 0) {
         newPosition = customState.spawnPosition;
+        hy.detachEntity(id, customState.spawnPosition);
     }
     return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, customState: newCustomState });
 };

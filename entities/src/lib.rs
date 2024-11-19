@@ -92,11 +92,13 @@ pub struct Anchor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Interaction {
     pub player_id: PlayerId,
     pub position: glam::Vec3,
-    #[serde(rename = "facingAngle")]
     pub facing_angle: f32,
+    #[serde(default)]
+    pub custom_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -109,6 +111,11 @@ pub struct EntityState {
     pub interactions: Vec<Interaction>,
     #[serde(default)]
     pub custom_state: HashMap<String, serde_json::Value>,
+    // A field to keep track of the entity's absolute position in the world, for use in server side
+    // scripts. If the entity is anchored, this should be the position of the anchor. Otherwise
+    // it's the same as `position`. This is pretty hacky.
+    #[serde(default)]
+    pub absolute_position: glam::Vec3,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default, Tsify)]

@@ -196,6 +196,16 @@ impl GameInstance {
             });
         }
 
+        // Copy player data into world
+        {
+            let mut world = self.world.lock().expect("Deadlock");
+            world.player_data = self
+                .players
+                .iter()
+                .map(|(player_id, player)| (player_id.clone(), player.state.clone()))
+                .collect();
+        }
+
         // Update players
         for client in self.clients.values_mut() {
             let player = self.players.get_mut(&client.player_id).unwrap();
@@ -237,6 +247,20 @@ impl GameInstance {
             // Reset edge trigger controls once per tick
             client.last_controls.fire = false;
             client.last_controls.jump = false;
+        }
+
+        // Update entities' absolute positions immediately after updating players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            for entity in world.entities.values_mut() {
+                if let Some(anchor) = &entity.state.anchor {
+                    if let Some(player) = self.players.get(&anchor.player_id) {
+                        entity.state.absolute_position = player.state.position;
+                    }
+                } else {
+                    entity.state.absolute_position = entity.state.position;
+                }
+            }
         }
 
         // Update entities

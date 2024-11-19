@@ -37,7 +37,7 @@ export const onAddPlayer: WorldOnAddPlayer = (
   playerState: PlayerState,
 ): [CustomState, PlayerState] => {
   // Give this man a gun
-  let gun = hy.spawnEntity(GUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
+  let gun = hy.spawnEntity(SHOTGUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
   hy.anchorEntity(gun, playerId, "hand_right_anchor");
 
   if (worldState.redTeam.length <= worldState.blueTeam.length) {
@@ -70,11 +70,11 @@ export const update: WorldInit = (worldState: CustomState): CustomState => {
         (l.entity_type == BLUE_FLAG_TYPE && r.entity_type == RED_FLAG_TYPE)
       ) {
         // One of the flags should be carried and the other not carried
-        if (l.state.customState.carried != r.state.customState.carried) {
+        if (l.state.customState.carried == r.state.customState.carried) {
           return;
         }
 
-        if (distance(l.state.position, r.state.position) < 1) {
+        if (distance(l.state.absolutePosition, r.state.absolutePosition) < 1) {
           let carriedType;
           if (l.state.customState.carried) {
             carriedType = l.entity_type;

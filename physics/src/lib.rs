@@ -476,6 +476,9 @@ impl PhysicsWorld {
         // If the entity is *not* dynamic, we set the body's position and velocity from the entity
         physics_body.set_linvel(glam_to_na(entity_data.state.velocity), true);
         physics_body.set_next_kinematic_position(glam_to_na(entity_data.state.velocity).into());
+
+        // I don't know why `set_next_kinematic_position` is not enough, but this fixes #209
+        physics_body.set_position(glam_to_na(entity_data.state.position).into(), true);
     }
 
     pub fn despawn_entity(&mut self, entity_id: &str) {
