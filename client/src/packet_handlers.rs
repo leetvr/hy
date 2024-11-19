@@ -1,5 +1,5 @@
 use {
-    crate::gltf::GLTFModel,
+    crate::{gltf::GLTFModel, LoadedGLTF},
     anyhow::{bail, Result},
     blocks::BlockGrid,
     entities::{EntityData, EntityID, PlayerId},
@@ -23,23 +23,24 @@ pub fn handle_set_block(
 /// Handle an `AddPlayer` packet
 pub fn handle_add_player(
     players: &mut HashMap<PlayerId, Player>,
-    model: &GLTFModel,
+    models: &HashMap<String, LoadedGLTF>,
     net_types::AddPlayer {
         id,
         position,
         animation_state,
         script_state,
+        model_path,
     }: net_types::AddPlayer,
 ) -> Result<()> {
-    let mut model = model.clone();
-    model.play_animation(&animation_state, 0.5);
     players.insert(
         id,
         Player {
             position,
             facing_angle: 0.,
-            model: model.clone(),
+            model: models.get(&model_path).map(|model| model.gltf.clone()),
             script_state,
+            model_path,
+            animation_state,
         },
     );
     Ok(())
@@ -54,8 +55,8 @@ pub fn handle_remove_player(
     Ok(())
 }
 
-/// Handle an `UpdatePosition` packet
-pub fn handle_update_position(
+/// Handle an `UpdatePlayer` packet
+pub fn handle_update_player(
     players: &mut HashMap<PlayerId, Player>,
     net_types::UpdatePlayer {
         id,
@@ -76,7 +77,10 @@ pub fn handle_update_position(
 
     player.position = position;
     if let Some(animation_state) = animation_state {
-        player.model.play_animation(&animation_state, 0.5);
+        if let Some(model) = player.model.as_mut() {
+            model.play_animation(&animation_state, 0.5);
+        }
+        player.animation_state = animation_state;
     }
     if let Some(script_state) = script_state {
         player.script_state = script_state;

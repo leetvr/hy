@@ -24,9 +24,6 @@ export const init = (worldState) => {
     return worldState;
 };
 export const onAddPlayer = (worldState, playerId, playerState) => {
-    // Give this man a gun
-    let gun = hy.spawnEntity(SHOTGUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
-    hy.anchorEntity(gun, playerId, "hand_right_anchor");
     if (worldState.redTeam.length <= worldState.blueTeam.length) {
         playerState.customState.team = "red";
         worldState.redTeam.push(playerId);
