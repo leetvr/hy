@@ -443,7 +443,7 @@ impl Engine {
                 let controls = net_types::Controls {
                     move_direction: move_dir.normalize_or_zero(),
                     jump: self.controls.keyboard_pressed.contains("Space"),
-                    fire: self.controls.keyboard_pressed.contains("KeyE"),
+                    fire: self.controls.mouse_left,
                     camera_yaw: self.controls.yaw,
                 };
                 self.send_packet(net_types::ClientPacket::Controls(controls));
