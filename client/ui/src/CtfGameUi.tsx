@@ -11,6 +11,7 @@ export default function CtfGameUi({
     const [playerHealth, setPlayerHealth] = useState(0);
     const [playerAmmo, setPlayerAmmo] = useState(0);
     const [playerTeam, setPlayerTeam] = useState("red");
+    const [iHaveFlag, setIHaveFlag] = useState(false);
     useEffect(() => {
         const intervalId = setInterval( () => {
             let freshWorldState = engine.ctx_get_world_state();
@@ -32,6 +33,9 @@ export default function CtfGameUi({
             if(playerTeam != freshPlayerInfo.get('team')) {
                 setPlayerTeam(freshPlayerInfo.get('team'));
             }
+            if(iHaveFlag != freshPlayerInfo.get('hasFlag')) {
+                setIHaveFlag(freshPlayerInfo.get('hasFlag'));
+            }
         }, 150);
         return () => clearInterval(intervalId);
     });
@@ -43,7 +47,6 @@ export default function CtfGameUi({
     } else {
         otherTeam = "blue";
     }
-    const iHaveFlag = false;
     if(iHaveFlag) {
         task = "You have the flag — return to base.";
     } else {

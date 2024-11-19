@@ -26,6 +26,7 @@ export const onSpawn: OnPlayerSpawn = (
   newCustomState.spawnPosition = position;
   newCustomState.respawnTimer = RESPAWN_TIME;
   newCustomState.stunned = false;
+  newCustomState.hasFlag = false;
 
   newCustomState.coyoteTime = 0.;
   newCustomState.jumpInputTime = 0.;
@@ -211,10 +212,12 @@ export const update: PlayerUpdate = (
           if (newCustomState.team == flag_team) {
             // Interacting with a flag returns it to its spawn
             hy.interactEntity(collision.targetId, playerID, position, newControls.camera_yaw, newControls.camera_pitch);
+            newCustomState.hasFlag = false;
           } else {
             // Pick up the flag if we aren't already holding something in the left hand
             if (!newCustomState.stunned && !attachedEntities["hand_left_anchor"]) {
               hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+              newCustomState.hasFlag = true;
             }
           }
         }
