@@ -6,18 +6,29 @@ export const onSpawn = (entityData) => {
     let newPosition = [...position];
     newState.timer = 0.;
     newState.spawnPosition = newPosition;
+    newState.wasAnchored = false;
+    if (entityData.state.anchor !== null) {
+        newState.wasAnchored = true;
+    }
     return Object.assign(Object.assign({}, entityData), { state: Object.assign(Object.assign({}, entityData.state), { position: newPosition, customState: newState }) });
 };
 export const update = (id, currentState) => {
-    const { position, rotation, customState } = currentState;
+    const { position, rotation, scale, customState } = currentState;
     let newPosition = [...position];
     let newRotation = [...rotation];
+    let newScale = [...scale];
     let newCustomState = Object.assign({}, customState);
-    if (currentState.anchor !== null) {
+    if (currentState.anchor != null) {
         newPosition = [0., 0., 0.];
         newRotation = [0., 0., 0., 1.];
+        newScale = [1., 1., 1.];
+        newCustomState.wasAnchored = true;
     }
     else {
+        if (newCustomState.wasAnchored) {
+            newCustomState.spawnPosition = newPosition;
+            newCustomState.wasAnchored = false;
+        }
         newCustomState.timer = (newCustomState.timer + DT) % 3.0;
         const t = newCustomState.timer / 3.0;
         newPosition[1] = newCustomState.spawnPosition[1] + Math.sin(t * 2 * Math.PI) * 0.15 + 0.75;
@@ -26,6 +37,7 @@ export const update = (id, currentState) => {
         const sinHalfAngle = Math.sin(angle / 2);
         const cosHalfAngle = Math.cos(angle / 2);
         newRotation = [0, sinHalfAngle, 0, cosHalfAngle];
+        newScale = [0.5, 0.5, 0.5];
     }
     let reloadTime = newCustomState.reloadTime;
     if (typeof reloadTime !== "number") {
@@ -39,7 +51,7 @@ export const update = (id, currentState) => {
         reloadTime = MAX_RELOAD_TICKS;
     });
     newCustomState.reloadTime = reloadTime - 1;
-    return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, customState: newCustomState });
+    return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, scale: newScale, customState: newCustomState });
 };
 // BALLS
 const moreBalls = ({ playerId, yaw, position }) => {

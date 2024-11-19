@@ -125,7 +125,13 @@ export const update: PlayerUpdate = (
 
           if (heldItemId) {
             // Drop the gun that was previously held, in the same position as the picked up gun
-            hy.detachEntity(heldItemId, itemData.state.customState.spawnPosition);
+            let dropPosition: Vec3 = [
+              itemData.state.customState.spawnPosition[0],
+              itemData.state.customState.spawnPosition[1],
+              itemData.state.customState.spawnPosition[2]
+            ];
+            dropPosition[1] -= 0.75;
+            hy.detachEntity(heldItemId, dropPosition);
             newCustomState.itemPickupCooldowns[heldItemId] = 5;
             touchedEntities[heldItemId] = true;
           }
