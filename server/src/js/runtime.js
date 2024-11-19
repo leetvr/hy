@@ -22,9 +22,7 @@ globalThis.hy = {
   getEntityData: (entityId) => {
     return core.ops.get_entity_data(entityId);
   },
-  spawnEntity: (entityTypeId, position, rotation, velocity) => {
-    return core.ops.spawn_entity(entityTypeId, position, rotation, velocity);
-  },
+  spawnEntity: core.ops.spawn_entity,
   despawnEntity: (entityId) => {
     return core.ops.despawn_entity(entityId);
   },
@@ -37,9 +35,7 @@ globalThis.hy = {
   detachEntity: (entityId, position) => {
     return core.ops.detach_entity(entityId, position);
   },
-  interactEntity: (entityId, playerId, position, facingAngle) => {
-    return core.ops.interact_entity(entityId, playerId, position, facingAngle);
-  },
+  interactEntity: core.ops.interact_entity,
   getCollisionsForEntity: (entityId) => {
     return core.ops.get_collisions_for_entity(entityId);
   },

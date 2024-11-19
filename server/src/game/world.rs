@@ -59,12 +59,14 @@ impl World {
         player_id: PlayerId,
         position: glam::Vec3,
         facing_angle: f32,
+        custom_state: HashMap<String, serde_json::Value>,
     ) {
         self.command_queue.push(WorldCommand::InteractEntity {
             entity_id,
             player_id,
             position,
             facing_angle,
+            custom_state,
         });
     }
 
@@ -124,12 +126,14 @@ impl World {
                     player_id,
                     position,
                     facing_angle,
+                    custom_state,
                 } => {
                     if let Some(entity) = self.entities.get_mut(&entity_id) {
                         entity.state.interactions.push(Interaction {
                             player_id,
                             position,
                             facing_angle,
+                            custom_state,
                         });
                     }
                 }
@@ -221,6 +225,7 @@ enum WorldCommand {
         player_id: PlayerId,
         position: glam::Vec3,
         facing_angle: f32,
+        custom_state: HashMap<String, serde_json::Value>,
     },
     PlaySound {
         sound_id: String,

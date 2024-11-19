@@ -63,6 +63,7 @@ export interface Interaction {
   playerId: number;
   position: Vec3;
   facingAngle: number;
+  customState?: CustomState;
 }
 
 // Player script hooks
@@ -103,7 +104,13 @@ interface GlobalHy {
   getEntities: () => { [key: EntityId]: EntityData };
   getPlayerState: (playerID: number) => PlayerState | undefined;
   getEntityData: (entityId: EntityId) => EntityData;
-  spawnEntity: (entity: number, position: Vec3, rotation: Vec3, velocity: Vec3) => EntityId;
+  spawnEntity: (
+    entity: number,
+    position: Vec3,
+    rotation: Vec3,
+    velocity: Vec3,
+    customState?: CustomState,
+  ) => EntityId;
   despawnEntity: (entityId: EntityId) => void;
   checkMovementForCollisions: (
     playerID: number,
@@ -117,6 +124,7 @@ interface GlobalHy {
     playerId: number,
     position: Vec3,
     facingAngle: number,
+    customState?: CustomState,
   ) => void;
   getCollisionsForEntity: (entityId: EntityId) => Collision[];
   getCollisionsForPlayer: (playerID: number) => Collision[];

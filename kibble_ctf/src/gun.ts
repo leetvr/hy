@@ -8,7 +8,6 @@ export const update: EntityUpdate = (id: string, currentState: EntityState): Ent
 // BULLETS
 const fireBullets = ({ playerId, facingAngle, position }: Interaction) => {
   let speed = 50;
-  console.log("Shot by", playerId);
   const firingPlayerState = hy.getPlayerState(playerId);
 
   if (!firingPlayerState) {
@@ -17,7 +16,6 @@ const fireBullets = ({ playerId, facingAngle, position }: Interaction) => {
   }
 
   const team = firingPlayerState.customState.team;
-  console.log(`Fired by ${team} team!`);
 
   // If the angle is wrong, don't find out why, just bash it into place
   let angle = facingAngle - Math.PI / 2;
@@ -29,5 +27,5 @@ const fireBullets = ({ playerId, facingAngle, position }: Interaction) => {
     position[2] + Math.sin(angle),
   ];
 
-  hy.spawnEntity(6, initialPosition, [0, 0, 0], initialVelocity);
+  hy.spawnEntity(6, initialPosition, [0, 0, 0], initialVelocity, { firedByTeam: team });
 };

@@ -81,6 +81,7 @@ fn spawn_entity(
     #[serde] position: glam::Vec3,
     #[serde] rotation: glam::Vec3,
     #[serde] velocity: glam::Vec3,
+    #[serde] custom_state: Option<HashMap<String, serde_json::Value>>,
 ) -> Result<EntityID, AnyError> {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
@@ -99,6 +100,7 @@ fn spawn_entity(
             position: position.into(),
             rotation: glam::Quat::from_euler(EulerRot::YXZ, rotation.y, rotation.x, rotation.z),
             velocity: velocity.into(),
+            custom_state: custom_state.unwrap_or_default(),
             ..Default::default()
         },
     };
@@ -144,11 +146,18 @@ fn interact_entity(
     #[bigint] player_id: u64,
     #[serde] position: Vec3,
     facing_angle: f32,
+    #[serde] custom_state: Option<HashMap<String, serde_json::Value>>,
 ) {
     let shared_state = state.borrow::<Arc<Mutex<World>>>();
     let mut world = shared_state.lock().unwrap();
 
-    world.interact_entity(entity_id, PlayerId::new(player_id), position, facing_angle);
+    world.interact_entity(
+        entity_id,
+        PlayerId::new(player_id),
+        position,
+        facing_angle,
+        custom_state.unwrap_or_default(),
+    );
 }
 
 #[op2]

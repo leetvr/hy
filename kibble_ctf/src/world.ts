@@ -37,7 +37,7 @@ export const onAddPlayer: WorldOnAddPlayer = (
   playerState: PlayerState,
 ): [CustomState, PlayerState] => {
   // Give this man a gun
-  let gun = hy.spawnEntity(GUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
+  let gun = hy.spawnEntity(SHOTGUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
   hy.anchorEntity(gun, playerId, "hand_right_anchor");
 
   if (worldState.redTeam.length <= worldState.blueTeam.length) {
