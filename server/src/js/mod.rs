@@ -226,6 +226,7 @@ impl JSContext {
                 // Not mutable from JS
                 anchor: _,
                 interactions: _,
+                absolute_position: _,
             } = next_state;
 
             entity.state.position = position;

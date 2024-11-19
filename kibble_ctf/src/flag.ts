@@ -52,8 +52,9 @@ export const update: EntityUpdate = (id, currentState: EntityState) => {
   }
 
   // On interaction, return the flag to its spawn position
-  if (currentState.interactions.length > 0 && !newCustomState.carried) {
+  if (currentState.interactions.length > 0) {
     newPosition = customState.spawnPosition;
+    hy.detachEntity(id, customState.spawnPosition);
   }
 
   return {
