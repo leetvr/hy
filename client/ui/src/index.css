@@ -199,6 +199,18 @@ a:hover {
 .ctf .status-ammo {
     background-image: url("/client/ui/public/logo-ammo.png")
 }
+.ctf .status-health.low span, .ctf .status-ammo.low span {
+    color: #f66;
+    animation: 0.8s infinite normal linear wig-out;
+    display: block;
+}
+@keyframes wig-out {
+    0% { transform: rotate(0deg); }
+    80% { transform: rotate(0deg); }
+    85% { transform: rotate(5deg) scale(105%); }
+    95% { transform: rotate(-5deg) scale(105%); }
+    100% { transform: rotate(0deg); }
+}
 .ctf .instructions-ctr {
     width: 60%;
     position: absolute;

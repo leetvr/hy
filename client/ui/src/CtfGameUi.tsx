@@ -54,10 +54,13 @@ export default function CtfGameUi({
     } else {
         task = "Infiltrate the " + otherTeam + " base and take their flag.";
     }
+
+    let ammoLowClass = playerAmmo <= 3 ? "low" : "";
+    let healthLowClass = playerHealth <= 1 ? "low" : "";
     return <div className={"ctf team-" + playerTeam}>
         <div className="status-ctr">
-            <div className="status status-health">{playerHealth}</div>
-            <div className="status status-ammo">{playerAmmo}</div>
+            <div className={"status status-health " + healthLowClass}><span>{playerHealth}</span></div>
+            <div className={"status status-ammo " + ammoLowClass}><span>{playerAmmo}</span></div>
         </div>
         <div className="score-ctr">
             <div className="score score-blue">{blueScore}</div>
