@@ -142,6 +142,9 @@ a:hover {
     transform: rotateY(0deg) translateZ(16px);
 }
 
+.ctf {
+    font-family: 'Rowdies', sans-serif;
+}
 .ctf .score-ctr {
     position: absolute;
     right: 0;
@@ -159,7 +162,6 @@ a:hover {
     font-size: 48px;
     font-weight: bold;
     padding-left: 8px;
-    font-family: 'Rowdies', sans-serif;
     background-repeat: no-repeat;
     background-position: center right;
     text-shadow: 0px 0px 8px #fff;
@@ -196,6 +198,28 @@ a:hover {
 }
 .ctf .status-ammo {
     background-image: url("/client/ui/public/logo-ammo.png")
+}
+.ctf .instructions-ctr {
+    width: 60%;
+    position: absolute;
+    font-size: 22px;
+    bottom: 0;
+    margin-bottom: 5%;
+    left: 50%;
+    margin-left: -25%;
+    color: #fff;
+    text-shadow: 0 0 10px #000;
+}
+.ctf .instruction-whichteam {
+    font-size: 150%;
+}
+.ctf .team-red {
+    text-transform: uppercase;
+    color: #C51E3A;
+}
+.ctf .team-blue {
+    text-transform: uppercase;
+    color: #6BA4B8;
 }
 
 body {

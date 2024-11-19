@@ -53,6 +53,8 @@ function App({ engine }: { engine: Engine }) {
           blueScore="2"
           health="92"
           ammo="4"
+          myTeam="red"
+          iHaveFlag={false}
       />}
     </div>
   );
