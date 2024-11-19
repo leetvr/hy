@@ -25,6 +25,7 @@ export interface BlockPos {
 export interface PlayerState {
   position: Vec3;
   velocity: Vec3;
+  facingAngle: number;
   animationState: string;
   isOnGround: boolean;
   customState: CustomState;

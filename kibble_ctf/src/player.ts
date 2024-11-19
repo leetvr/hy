@@ -48,12 +48,14 @@ export const update: PlayerUpdate = (
     position,
     velocity,
     animationState,
+    facingAngle,
     isOnGround: wasOnGround,
     customState,
     attachedEntities,
   } = currentState;
   let newPosition: Vec3 = [...position];
   let newVelocity: Vec3 = [...velocity];
+  let newFacingAngle: number = facingAngle;
   let newAnimationState: string = animationState;
   let newCustomState = { ...customState };
   let newControls = { ...controls };
@@ -163,6 +165,9 @@ export const update: PlayerUpdate = (
   });
 
   if (newControls.fire) {
+    console.log("fire");
+    newFacingAngle = controls.camera_yaw;
+
     let handItems = attachedEntities["hand_right_anchor"];
     if (handItems != undefined) {
       handItems.forEach((item) => {
@@ -179,6 +184,8 @@ export const update: PlayerUpdate = (
   const inputZ = newControls.move_direction[1];
 
   if (inputX !== 0 || inputZ !== 0) {
+    newFacingAngle = controls.camera_yaw;
+
     // Normalize input direction
     const inputLength = Math.hypot(inputX, inputZ);
     const normalizedInput: Vec2 = [inputX / inputLength, inputZ / inputLength];
@@ -243,6 +250,7 @@ export const update: PlayerUpdate = (
     ...currentState,
     position: newPosition,
     velocity: newVelocity,
+    facingAngle: newFacingAngle,
     animationState: newAnimationState,
     customState: newCustomState,
     isOnGround,

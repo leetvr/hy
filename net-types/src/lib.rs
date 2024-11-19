@@ -32,6 +32,7 @@ pub enum ClientPacket {
 pub struct UpdatePlayer {
     pub id: PlayerId,
     pub position: glam::Vec3,
+    pub facing_angle: f32,
     // Included if the animation state has changed
     pub animation_state: Option<String>,
     // Included if the script state has changed

@@ -1178,10 +1178,9 @@ fn get_entity_transform(
 }
 
 fn player_transform(player: &Player) -> Transform {
-    const PLAYER_BASE_ANGLE: f32 = std::f32::consts::FRAC_PI_2;
     Transform::new_with_scale(
         player.position,
-        Quat::from_rotation_y(-player.facing_angle - PLAYER_BASE_ANGLE),
+        Quat::from_rotation_y(player.facing_angle),
         glam::Vec3::splat(0.5),
     )
 }

@@ -255,6 +255,7 @@ struct Player {
 pub struct PlayerState {
     position: glam::Vec3,
     velocity: glam::Vec3,
+    facing_angle: f32,
     animation_state: String,
     is_on_ground: bool,
     #[serde(default)]

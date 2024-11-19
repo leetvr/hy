@@ -26,9 +26,10 @@ export const onSpawn = (playerId, currentState) => {
 export const update = (playerID, currentState, controls) => {
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
     // It's just a quick way to pass data to the script.
-    const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities, } = currentState;
+    const { position, velocity, animationState, facingAngle, isOnGround: wasOnGround, customState, attachedEntities, } = currentState;
     let newPosition = [...position];
     let newVelocity = [...velocity];
+    let newFacingAngle = facingAngle;
     let newAnimationState = animationState;
     let newCustomState = Object.assign({}, customState);
     let newControls = Object.assign({}, controls);
@@ -124,6 +125,8 @@ export const update = (playerID, currentState, controls) => {
         }
     });
     if (newControls.fire) {
+        console.log("fire");
+        newFacingAngle = controls.camera_yaw;
         let handItems = attachedEntities["hand_right_anchor"];
         if (handItems != undefined) {
             handItems.forEach((item) => {
@@ -138,6 +141,7 @@ export const update = (playerID, currentState, controls) => {
     const inputX = newControls.move_direction[0];
     const inputZ = newControls.move_direction[1];
     if (inputX !== 0 || inputZ !== 0) {
+        newFacingAngle = controls.camera_yaw;
         // Normalize input direction
         const inputLength = Math.hypot(inputX, inputZ);
         const normalizedInput = [inputX / inputLength, inputZ / inputLength];
@@ -178,7 +182,11 @@ export const update = (playerID, currentState, controls) => {
     if (!isAlive) {
         newAnimationState = "sleep";
     }
-    return Object.assign(Object.assign({}, currentState), { position: newPosition, velocity: newVelocity, animationState: newAnimationState, customState: newCustomState, isOnGround,
+    // Players die when they are below the map
+    if (newPosition[1] < -10) {
+        newCustomState.health = 0;
+    }
+    return Object.assign(Object.assign({}, currentState), { position: newPosition, velocity: newVelocity, facingAngle: newFacingAngle, animationState: newAnimationState, customState: newCustomState, isOnGround,
         attachedEntities });
 };
 const GUN_TYPE_ID = 1;
