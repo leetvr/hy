@@ -18,6 +18,12 @@ export const init: WorldInit = (worldState: CustomState): CustomState => {
       redSpawn[1] += 1;
     }
   });
+  if (blueSpawn == null) {
+    blueSpawn = [0, 0, 0];
+  }
+  if (redSpawn == null) {
+    redSpawn = [0, 0, 0];
+  }
 
   worldState.blueSpawn = blueSpawn;
   worldState.redSpawn = redSpawn;
