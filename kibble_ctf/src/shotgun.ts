@@ -21,7 +21,7 @@ export const update: EntityUpdate = (id: string, currentState: EntityState): Ent
 };
 
 // BALLS
-const moreBalls = ({ playerId, facingAngle, position }: Interaction) => {
+const moreBalls = ({ playerId, yaw, position }: Interaction) => {
   let speed = 50;
   const firingPlayerState = hy.getPlayerState(playerId);
 
@@ -33,7 +33,7 @@ const moreBalls = ({ playerId, facingAngle, position }: Interaction) => {
   const team = firingPlayerState.customState.team;
 
   // If the angle is wrong, don't find out why, just bash it into place
-  let angle = facingAngle - Math.PI / 2;
+  let angle = yaw - Math.PI / 2;
 
   // TODO: fire multiple balls? maths too hard for kane brain
   const initialVelocity: Vec3 = [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed];

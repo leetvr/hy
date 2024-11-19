@@ -19,10 +19,10 @@ export const onSpawn = (playerId, currentState) => {
     newCustomState.respawnTimer = RESPAWN_TIME;
     newCustomState.coyoteTime = 0.;
     newCustomState.jumpInputTime = 0.;
-    let gun = hy.spawnEntity(SHOTGUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
+    let gun = hy.spawnEntity(GUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
     hy.anchorEntity(gun, playerId, "hand_right_anchor");
-    newCustomState.ammo = max_ammo(SHOTGUN_TYPE_ID);
-    newCustomState.maxAmmo = max_ammo(SHOTGUN_TYPE_ID);
+    newCustomState.ammo = max_ammo(GUN_TYPE_ID);
+    newCustomState.maxAmmo = max_ammo(GUN_TYPE_ID);
     // NOTE(ll): modelPath *must* be set here, otherwise the model won't be loaded.
     return Object.assign(Object.assign({}, currentState), { customState: newCustomState, modelPath: newModelPath });
 };
@@ -115,7 +115,7 @@ export const update = (playerID, currentState, controls) => {
                     }
                     if (newCustomState.team == flag_team) {
                         // Interacting with a flag returns it to its spawn
-                        hy.interactEntity(collision.targetId, playerID, position, newControls.camera_yaw);
+                        hy.interactEntity(collision.targetId, playerID, position, newControls.camera_yaw, newControls.camera_pitch);
                     }
                     else {
                         // Pick up the flag if we aren't already holding something in the left hand
@@ -135,7 +135,7 @@ export const update = (playerID, currentState, controls) => {
             handItems.forEach((item) => {
                 if (newCustomState.ammo > 0) {
                     isFiring = true;
-                    hy.interactEntity(item, playerID, position, newControls.camera_yaw);
+                    hy.interactEntity(item, playerID, position, newControls.camera_yaw, newControls.camera_pitch);
                     newCustomState.ammo -= 1;
                 }
             });

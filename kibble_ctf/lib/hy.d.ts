@@ -38,6 +38,7 @@ export interface PlayerControls {
   readonly jump: boolean;
   readonly fire: boolean;
   readonly camera_yaw: number; // radians
+  readonly camera_pitch: number; // radians
 }
 
 export interface EntityData {
@@ -65,7 +66,8 @@ export interface EntityState {
 export interface Interaction {
   playerId: number;
   position: Vec3;
-  facingAngle: number;
+  yaw: number;
+  pitch: number;
   customState?: CustomState;
 }
 
@@ -126,7 +128,8 @@ interface GlobalHy {
     entityId: EntityId,
     playerId: number,
     position: Vec3,
-    facingAngle: number,
+    yaw: number,
+    pitch: number,
     customState?: CustomState,
   ) => void;
   getCollisionsForEntity: (entityId: EntityId) => Collision[];

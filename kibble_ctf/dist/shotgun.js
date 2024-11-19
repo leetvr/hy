@@ -15,7 +15,7 @@ export const update = (id, currentState) => {
     return currentState;
 };
 // BALLS
-const moreBalls = ({ playerId, facingAngle, position }) => {
+const moreBalls = ({ playerId, yaw, position }) => {
     let speed = 50;
     const firingPlayerState = hy.getPlayerState(playerId);
     if (!firingPlayerState) {
@@ -24,7 +24,7 @@ const moreBalls = ({ playerId, facingAngle, position }) => {
     }
     const team = firingPlayerState.customState.team;
     // If the angle is wrong, don't find out why, just bash it into place
-    let angle = facingAngle - Math.PI / 2;
+    let angle = yaw - Math.PI / 2;
     // TODO: fire multiple balls? maths too hard for kane brain
     const initialVelocity = [-Math.cos(angle) * speed, 0, Math.sin(angle) * speed];
     const initialPosition = [

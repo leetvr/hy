@@ -96,7 +96,8 @@ pub struct Anchor {
 pub struct Interaction {
     pub player_id: PlayerId,
     pub position: glam::Vec3,
-    pub facing_angle: f32,
+    pub yaw: f32,
+    pub pitch: f32,
     #[serde(default)]
     pub custom_state: HashMap<String, serde_json::Value>,
 }
