@@ -322,13 +322,13 @@ impl Renderer {
             // --- SSAO Pass ---
             // -----------------
 
-            self.ssao_renderer.render(
-                &self.gl,
-                self.resolution,
-                self.hdr_target.depth_texture,
-                self.hdr_target.framebuffer,
-                projection_matrix,
-            );
+            // self.ssao_renderer.render(
+            //     &self.gl,
+            //     self.resolution,
+            //     self.hdr_target.depth_texture,
+            //     self.hdr_target.framebuffer,
+            //     projection_matrix,
+            // );
 
             // ------------------------
             // --- Tonemapping Pass ---
