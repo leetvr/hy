@@ -206,6 +206,7 @@ impl Renderer {
                 .viewport(0, 0, SHADOW_SIZE.x as i32, SHADOW_SIZE.y as i32);
             self.gl.cull_face(glow::FRONT);
 
+            self.gl.color_mask(true, true, true, true);
             self.gl.depth_mask(true);
             self.gl.clear_depth_f32(1.0);
             self.gl.clear(glow::DEPTH_BUFFER_BIT);
@@ -231,12 +232,14 @@ impl Renderer {
             // --------------------
 
             self.gl
-                .bind_framebuffer(glow::FRAMEBUFFER, Some(self.hdr_target.framebuffer));
+                .bind_framebuffer(glow::FRAMEBUFFER, Some(self.hdr_target.msaa_framebuffer));
             self.gl
                 .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
             self.gl.cull_face(glow::BACK);
 
             // Set the clear color
+            self.gl.color_mask(true, true, true, true);
+            self.gl.depth_mask(true);
             self.gl.clear_color(0.1, 0.1, 0.1, 1.0);
             self.gl
                 .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
@@ -271,6 +274,44 @@ impl Renderer {
 
             self.debug_renderer
                 .render(&self.gl, clip_from_world, debug_lines);
+
+            // --------------------
+            // --- Resolve MSAA ---
+            // --------------------
+
+            self.gl.bind_framebuffer(
+                glow::READ_FRAMEBUFFER,
+                Some(self.hdr_target.msaa_framebuffer),
+            );
+
+            self.gl
+                .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(self.hdr_target.framebuffer));
+
+            self.gl.blit_framebuffer(
+                0,
+                0,
+                self.resolution.x as i32,
+                self.resolution.y as i32,
+                0,
+                0,
+                self.resolution.x as i32,
+                self.resolution.y as i32,
+                glow::COLOR_BUFFER_BIT,
+                glow::LINEAR,
+            );
+
+            self.gl.blit_framebuffer(
+                0,
+                0,
+                self.resolution.x as i32,
+                self.resolution.y as i32,
+                0,
+                0,
+                self.resolution.x as i32,
+                self.resolution.y as i32,
+                glow::DEPTH_BUFFER_BIT,
+                glow::NEAREST,
+            );
 
             // ------------------------
             // --- Tonemapping Pass ---
@@ -538,13 +579,83 @@ impl ShadowTarget {
 }
 
 struct HdrFramebuffer {
+    msaa_framebuffer: glow::Framebuffer,
+
+    color_msaa_renderbuffer: glow::Renderbuffer,
+    depth_msaa_renderbuffer: glow::Renderbuffer,
+
     framebuffer: glow::Framebuffer,
+
     color_texture: glow::Texture,
     depth_texture: glow::Texture,
 }
 
 impl HdrFramebuffer {
     fn new(gl: &glow::Context, size: UVec2) -> Self {
+        let samples = unsafe { gl.get_parameter_i32(glow::MAX_SAMPLES) };
+
+        tracing::debug!(
+            "Creating HDR framebuffer of size {}x{} with {} samples",
+            size.x,
+            size.y,
+            samples
+        );
+
+        let color_msaa_renderbuffer = unsafe {
+            let color_msaa_renderbuffer = gl
+                .create_renderbuffer()
+                .expect("Failed to create renderbuffer");
+            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(color_msaa_renderbuffer));
+            gl.renderbuffer_storage_multisample(
+                glow::RENDERBUFFER,
+                samples,
+                glow::RGBA16F,
+                size.x as i32,
+                size.y as i32,
+            );
+            color_msaa_renderbuffer
+        };
+
+        let depth_msaa_renderbuffer = unsafe {
+            let depth_msaa_renderbuffer = gl
+                .create_renderbuffer()
+                .expect("Failed to create renderbuffer");
+            gl.bind_renderbuffer(glow::RENDERBUFFER, Some(depth_msaa_renderbuffer));
+            gl.renderbuffer_storage_multisample(
+                glow::RENDERBUFFER,
+                samples,
+                glow::DEPTH_COMPONENT32F,
+                size.x as i32,
+                size.y as i32,
+            );
+            depth_msaa_renderbuffer
+        };
+
+        let msaa_framebuffer = unsafe {
+            let msaa_framebuffer = gl
+                .create_framebuffer()
+                .expect("Failed to create framebuffer");
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(msaa_framebuffer));
+            gl.framebuffer_renderbuffer(
+                glow::FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::RENDERBUFFER,
+                Some(color_msaa_renderbuffer),
+            );
+            gl.framebuffer_renderbuffer(
+                glow::FRAMEBUFFER,
+                glow::DEPTH_ATTACHMENT,
+                glow::RENDERBUFFER,
+                Some(depth_msaa_renderbuffer),
+            );
+            gl.draw_buffers(&[glow::COLOR_ATTACHMENT0]);
+            gl.read_buffer(glow::COLOR_ATTACHMENT0);
+            tracing::error!("{:X?}", gl.check_framebuffer_status(glow::FRAMEBUFFER));
+
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            msaa_framebuffer
+        };
+
         let color_texture = unsafe {
             let color_texture = gl.create_texture().expect("Failed to create texture");
             gl.bind_texture(glow::TEXTURE_2D, Some(color_texture));
@@ -648,6 +759,9 @@ impl HdrFramebuffer {
         };
 
         Self {
+            msaa_framebuffer,
+            color_msaa_renderbuffer,
+            depth_msaa_renderbuffer,
             framebuffer,
             color_texture,
             depth_texture,
@@ -656,7 +770,10 @@ impl HdrFramebuffer {
 
     fn dispose(&mut self, gl: &glow::Context) {
         unsafe {
+            gl.delete_framebuffer(self.msaa_framebuffer);
             gl.delete_framebuffer(self.framebuffer);
+            gl.delete_renderbuffer(self.color_msaa_renderbuffer);
+            gl.delete_renderbuffer(self.depth_msaa_renderbuffer);
             gl.delete_texture(self.color_texture);
             gl.delete_texture(self.depth_texture);
         }
