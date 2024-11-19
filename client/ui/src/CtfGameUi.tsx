@@ -11,6 +11,7 @@ export default function CtfGameUi({
     const [playerHealth, setPlayerHealth] = useState(0);
     const [playerAmmo, setPlayerAmmo] = useState(0);
     const [playerTeam, setPlayerTeam] = useState("red");
+    const [iHaveFlag, setIHaveFlag] = useState(false);
     useEffect(() => {
         const intervalId = setInterval( () => {
             let freshWorldState = engine.ctx_get_world_state();
@@ -32,27 +33,34 @@ export default function CtfGameUi({
             if(playerTeam != freshPlayerInfo.get('team')) {
                 setPlayerTeam(freshPlayerInfo.get('team'));
             }
+            if(iHaveFlag != freshPlayerInfo.get('hasFlag')) {
+                setIHaveFlag(freshPlayerInfo.get('hasFlag'));
+            }
         }, 150);
         return () => clearInterval(intervalId);
     });
 
-    let task;
     let otherTeam;
     if(playerTeam === "blue") {
         otherTeam = "red";
     } else {
         otherTeam = "blue";
     }
-    const iHaveFlag = false;
+    let task;
+    let taskClass = "";
     if(iHaveFlag) {
+        taskClass = "has-flag";
         task = "You have the flag — return to base.";
     } else {
         task = "Infiltrate the " + otherTeam + " base and take their flag.";
     }
-    return <div className="ctf">
+
+    let ammoLowClass = playerAmmo <= 3 ? "low" : "";
+    let healthLowClass = playerHealth <= 1 ? "low" : "";
+    return <div className={"ctf team-" + playerTeam}>
         <div className="status-ctr">
-            <div className="status status-health">{playerHealth}</div>
-            <div className="status status-ammo">{playerAmmo}</div>
+            <div className={"status status-health " + healthLowClass}><span>{playerHealth}</span></div>
+            <div className={"status status-ammo " + ammoLowClass}><span>{playerAmmo}</span></div>
         </div>
         <div className="score-ctr">
             <div className="score score-blue">{blueScore}</div>
@@ -60,7 +68,7 @@ export default function CtfGameUi({
         </div>
         <div className="instructions-ctr">
             <p className="instruction-whichteam">You are on <span class={"team-" + playerTeam}>{playerTeam}</span> team.</p>
-            <p className="instruction-task">{task}</p>
+            <p className={"instruction-task " + taskClass}>{task}</p>
         </div>
     </div>;
 }
