@@ -134,4 +134,13 @@ impl Engine {
             _ => JsValue::null(),
         }
     }
+
+    pub fn ctx_get_my_player_id(&self) -> JsValue {
+        match &self.state {
+            GameState::Playing { client_player, .. } => {
+                serde_wasm_bindgen::to_value(client_player).expect("Failed to serialize playerid")
+            }
+            _ => JsValue::null(),
+        }
+    }
 }

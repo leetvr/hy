@@ -20,21 +20,15 @@ export default function CtfGameUi({
             if(redScore != freshWorldState.get('redScore')) {
                 setRedScore(freshWorldState.get('redScore'));
             }
-            // TODO: Make this do the right thing
-            const playerId = 0;
-            let freshPlayerInfo = engine.ctx_get_players();
-            console.log("xx", freshPlayerInfo);
-            freshPlayerInfo = freshPlayerInfo.get(playerId)
-            console.log("yy", freshPlayerInfo);
+
+            const playerId = engine.ctx_get_my_player_id();
+            let freshPlayerInfo = engine.ctx_get_players().get(playerId);
             if(playerHealth != freshPlayerInfo.get('health')) {
                 setPlayerHealth(freshPlayerInfo.get('health'));
             }
-            /*
-             // TODO: uncomment this when Ammo is supported
             if(playerAmmo != freshPlayerInfo.get('ammo')) {
                 setPlayerAmmo(freshPlayerInfo.get('ammo'));
             }
-            */
             if(playerTeam != freshPlayerInfo.get('team')) {
                 setPlayerTeam(freshPlayerInfo.get('team'));
             }
