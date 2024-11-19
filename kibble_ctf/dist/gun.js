@@ -1,6 +1,42 @@
+const DT = 0.01666667;
+export const onSpawn = (entityData) => {
+    const { position, customState } = entityData.state;
+    let newState = Object.assign({}, customState);
+    let newPosition = [...position];
+    newState.timer = 0.;
+    newState.spawnPosition = newPosition;
+    newState.wasAnchored = false;
+    if (entityData.state.anchor !== null) {
+        newState.wasAnchored = true;
+    }
+    return Object.assign(Object.assign({}, entityData), { state: Object.assign(Object.assign({}, entityData.state), { position: newPosition, customState: newState }) });
+};
 export const update = (id, currentState) => {
+    const { position, rotation, customState } = currentState;
+    let newPosition = [...position];
+    let newRotation = [...rotation];
+    let newCustomState = Object.assign({}, customState);
+    if (currentState.anchor !== null) {
+        newPosition = [0., 0., 0.];
+        newRotation = [0., 0., 0., 1.];
+        newCustomState.wasAnchored = true;
+    }
+    else {
+        if (newCustomState.wasAnchored) {
+            newCustomState.spawnPosition = newPosition;
+            newCustomState.wasAnchored = false;
+        }
+        newCustomState.timer = (newCustomState.timer + DT) % 3.0;
+        const t = newCustomState.timer / 3.0;
+        newPosition[1] = newCustomState.spawnPosition[1] + Math.sin(t * 2 * Math.PI) * 0.15 + 0.75;
+        // Artisanal hand rotated quaternion
+        const angle = t * 2 * Math.PI;
+        const sinHalfAngle = Math.sin(angle / 2);
+        const cosHalfAngle = Math.cos(angle / 2);
+        newRotation = [0, sinHalfAngle, 0, cosHalfAngle];
+    }
     currentState.interactions.forEach(fireBullets);
-    return currentState;
+    return Object.assign(Object.assign({}, currentState), { position: newPosition, rotation: newRotation, customState: newCustomState });
 };
 // BULLETS
 const fireBullets = ({ playerId, yaw, pitch, position }) => {
@@ -13,7 +49,7 @@ const fireBullets = ({ playerId, yaw, pitch, position }) => {
     const team = firingPlayerState.customState.team;
     // If the angle is wrong, don't find out why, just bash it into place
     let fixedYaw = yaw + Math.PI / 2;
-    // This one is just adjusted to feel better so you don't constantly shoot the ground
+    // This one is just tuned to feel better so you don't constantly shoot the ground
     let fixedPitch = pitch + 0.2;
     let initialVelocity = [
         speed * Math.cos(fixedPitch) * Math.cos(fixedYaw),

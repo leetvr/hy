@@ -19,6 +19,7 @@ export const onSpawn = (playerId, currentState) => {
     newCustomState.respawnTimer = RESPAWN_TIME;
     newCustomState.coyoteTime = 0.;
     newCustomState.jumpInputTime = 0.;
+    newCustomState.itemPickupCooldowns = {};
     let gun = hy.spawnEntity(GUN_TYPE_ID, [0, 0, 0], [0, 0, 0], [0, 0, 0]);
     hy.anchorEntity(gun, playerId, "hand_right_anchor");
     newCustomState.ammo = max_ammo(GUN_TYPE_ID);
@@ -53,17 +54,44 @@ export const update = (playerID, currentState, controls) => {
         newControls.fire = false;
     }
     const collisions = hy.getCollisionsForPlayer(playerID);
+    let touchedEntities = {};
     collisions.forEach((collision) => {
         if (!isAlive) {
             return;
         }
         if (collision.collisionTarget == "entity") {
             let entityData = hy.getEntityData(collision.targetId);
+            touchedEntities[collision.targetId] = true;
+            console.log("Touched entity", collision.targetId);
+            if (newCustomState.itemPickupCooldowns[collision.targetId]) {
+                console.log("Item on cooldown");
+                return;
+            }
             if (entityData != undefined) {
-                if (entityData.entity_type == GUN_TYPE_ID) {
-                    // Pick up gun if there's nothing in the right hand
-                    if (!attachedEntities["hand_right_anchor"]) {
-                        hy.anchorEntity(collision.targetId, playerID, "hand_right_anchor");
+                if (entityData.entity_type == GUN_TYPE_ID || entityData.entity_type == SHOTGUN_TYPE_ID) {
+                    // Pick up gun if it's different from the one in the hand
+                    let heldItemId = null;
+                    let heldItemType = null;
+                    if (attachedEntities["hand_right_anchor"]) {
+                        heldItemId = attachedEntities["hand_right_anchor"][0];
+                        let heldItemData = hy.getEntityData(heldItemId);
+                        heldItemType = heldItemData.entity_type;
+                    }
+                    let itemData = hy.getEntityData(collision.targetId);
+                    if (itemData.state.anchor != null) {
+                        return;
+                    }
+                    if (itemData.entity_type == heldItemType) {
+                        return;
+                    }
+                    hy.anchorEntity(collision.targetId, playerID, "hand_right_anchor");
+                    newCustomState.ammo = max_ammo(itemData.entity_type);
+                    newCustomState.maxAmmo = max_ammo(itemData.entity_type);
+                    if (heldItemId) {
+                        // Drop the gun that was previously held, in the same position as the picked up gun
+                        hy.detachEntity(heldItemId, itemData.state.customState.spawnPosition);
+                        newCustomState.itemPickupCooldowns[heldItemId] = 5;
+                        touchedEntities[heldItemId] = true;
                     }
                 }
                 if (entityData.entity_type == AMMO_TYPE_ID) {
@@ -125,6 +153,19 @@ export const update = (playerID, currentState, controls) => {
                     }
                 }
             }
+        }
+    });
+    // Items that are no longer in contact with the player should be removed from the dontPickupItem
+    // list
+    Object.keys(newCustomState.itemPickupCooldowns).forEach((itemId) => {
+        if (!touchedEntities[itemId]) {
+            newCustomState.itemPickupCooldowns[itemId] -= 1;
+            if (newCustomState.itemPickupCooldowns[itemId] <= 0) {
+                delete newCustomState.itemPickupCooldowns[itemId];
+            }
+        }
+        else {
+            newCustomState.itemPickupCooldowns[itemId] = 5;
         }
     });
     let isFiring = false;
