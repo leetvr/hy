@@ -89,6 +89,8 @@ fn get_mime_type(request_path: &str) -> &str {
         "text/html"
     } else if request_path.ends_with(".css") {
         "text/css"
+    } else if request_path.ends_with(".svg") {
+        "image/svg+xml"
     } else {
         "application/octet-stream"
     }

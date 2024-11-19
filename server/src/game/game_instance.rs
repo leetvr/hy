@@ -1,17 +1,24 @@
-use std::{
-    mem,
-    sync::{Arc, Mutex},
+use {
+    crate::game::{network::KnownEntityState, world::spawn_entity},
+    anyhow::Result,
+    entities::{Anchor, PlayerId},
+    serde_json::Map,
+    std::{
+        mem,
+        sync::{Arc, Mutex},
+    },
 };
 
 use {
-    crate::game::{network::ClientPlayerState, player, PlayerState},
+    crate::game::{network::ClientPlayerState, PlayerState},
     entities::{EntityData, EntityID},
     std::collections::{HashMap, HashSet},
 };
 
 use blocks::{BlockGrid, BlockPos, EMPTY_BLOCK};
+use entities::EntityTypeID;
 use glam::Vec3;
-use net_types::{ClientShouldSwitchMode, PlayerId};
+use net_types::ClientShouldSwitchMode;
 use physics::{PhysicsCollider, PhysicsWorld};
 use tokio::sync::mpsc;
 
@@ -20,12 +27,16 @@ use crate::js::JSContext;
 use super::{
     editor_instance::EditorInstance,
     network::{Client, ClientId, ClientMessageReceiver, ServerMessageSender},
-    world::World,
+    world::{self, World},
     GameState, NextServerState, Player, WORLD_SIZE,
 };
 
+const DEBUG_LINES: bool = false;
+
 pub struct GameInstance {
     pub world: Arc<Mutex<World>>,
+    // world script state
+    pub custom_world_state: serde_json::Value,
     _game_state: GameState,
     next_client_id: ClientId,
     pub clients: HashMap<ClientId, Client>,
@@ -41,7 +52,7 @@ impl GameInstance {
     pub fn new(world: Arc<Mutex<World>>) -> Self {
         // Roughly in the center of the map
         let player_spawn_point =
-            glam::Vec3::new(WORLD_SIZE as f32 / 2., 16., WORLD_SIZE as f32 / 2.);
+            glam::Vec3::new(WORLD_SIZE as f32 / 2., 4., WORLD_SIZE as f32 / 2.);
 
         let mut physics_world = PhysicsWorld::new();
         let mut colliders = Vec::new();
@@ -55,6 +66,7 @@ impl GameInstance {
 
         Self {
             world,
+            custom_world_state: serde_json::Value::Object(Map::new()),
             player_spawn_point,
             physics_world,
             colliders,
@@ -66,7 +78,16 @@ impl GameInstance {
         }
     }
 
-    pub async fn from_transition(editor_instance: EditorInstance) -> Self {
+    pub fn init(&mut self, js_context: &mut JSContext) -> anyhow::Result<()> {
+        js_context.run_world_init(&mut self.custom_world_state)?;
+
+        Ok(())
+    }
+
+    pub async fn from_transition(
+        js_context: &mut JSContext,
+        editor_instance: EditorInstance,
+    ) -> Self {
         let EditorInstance {
             world,
             mut editor_client,
@@ -74,41 +95,68 @@ impl GameInstance {
         } = editor_instance;
         let mut game_instance = GameInstance::new(world.clone());
 
-        let world = world.lock().expect("DEADLOCK!!");
-
+        // Put the fresh physics world in the old shared Arc<Mutex<PhysicsWorld>>
         {
-            let mut physics_world = physics_world.lock().expect("Deadlock");
-            // Rebuild the terrain
-            bake_terrain_colliders(
-                &mut physics_world,
-                &world.blocks,
-                &mut game_instance.colliders,
-            );
+            let mut old_physics_world = physics_world.lock().expect("Deadlock");
+            let mut new_physics_world = game_instance.physics_world.lock().expect("Deadlock");
 
-            // Remove any old player handles
-            physics_world.player_handles.clear();
+            // sick mem::swap bro
+            std::mem::swap(&mut *old_physics_world, &mut *new_physics_world);
         }
 
-        // IMPORTANT: We need the client to forget any previous world state
-        editor_client.awareness = Default::default();
+        // The old Arc is the one shared with the script context, and now contains the fresh
+        // physics world. That's the one we want to use in the game instance.
+        // The new old physics world is dropped here
+        game_instance.physics_world = physics_world;
 
-        // Create a player for the editor client
+        // Entities need to be spawned into the new physics world
+        {
+            let mut world = game_instance.world.lock().unwrap();
+            let entity_type_registry = world.entity_type_registry.clone();
+            for entity_data in world.entities.values_mut() {
+                spawn_entity(
+                    entity_data,
+                    js_context,
+                    game_instance.physics_world.clone(),
+                    &entity_type_registry,
+                );
+            }
+        }
+
+        // Init the world after entities are spawned but before players are added
+        game_instance
+            .init(js_context)
+            .expect("Error during world init");
+
+        // Create a player for the editor client and also spawn that into the new physics world
         let new_player_id = PlayerId::new(game_instance.next_player_id);
         game_instance.next_player_id += 1;
-        {
-            let mut physics_world = physics_world.lock().expect("Deadlock");
-            game_instance.players.insert(
-                new_player_id,
+        let player = match spawn_player(
+            js_context,
+            &mut game_instance.custom_world_state,
+            new_player_id,
+            game_instance.player_spawn_point,
+            &game_instance.physics_world,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("Error spawning player: {:?}\n", e);
+                tracing::warn!("Spawning default player");
+                // make a new player without calling any spawn script
                 Player::new(
                     new_player_id,
-                    &mut physics_world,
+                    &mut game_instance.physics_world.lock().expect("Deadlock"),
                     game_instance.player_spawn_point,
-                ),
-            );
-        }
+                )
+            }
+        };
+        game_instance.players.insert(new_player_id, player);
 
         // Set the player ID on the editor client
         editor_client.player_id = new_player_id;
+
+        // IMPORTANT: We need the client to forget any previous world state
+        editor_client.awareness = Default::default();
 
         let client_id = game_instance.next_client_id;
         game_instance.next_client_id = game_instance.next_client_id + 1;
@@ -123,32 +171,56 @@ impl GameInstance {
                 .into(),
             )
             .await;
-
-        // Make sure that the newly created game instance points to the existing physics world
-        game_instance.physics_world = physics_world;
         game_instance.clients.insert(client_id, editor_client);
         game_instance
     }
 
     pub async fn tick(&mut self, js_context: &mut JSContext) -> Option<NextServerState> {
+        // World script update
+        if let Err(err) = js_context.run_world_update(&mut self.custom_world_state) {
+            tracing::error!("Error running scripted world update: {err:#}");
+        }
+
         // Handle client messages
         let maybe_next_state = self.client_net_updates().await;
 
+        // Remove any entities attached to removed players
+        {
+            let mut world = self.world.lock().expect("Deadlock!");
+            world.entities.retain(|_, entity| {
+                if let Some(Anchor { player_id, .. }) = entity.state.anchor {
+                    self.players.contains_key(&player_id)
+                } else {
+                    true
+                }
+            });
+        }
+
         // Update players
-        for client in self.clients.values() {
+        for client in self.clients.values_mut() {
             let player = self.players.get_mut(&client.player_id).unwrap();
-            let collisions = {
+
+            // Update the list of attached entities
+            {
                 let world = self.world.lock().expect("Deadlock!");
-                player::player_aabb_block_collisions(player.state.position, &world.blocks)
-            };
+
+                player.state.attached_entities.clear();
+                for (entity_id, entity) in &world.entities {
+                    let Some(anchor) = &entity.state.anchor else {
+                        continue;
+                    };
+
+                    let entity_list = player
+                        .state
+                        .attached_entities
+                        .entry(anchor.parent_anchor.clone())
+                        .or_insert_with(Default::default);
+                    entity_list.push(entity_id.clone());
+                }
+            }
 
             player.state = js_context
-                .get_player_next_state(
-                    client.player_id,
-                    &player.state,
-                    &client.last_controls,
-                    collisions,
-                )
+                .get_player_next_state(client.player_id, &player.state, &client.last_controls)
                 .await
                 .unwrap();
 
@@ -161,17 +233,14 @@ impl GameInstance {
                     player.state.position,
                 );
             }
+
+            // Reset edge trigger controls once per tick
+            client.last_controls.fire = false;
+            client.last_controls.jump = false;
         }
 
         // Update entities
-        let entity_data = {
-            let world = self.world.lock().expect("Deadlock!");
-            world
-                .entities
-                .iter()
-                .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
-                .collect::<Vec<_>>()
-        };
+        let entity_data = self.get_entities_in_world();
 
         for (entity_id, entity_type_id) in entity_data {
             js_context
@@ -182,28 +251,54 @@ impl GameInstance {
 
         // Step physics
         {
-            self.physics_world.lock().expect("Deadlock!").step();
+            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
+            let mut world = self.world.lock().expect("Deadlock!");
+
+            // borrowing is hard
+            let entity_type_registry = world.entity_type_registry.clone();
+            physics_world.step(&mut world.entities, &entity_type_registry);
+
+            if DEBUG_LINES {
+                let debug_lines = physics_world.get_debug_lines();
+                for (_, client) in self.clients.iter() {
+                    let _ = client
+                        .outgoing_tx
+                        .send(net_types::ServerPacket::SetDebugLines(debug_lines.clone()))
+                        .await;
+                }
+            }
         }
 
         // Run world commands queued from the scripts
         let mut world = self.world.lock().expect("Deadlock!");
-        world.apply_queued_updates();
+        world.apply_queued_updates(js_context, self.physics_world.clone());
 
         maybe_next_state
     }
 
     pub async fn handle_new_client(
         &mut self,
+        js_context: &mut JSContext,
         (incoming_rx, outgoing_tx): (ClientMessageReceiver, ServerMessageSender),
     ) {
         let player_id = PlayerId::new(self.next_player_id);
         self.next_player_id += 1;
         {
-            let mut physics_world = self.physics_world.lock().expect("Deadlock!");
-            self.players.insert(
+            let player = match spawn_player(
+                js_context,
+                &mut self.custom_world_state,
                 player_id,
-                Player::new(player_id, &mut physics_world, self.player_spawn_point),
-            );
+                self.player_spawn_point,
+                &self.physics_world,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Error spawning player: {:?}", e);
+                    // Drop player connection
+                    return;
+                }
+            };
+            self.players.insert(player_id, player);
         }
 
         let client_id = self.next_client_id;
@@ -260,8 +355,22 @@ impl GameInstance {
                 },
             } {
                 match packet {
-                    net_types::ClientPacket::Controls(controls) => {
-                        client.last_controls = controls;
+                    net_types::ClientPacket::Controls(net_types::Controls {
+                        move_direction,
+                        jump,
+                        fire,
+                        camera_yaw,
+                    }) => {
+                        client.last_controls.move_direction = move_direction;
+                        client.last_controls.camera_yaw = camera_yaw;
+
+                        // Only allow the client to trigger jump and fire once per tick
+                        if jump {
+                            client.last_controls.jump = true;
+                        }
+                        if fire {
+                            client.last_controls.fire = true;
+                        }
                     }
                     net_types::ClientPacket::Start => {
                         maybe_next_state = Some(NextServerState::Playing)
@@ -295,6 +404,32 @@ impl GameInstance {
 
         // If we need to transition to a new state, return that
         maybe_next_state
+    }
+
+    pub(crate) async fn spawn_entities(&self, js_context: &mut JSContext) {
+        let mut world = self.world.lock().expect("Deadlock!");
+
+        // work around borrowing issues? no time, baby
+        let entity_type_registry = world.entity_type_registry.clone();
+
+        let entities = &mut world.entities;
+        for entity_data in entities.values_mut() {
+            world::spawn_entity(
+                entity_data,
+                js_context,
+                self.physics_world.clone(),
+                &entity_type_registry,
+            );
+        }
+    }
+
+    fn get_entities_in_world(&self) -> Vec<(EntityID, EntityTypeID)> {
+        let world = self.world.lock().expect("Deadlock!");
+        world
+            .entities
+            .iter()
+            .map(|(entity_id, entity)| (entity_id.clone(), entity.entity_type))
+            .collect::<Vec<_>>()
     }
 }
 
@@ -402,10 +537,14 @@ async fn sync_entities_to_client(
                 .into(),
             )
             .await;
-        client
-            .awareness
-            .entities
-            .insert(entity_id.clone(), entity.state.position);
+        client.awareness.entities.insert(
+            entity_id.clone(),
+            KnownEntityState {
+                position: entity.state.position.clone(),
+                rotation: entity.state.rotation.clone(),
+                anchor: entity.state.anchor.clone(),
+            },
+        );
     }
 
     // Remove old entities from this client
@@ -423,22 +562,60 @@ async fn sync_entities_to_client(
     }
 
     // Update client's entity positions for all known entities
-    for (entity_id, known_position) in &mut client.awareness.entities {
+    for (
+        entity_id,
+        KnownEntityState {
+            position: known_position,
+            rotation: known_rotation,
+            anchor: known_anchor,
+        },
+    ) in &mut client.awareness.entities
+    {
         let entity = entities.get(entity_id).unwrap();
-        if entity.state.position != *known_position {
+        if entity.state.position != *known_position
+            || entity.state.rotation != *known_rotation
+            || entity.state.anchor != *known_anchor
+        {
             let _ = client
                 .outgoing_tx
                 .send(
                     net_types::UpdateEntity {
                         entity_id: entity_id.clone(),
-                        position: entity.state.position,
+                        position: entity.state.position.clone(),
+                        rotation: entity.state.rotation.clone(),
+                        anchor: entity.state.anchor.clone(),
                     }
                     .into(),
                 )
                 .await;
-            *known_position = entity.state.position;
+            *known_position = entity.state.position.clone();
+            *known_rotation = entity.state.rotation.clone();
+            *known_anchor = entity.state.anchor.clone();
         }
     }
+}
+
+pub fn spawn_player(
+    js_context: &mut JSContext,
+    custom_world_state: &mut serde_json::Value,
+    id: PlayerId,
+    position: glam::Vec3,
+    physics_world: &Arc<Mutex<PhysicsWorld>>,
+) -> Result<Player> {
+    let mut physics_world = physics_world.lock().expect("Deadlock!");
+    let mut player = Player::new(id, &mut physics_world, position);
+
+    // First let the world mutate the spawned player
+    player.state =
+        js_context.run_world_spawn_player_script(custom_world_state, id, &player.state)?;
+
+    // Note(ll): Consider that this lets the world script push any data from itself to the player
+    // script. We should think about whether we want to allow this.
+
+    // Then let the player script mutate itself
+    player.state = js_context.get_player_spawn_state(id, &player.state)?;
+
+    Ok(player)
 }
 
 /// Rebuilds the terrain colliders from the block grid
@@ -449,9 +626,12 @@ pub fn bake_terrain_colliders(
     blocks: &BlockGrid,
     colliders: &mut Vec<PhysicsCollider>,
 ) {
-    // Remove old colliders
-    for collider in colliders.drain(..) {
-        physics_world.remove_collider(collider);
+    for (position, block_type_id) in blocks.iter_non_empty() {
+        physics_world.add_block_collider(position.into(), block_type_id);
+    }
+
+    if true {
+        return;
     }
 
     // Vertices can be shared between many faces, store indices for each unique vertex

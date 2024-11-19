@@ -1,24 +1,133 @@
-import { Vec3, PlayerUpdate, PlayerControls, PlayerState, PlayerCollision, Vec2 } from "../lib/hy";
+import { Vec3, PlayerUpdate, PlayerControls, PlayerState, Vec2, OnPlayerSpawn } from "../lib/hy";
 
-const GRAVITY = -20; // Gravity acceleration (m/s^2)
-const MOVE_SPEED = 8.0; // Movement speed (units per second)
-const JUMP_SPEED = 12.0; // Jump initial velocity (units per second)
+const GRAVITY = -9.81; // Gravity acceleration (m/s^2)
+const MOVE_SPEED = 5.0; // Movement speed (units per second)
+const JUMP_SPEED = 5.0; // Jump initial velocity (units per second)
 const DT = 1 / 60; // Fixed delta time (seconds per frame)
+
+export const onSpawn: OnPlayerSpawn = (
+  playerID: number,
+  currentState: PlayerState,
+): PlayerState => {
+  const { customState, position } = currentState;
+  let newCustomState = { ...customState };
+
+  newCustomState.health = MAX_HEALTH;
+  newCustomState.spawnPosition = position;
+  newCustomState.respawnTimer = 0.;
+
+  return {
+    ...currentState,
+    customState: newCustomState
+  };
+}
 
 export const update: PlayerUpdate = (
   playerID: number,
   currentState: PlayerState,
   controls: PlayerControls,
-  collisions: PlayerCollision[],
 ): PlayerState => {
-  const { position, velocity, animationState } = currentState;
+  // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
+  // It's just a quick way to pass data to the script.
+  const { position, velocity, animationState, isOnGround: wasOnGround, customState, attachedEntities } = currentState;
   let newPosition: Vec3 = [...position];
   let newVelocity: Vec3 = [...velocity];
   let newAnimationState: string = animationState;
+  let newCustomState = { ...customState };
+  let newControls = { ...controls };
+
+  let isAlive = newCustomState.health > 0;
+  if (!isAlive) {
+
+    if (attachedEntities["hand_left_anchor"]) {
+      hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+    }
+
+    if (newCustomState.respawnTimer <= 0) {
+      newPosition = newCustomState.spawnPosition;
+      newCustomState.health = MAX_HEALTH;
+      newCustomState.respawnTimer = 3.0;
+    }
+    newCustomState.respawnTimer -= DT;
+
+    // Reset controls when player is dead
+    newControls.move_direction = [0, 0];
+    newControls.jump = false;
+    newControls.fire = false;
+  }
+
+  const collisions = hy.getCollisionsForPlayer(playerID);
+  collisions.forEach((collision) => {
+    if (!isAlive) {
+      return;
+    }
+
+    if (collision.collisionTarget == "entity") {
+
+      let entityData = hy.getEntityData(collision.targetId);
+      if (entityData != undefined) {
+        const GUN_TYPE = 1;
+        const BULLET_TYPE = 2;
+        const BLUE_FLAG_TYPE = 3;
+        const RED_FLAG_TYPE = 4;
+
+        if (entityData.entity_type == GUN_TYPE) {
+          // Pick up gun if there's nothing in the right hand
+          if (!attachedEntities["hand_right_anchor"]) {
+            hy.anchorEntity(collision.targetId, playerID, "hand_right_anchor");
+          }
+        }
+
+        if (entityData.entity_type == BULLET_TYPE) {
+          // Destroy bullet and take damage
+          hy.despawnEntity(collision.targetId);
+          newCustomState.health -= 1;
+          if (newCustomState.health <= 0) {
+            newCustomState.respawnTimer = RESPAWN_TIME;
+          }
+        }
+
+
+        if (entityData.entity_type == BLUE_FLAG_TYPE || entityData.entity_type == RED_FLAG_TYPE) {
+          // Don't do anything with a flag that is already carried
+          if (entityData.state.customState.carried) {
+            return;
+          }
+
+          let flag_team;
+          if (entityData.entity_type == BLUE_FLAG_TYPE) {
+            flag_team = "blue";
+          } else {
+            flag_team = "red";
+          }
+
+          if (newCustomState.team == flag_team) {
+            // Interacting with a flag returns it to its spawn
+            hy.interactEntity(collision.targetId, playerID, position, newControls.camera_yaw);
+          } else {
+            // Pick up the flag if we aren't already holding something in the left hand
+            if (!attachedEntities["hand_left_anchor"]) {
+              hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
+            }
+          }
+        }
+      }
+    }
+  });
+
+
+  if (newControls.fire) {
+    let handItems = attachedEntities["hand_right_anchor"];
+    if (handItems != undefined) {
+      handItems.forEach((item) => {
+        hy.interactEntity(item, playerID, position, newControls.camera_yaw);
+      });
+    }
+  }
 
   // Handle horizontal movement
-  const inputX = controls.move_direction[0];
-  const inputZ = controls.move_direction[1];
+  const inputX = newControls.move_direction[0];
+  const inputZ = newControls.move_direction[1];
 
   if (inputX !== 0 || inputZ !== 0) {
     // Normalize input direction
@@ -26,7 +135,7 @@ export const update: PlayerUpdate = (
     const normalizedInput: Vec2 = [inputX / inputLength, inputZ / inputLength];
 
     // Rotate input by camera yaw to get world space direction
-    const yaw = controls.camera_yaw;
+    const yaw = newControls.camera_yaw;
     const sinYaw = Math.sin(yaw);
     const cosYaw = Math.cos(yaw);
 
@@ -40,52 +149,55 @@ export const update: PlayerUpdate = (
 
     newAnimationState = "run";
   } else {
-    // Apply damping to horizontal velocity when no input
-    newVelocity[0] *= 0.7; // Adjust damping factor as needed
+    // TODO: Apply damping to horizontal velocity when no input
+    newVelocity[0] *= 0.7;
     newVelocity[2] *= 0.7;
     newAnimationState = "idle";
   }
 
-  // Ground detection
-  const isOnGround = hy.isPlayerOnGround(playerID);
-
-  // Handle jumping, falling
-  if (!isOnGround) {
+  // Apply gravity
+  if (!wasOnGround) {
     newVelocity[1] += GRAVITY * DT;
-  } else if (controls.jump) {
-    newVelocity[1] = JUMP_SPEED;
-  } else {
-    newVelocity[1] = 0;
   }
 
   // Update position based on velocity and delta time
-  const movement: Vec3 = [newVelocity[0] * DT, newVelocity[1] * DT, newVelocity[2] * DT];
+  const desiredMovement: Vec3 = [newVelocity[0], newVelocity[1], newVelocity[2]];
 
-  newPosition[0] += movement[0];
-  newPosition[1] += movement[1];
-  newPosition[2] += movement[2];
+  const { correctedMovement, isOnGround } = hy.checkMovementForCollisions(
+    playerID,
+    position,
+    desiredMovement,
+  );
 
-  const adjustedMovement = hy.checkMovementForCollisions(playerID, movement);
-  // Check for collisions with blocks
-  if (adjustedMovement) {
-    newPosition[0] += adjustedMovement[0];
-    newPosition[1] += adjustedMovement[1];
-    newPosition[2] += adjustedMovement[2];
+  newVelocity[0] = correctedMovement[0];
+  newVelocity[1] = correctedMovement[1];
+  newVelocity[2] = correctedMovement[2];
 
-    return {
-      position: newPosition,
-      velocity: newVelocity,
-      animationState: newAnimationState,
-    };
-  } else {
-    return {
-      position: newPosition,
-      velocity: newVelocity,
-      animationState: newAnimationState,
-    };
+  if (isOnGround && newControls.jump) {
+    newVelocity[1] = JUMP_SPEED;
+
+    if (attachedEntities["hand_left_anchor"]) {
+      hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+    }
   }
+
+  newPosition[0] += newVelocity[0] * DT;
+  newPosition[1] += newVelocity[1] * DT;
+  newPosition[2] += newVelocity[2] * DT
+
+  if (!isAlive) {
+    newAnimationState = "sleep";
+  }
+
+  return {
+    position: newPosition,
+    velocity: newVelocity,
+    animationState: newAnimationState,
+    customState: newCustomState,
+    isOnGround,
+    attachedEntities,
+  };
 };
 
-function length(v: Vec3): number {
-  return Math.hypot(v[0], v[1], v[2]);
-}
+const MAX_HEALTH = 5;
+const RESPAWN_TIME = 3.0;

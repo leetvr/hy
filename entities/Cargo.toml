@@ -6,5 +6,6 @@ edition = "2021"
 [dependencies]
 glam.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 wasm-bindgen.workspace = true
 tsify.workspace = true

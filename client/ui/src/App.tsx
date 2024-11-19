@@ -11,19 +11,21 @@ function App({ engine }: { engine: Engine }) {
   const [blockRegistry, setBlockRegistry] = useState<BlockRegistry>();
   const [entityTypeRegistry, setEntityTypeRegistry] = useState<EntityTypeRegistry>();
 
-  useEffect(() => {
-    engine.ctx_on_init((blockRegistry: BlockRegistry, entityTypeRegistry: EntityTypeRegistry) => {
-      setBlockRegistry(blockRegistry);
-      setEntityTypeRegistry(entityTypeRegistry);
-    });
-  }, [engine]);
-
   const setMode = (newMode: EngineMode) => {
     if (newMode != currentMode) {
       setModeState(newMode);
       engine.ctx_set_engine_mode(newMode);
     }
   };
+
+  useEffect(() => {
+    engine.ctx_on_init((blockRegistry: BlockRegistry, entityTypeRegistry: EntityTypeRegistry) => {
+      setBlockRegistry(blockRegistry);
+      setEntityTypeRegistry(entityTypeRegistry);
+    });
+
+    setModeState(engine.ctx_get_engine_mode());
+  }, [engine]);
 
   const editClass = getEngineModeText(currentMode);
 

@@ -13,6 +13,8 @@ wasm-bindgen.workspace = true
 itertools.workspace = true
 glam.workspace = true
 web-sys.workspace = true
+ktx2.workspace = true
+ddsfile.workspace = true
 gltf.workspace = true
 bytemuck.workspace = true
 nanorand.workspace = true
@@ -26,6 +28,7 @@ dolly.workspace = true
 serde.workspace = true
 serde-wasm-bindgen.workspace = true
 gloo-net.workspace = true
+serde_json.workspace = true
 
 net-types.workspace = true
 blocks.workspace = true

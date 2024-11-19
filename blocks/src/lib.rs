@@ -61,9 +61,9 @@ impl BlockPos {
     }
 }
 
-impl Into<glam::Vec3> for BlockPos {
-    fn into(self) -> glam::Vec3 {
-        glam::Vec3::new(self.x as f32, self.y as f32, self.z as f32)
+impl From<BlockPos> for glam::Vec3 {
+    fn from(pos: BlockPos) -> Self {
+        glam::Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32)
     }
 }
 

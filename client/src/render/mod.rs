@@ -1,6 +1,8 @@
 mod cube_vao;
 mod debug_renderer;
 mod grid_renderer;
+mod skybox;
+mod tonemapping;
 mod vertex;
 
 // Re-exports
@@ -14,11 +16,11 @@ use {
     std::{mem, slice},
 };
 
-use bytemuck::offset_of;
-use glam::{Mat4, UVec2, UVec3, Vec3, Vec3Swizzles};
+use bytemuck::{offset_of, Pod, Zeroable};
+use glam::{Mat4, UVec2, UVec3, Vec3};
 use glow::HasContext;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
+use web_sys::{js_sys, HtmlCanvasElement, WebGl2RenderingContext};
 
 use crate::{
     gltf::{GLTFPrimitive, TransparencyType},
@@ -29,7 +31,37 @@ const POSITION_ATTRIBUTE: u32 = 0;
 const NORMAL_ATTRIBUTE: u32 = 1;
 const UV_ATTRIBUTE: u32 = 2;
 
-const SHADOW_SIZE: UVec2 = UVec2::splat(1024);
+const SHADOW_SIZE: UVec2 = UVec2::splat(2048);
+const LIGHT_DIRECTION: Vec3 = Vec3::new(-1.0, -1.0, -1.0);
+
+const MAX_LIGHTS: usize = 64;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Zeroable, Pod)]
+struct LightBuffer {
+    light_count: u32,
+    _padding: [u32; 3],
+    lights: [Light; MAX_LIGHTS],
+}
+
+impl Default for LightBuffer {
+    fn default() -> Self {
+        Self {
+            light_count: Default::default(),
+            _padding: Default::default(),
+            lights: [Default::default(); MAX_LIGHTS],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, Zeroable, Pod)]
+pub struct Light {
+    pub position: Vec3,
+    pub distance: f32,
+    pub color: Vec3,
+    pub _padding: f32,
+}
 
 pub struct Renderer {
     gl: glow::Context,
@@ -38,6 +70,7 @@ pub struct Renderer {
     forward_program: PrimaryProgram,
     shadow_program: PrimaryProgram,
 
+    hdr_target: HdrFramebuffer,
     shadow_target: ShadowTarget,
 
     pub camera: Camera,
@@ -45,21 +78,29 @@ pub struct Renderer {
 
     grid_renderer: grid_renderer::GridRenderer,
     debug_renderer: debug_renderer::DebugRenderer,
+    skybox_renderer: skybox::SkyboxRenderer,
+    tonemapping_renderer: tonemapping::TonemappingRenderer,
+
+    light_buffer: glow::Buffer,
 }
 
 impl Renderer {
     pub fn new(canvas: HtmlCanvasElement) -> Result<Self, JsValue> {
+        let context_options = js_sys::Object::new();
+        js_sys::Reflect::set(
+            &context_options,
+            &"antialias".into(),
+            &JsValue::from_bool(false),
+        )?;
+
         // Get the WebGL2 rendering context
         let webgl2_context = canvas
-            .get_context("webgl2")?
+            .get_context_with_context_options("webgl2", &context_options)?
             .ok_or("WebGL2 not supported")?
             .dyn_into::<WebGl2RenderingContext>()?;
 
         // Initialize glow with the WebGL2 context
         let gl = get_gl_context(webgl2_context);
-
-        let vertex_shader_source = include_str!("shaders/tri.vert");
-        let fragment_shader_source = include_str!("shaders/tri.frag");
 
         let forward_program = PrimaryProgram::new(
             &gl,
@@ -73,36 +114,71 @@ impl Renderer {
             include_str!("shaders/shadow_tri.frag"),
         );
 
+        let skybox_renderer = skybox::SkyboxRenderer::new(&gl);
+
+        let hdr_target = HdrFramebuffer::new(&gl, UVec2::new(canvas.width(), canvas.height()));
         let shadow_target = ShadowTarget::new(&gl, SHADOW_SIZE);
 
         let camera = Camera::default();
 
         let grid_renderer = grid_renderer::GridRenderer::new(&gl);
         let debug_renderer = debug_renderer::DebugRenderer::new(&gl);
+        let tonemapping_renderer = tonemapping::TonemappingRenderer::new(&gl);
 
         let resolution = UVec2::new(canvas.width(), canvas.height());
+
+        let light_buffer = unsafe { gl.create_buffer().expect("Failed to create buffer") };
 
         Ok(Self {
             gl,
             canvas,
             forward_program,
             shadow_program,
+            hdr_target,
             shadow_target,
             camera,
             resolution,
             grid_renderer,
             debug_renderer,
+            skybox_renderer,
+            tonemapping_renderer,
+            light_buffer,
         })
     }
 
     pub fn resize(&mut self, dimension: UVec2) {
         self.resolution = dimension;
+
+        self.hdr_target.dispose(&self.gl);
+        self.hdr_target = HdrFramebuffer::new(&self.gl, dimension);
     }
 
-    pub fn render(&self, draw_calls: &[DrawCall], debug_lines: &[DebugLine], grid_size: UVec3) {
+    pub fn render(
+        &self,
+        draw_calls: &[DrawCall],
+        debug_lines: &[DebugLine],
+        lights: &[Light],
+        grid_size: UVec3,
+    ) {
         let aspect_ratio = self.canvas.client_width() as f32 / self.canvas.client_height() as f32;
+        let light_direction = LIGHT_DIRECTION.normalize();
 
         unsafe {
+            // Upload to light buffer
+            let mut light_buffer_data = LightBuffer::default();
+            for (idx, light) in lights.iter().enumerate().take(MAX_LIGHTS) {
+                light_buffer_data.lights[idx] = *light;
+            }
+            light_buffer_data.light_count = lights.len() as u32;
+
+            self.gl
+                .bind_buffer(glow::UNIFORM_BUFFER, Some(self.light_buffer));
+            self.gl.buffer_data_u8_slice(
+                glow::UNIFORM_BUFFER,
+                bytemuck::bytes_of(&light_buffer_data),
+                glow::STREAM_DRAW,
+            );
+
             let mut blend_state = EnableState::new(&self.gl, glow::BLEND, false);
             self.gl.enable(glow::DEPTH_TEST);
             self.gl.blend_func_separate(
@@ -130,20 +206,32 @@ impl Renderer {
                 .viewport(0, 0, SHADOW_SIZE.x as i32, SHADOW_SIZE.y as i32);
             self.gl.cull_face(glow::FRONT);
 
+            self.gl.depth_mask(true);
             self.gl.clear_depth_f32(1.0);
             self.gl.clear(glow::DEPTH_BUFFER_BIT);
 
-            let shadow_matrix = compute_shadow_bounding_box(Vec3::new(1.0, -1.0, -1.0), grid_size);
+            self.gl.enable(glow::POLYGON_OFFSET_FILL);
+            self.gl.polygon_offset(0.0, 0.0);
+
+            let shadow_from_world = compute_shadow_bounding_box(light_direction, grid_size);
 
             blend_state.set(&self.gl, false);
 
-            self.render_pass(&self.shadow_program, draw_calls, None, shadow_matrix, None);
+            self.render_pass(
+                &self.shadow_program,
+                draw_calls,
+                None,
+                shadow_from_world,
+                None,
+                light_direction,
+            );
 
             // --------------------
             // --- Forward Pass ---
             // --------------------
 
-            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            self.gl
+                .bind_framebuffer(glow::FRAMEBUFFER, Some(self.hdr_target.framebuffer));
             self.gl
                 .viewport(0, 0, self.resolution.x as i32, self.resolution.y as i32);
             self.gl.cull_face(glow::BACK);
@@ -153,18 +241,29 @@ impl Renderer {
             self.gl
                 .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
 
+            self.gl.disable(glow::POLYGON_OFFSET_FILL);
+
             let projection_matrix =
-                Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
+                Mat4::perspective_rh_gl(60.0_f32.to_radians(), aspect_ratio, 0.1, 100.0);
 
             let view_matrix = self.camera.view_matrix();
+
+            let origin_view_matrix = self.camera.origin_view_matrix();
+
+            let clip_from_world = projection_matrix * view_matrix;
+            let origin_world_from_clip = (projection_matrix * origin_view_matrix).inverse();
 
             self.render_pass(
                 &self.forward_program,
                 draw_calls,
                 Some(&mut blend_state),
-                projection_matrix * view_matrix,
-                Some(shadow_matrix),
+                clip_from_world,
+                Some(shadow_from_world),
+                light_direction,
             );
+
+            self.skybox_renderer
+                .render(&self.gl, origin_world_from_clip);
 
             let clip_from_world = projection_matrix * view_matrix;
             self.grid_renderer
@@ -172,6 +271,15 @@ impl Renderer {
 
             self.debug_renderer
                 .render(&self.gl, clip_from_world, debug_lines);
+
+            // ------------------------
+            // --- Tonemapping Pass ---
+            // ------------------------
+
+            self.gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+
+            self.tonemapping_renderer
+                .render(&self.gl, self.hdr_target.color_texture);
 
             self.gl.flush();
         }
@@ -184,9 +292,13 @@ impl Renderer {
         blend_state: Option<&mut EnableState>,
         clip_from_world: Mat4,
         shadow_from_world: Option<Mat4>,
+        light_direction: Vec3,
     ) {
         unsafe {
             self.gl.use_program(Some(program.program));
+
+            self.gl
+                .bind_buffer_base(glow::UNIFORM_BUFFER, 0, Some(self.light_buffer));
 
             for draw_call in draw_calls {
                 let blending = draw_call.primitive.transparency_type.requires_blending();
@@ -201,13 +313,26 @@ impl Renderer {
 
                 self.gl.depth_mask(!blending);
 
+                // Set light direction
+                self.gl.uniform_3_f32_slice(
+                    program.light_dir_location.as_ref(),
+                    (-light_direction).as_ref(),
+                );
+
+                // Set worldFromLocal matrix
+                self.gl.uniform_matrix_4_f32_slice(
+                    program.world_from_local_location.as_ref(),
+                    false,
+                    bytemuck::cast_slice(draw_call.transform.as_ref()),
+                );
+
                 let mvp_matrix = clip_from_world * draw_call.transform;
 
                 // Set matrix
                 self.gl.uniform_matrix_4_f32_slice(
                     program.matrix_location.as_ref(),
                     false,
-                    bytemuck::cast_slice(slice::from_ref(&mvp_matrix)),
+                    bytemuck::cast_slice(mvp_matrix.as_ref()),
                 );
                 if let Some(shadow_from_world) = shadow_from_world {
                     let shadow_matrix = shadow_from_world * draw_call.transform;
@@ -226,7 +351,7 @@ impl Renderer {
                 );
 
                 // Set shadow map
-                if let Some(shadow_map_location) = program.shadow_map_location.as_ref() {
+                if let Some(_) = program.shadow_map_location.as_ref() {
                     self.gl.active_texture(glow::TEXTURE1);
                     self.gl
                         .bind_texture(glow::TEXTURE_2D, Some(self.shadow_target.depth_texture));
@@ -278,6 +403,9 @@ struct PrimaryProgram {
     tint_location: Option<glow::UniformLocation>,
     depth_cutoff_location: Option<glow::UniformLocation>,
     shadow_map_location: Option<glow::UniformLocation>,
+
+    light_dir_location: Option<glow::UniformLocation>,
+    world_from_local_location: Option<glow::UniformLocation>,
 }
 
 impl PrimaryProgram {
@@ -292,6 +420,14 @@ impl PrimaryProgram {
             let depth_cutoff_location = gl.get_uniform_location(program, "depthCutoff");
             let shadow_map_location = gl.get_uniform_location(program, "shadowMap");
 
+            let light_dir_location = gl.get_uniform_location(program, "lightDir");
+            let world_from_local_location = gl.get_uniform_location(program, "worldFromLocal");
+
+            let uniform_block_index = gl.get_uniform_block_index(program, "light_buffer");
+            if let Some(uniform_block_index) = uniform_block_index {
+                gl.uniform_block_binding(program, uniform_block_index, 0);
+            }
+
             gl.use_program(Some(program));
 
             gl.uniform_1_i32(texture_location.as_ref(), 0);
@@ -305,6 +441,9 @@ impl PrimaryProgram {
                 tint_location,
                 depth_cutoff_location,
                 shadow_map_location,
+
+                light_dir_location,
+                world_from_local_location,
             }
         }
     }
@@ -397,6 +536,133 @@ impl ShadowTarget {
         }
     }
 }
+
+struct HdrFramebuffer {
+    framebuffer: glow::Framebuffer,
+    color_texture: glow::Texture,
+    depth_texture: glow::Texture,
+}
+
+impl HdrFramebuffer {
+    fn new(gl: &glow::Context, size: UVec2) -> Self {
+        let color_texture = unsafe {
+            let color_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(color_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA16F as i32,
+                size.x as i32,
+                size.y as i32,
+                0,
+                glow::RGBA,
+                glow::HALF_FLOAT,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            color_texture
+        };
+
+        let depth_texture = unsafe {
+            let depth_texture = gl.create_texture().expect("Failed to create texture");
+            gl.bind_texture(glow::TEXTURE_2D, Some(depth_texture));
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::DEPTH_COMPONENT32F as i32,
+                size.x as i32,
+                size.y as i32,
+                0,
+                glow::DEPTH_COMPONENT,
+                glow::FLOAT,
+                None,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+
+            depth_texture
+        };
+
+        let framebuffer = unsafe {
+            let framebuffer = gl
+                .create_framebuffer()
+                .expect("Failed to create framebuffer");
+            gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::TEXTURE_2D,
+                Some(color_texture),
+                0,
+            );
+            gl.framebuffer_texture_2d(
+                glow::FRAMEBUFFER,
+                glow::DEPTH_ATTACHMENT,
+                glow::TEXTURE_2D,
+                Some(depth_texture),
+                0,
+            );
+            gl.draw_buffers(&[glow::COLOR_ATTACHMENT0]);
+            gl.read_buffer(glow::COLOR_ATTACHMENT0);
+            tracing::error!("{:X?}", gl.check_framebuffer_status(glow::FRAMEBUFFER));
+
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            framebuffer
+        };
+
+        Self {
+            framebuffer,
+            color_texture,
+            depth_texture,
+        }
+    }
+
+    fn dispose(&mut self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_framebuffer(self.framebuffer);
+            gl.delete_texture(self.color_texture);
+            gl.delete_texture(self.depth_texture);
+        }
+    }
+}
+
 // CRIME(cw): This isn't really a crime but minecraft has this exact class and I feel nasty.
 struct EnableState {
     kind: u32,
@@ -696,6 +962,11 @@ impl Camera {
     pub fn view_matrix(&self) -> Mat4 {
         (Mat4::from_translation(self.position) * Mat4::from_quat(self.rotation)).inverse()
     }
+
+    /// View matrix without any translation. Used For skybox stuff
+    pub fn origin_view_matrix(&self) -> Mat4 {
+        Mat4::from_quat(self.rotation).inverse()
+    }
 }
 
 pub enum Filtering {
@@ -728,7 +999,7 @@ impl Texture {
             gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA as i32,
+                glow::SRGB8_ALPHA8 as i32,
                 width as i32,
                 height as i32,
                 0,
@@ -811,33 +1082,37 @@ pub fn build_cube_draw_calls<'a>(
 }
 
 pub fn compute_shadow_bounding_box(direction: Vec3, grid_size: UVec3) -> Mat4 {
-    // All 8 corners of the grid
-    let corners = [
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec3::new(grid_size.x as f32, 0.0, 0.0),
-        Vec3::new(0.0, grid_size.y as f32, 0.0),
-        Vec3::new(grid_size.x as f32, grid_size.y as f32, 0.0),
-        Vec3::new(0.0, 0.0, grid_size.z as f32),
-        Vec3::new(grid_size.x as f32, 0.0, grid_size.z as f32),
-        Vec3::new(0.0, grid_size.y as f32, grid_size.z as f32),
-        Vec3::new(grid_size.x as f32, grid_size.y as f32, grid_size.z as f32),
-    ];
+    // TODO(cw): Too Fancy
+    // // All 8 corners of the grid
+    // let corners = [
+    //     Vec3::new(0.0, 0.0, 0.0),
+    //     Vec3::new(grid_size.x as f32, 0.0, 0.0),
+    //     Vec3::new(0.0, grid_size.y as f32, 0.0),
+    //     Vec3::new(grid_size.x as f32, grid_size.y as f32, 0.0),
+    //     Vec3::new(0.0, 0.0, grid_size.z as f32),
+    //     Vec3::new(grid_size.x as f32, 0.0, grid_size.z as f32),
+    //     Vec3::new(0.0, grid_size.y as f32, grid_size.z as f32),
+    //     Vec3::new(grid_size.x as f32, grid_size.y as f32, grid_size.z as f32),
+    // ];
 
-    // Project those corners in the direction of the light
-    let zero_view_matrix = Mat4::look_at_rh(-direction, Vec3::ZERO, Vec3::Y);
+    // // Project those corners in the direction of the light
+    // let zero_view_matrix = Mat4::look_at_rh(-direction, Vec3::ZERO, Vec3::Y);
 
-    let mut min = Vec3::INFINITY;
-    let mut max = Vec3::NEG_INFINITY;
+    // let mut min = Vec3::INFINITY;
+    // let mut max = Vec3::NEG_INFINITY;
 
-    for corner in corners {
-        let projected = zero_view_matrix.transform_point3(corner);
+    // for corner in corners {
+    //     let projected = zero_view_matrix.transform_point3(corner);
 
-        min = min.min(projected);
-        max = max.max(projected);
-    }
+    //     min = min.min(projected);
+    //     max = max.max(projected);
+    // }
 
-    let center = (min + max) / 2.0;
-    let size = max - min;
+    // let center = (min + max) / 2.0;
+    // let size = max - min;
+
+    let center = grid_size.as_vec3() * 0.5;
+    let size = Vec3::splat(grid_size.as_vec3().max_element() * 1.5);
 
     let projection_matrix = Mat4::orthographic_rh_gl(
         -size.x / 2.0,

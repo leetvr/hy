@@ -145,6 +145,7 @@ pub struct GLTFMaterial {
 #[derive(Debug, Default, Clone)]
 pub struct GLTFNode {
     pub mesh: Option<usize>,
+    pub name: Option<String>,
     pub children: Vec<usize>,
     pub base_transform: Transform,
     pub current_transform: Transform,
@@ -259,6 +260,7 @@ fn load_node(node: Node<'_>) -> anyhow::Result<GLTFNode> {
     let children = node.children().map(|n| n.index()).collect();
     Ok(GLTFNode {
         mesh: node.mesh().map(|m| m.index()),
+        name: node.name().map(str::to_string),
         current_transform: transform,
         base_transform: transform,
         children,
@@ -514,18 +516,11 @@ where
 
 pub fn animate_model(model: &mut GLTFModel, delta_time: Duration) {
     'state_change: loop {
-        tracing::info!("Animating model {:?}", model.animation_state);
         match model.animation_state {
             AnimationState::Playing { anim_index } => {
                 let animation = &mut model.animations[anim_index];
                 animation.animation_time =
                     (animation.animation_time + delta_time.as_secs_f32()) % animation.duration;
-
-                tracing::info!(
-                    "Playing animation {}, {:.2}",
-                    animation.name,
-                    animation.animation_time
-                );
 
                 for channel in &animation.channels {
                     let Some(value) = get_next_value_for_channel(channel, animation.animation_time)

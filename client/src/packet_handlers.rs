@@ -1,15 +1,12 @@
 use {
     crate::gltf::GLTFModel,
-    anyhow::bail,
-    entities::{EntityData, EntityID},
+    anyhow::{bail, Result},
+    blocks::BlockGrid,
+    entities::{EntityData, EntityID, PlayerId},
     glam::Vec3Swizzles,
     net_types::{AddEntity, RemoveEntity, UpdateEntity},
     std::collections::HashMap,
 };
-
-use anyhow::Result;
-use blocks::BlockGrid;
-use net_types::PlayerId;
 
 use crate::Player;
 // Handlers for incoming packets
@@ -87,6 +84,7 @@ pub(crate) fn handle_add_entity(
         entity_data,
     }: AddEntity,
 ) {
+    tracing::debug!("Added entity {entity_id}");
     entities.insert(entity_id, entity_data);
 }
 
@@ -95,6 +93,8 @@ pub(crate) fn handle_update_entity(
     UpdateEntity {
         entity_id,
         position,
+        rotation,
+        anchor,
     }: UpdateEntity,
 ) -> Result<()> {
     let Some(entity) = entities.get_mut(&entity_id) else {
@@ -102,6 +102,8 @@ pub(crate) fn handle_update_entity(
     };
 
     entity.state.position = position;
+    entity.state.rotation = rotation;
+    entity.state.anchor = anchor;
 
     Ok(())
 }

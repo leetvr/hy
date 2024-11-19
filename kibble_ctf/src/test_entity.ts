@@ -1,29 +1,43 @@
-import type { EntityState, EntityUpdate, Vec3 } from "../lib/hy";
+import type {
+  EntityState,
+  EntityUpdate,
+  Vec3,
+  OnEntitySpawn,
+  EntityData,
+} from "../lib/hy";
 
-const ENTITY_SPEED = 15;
 const DT = 0.01666667;
 
-export const update: EntityUpdate = (currentState: EntityState): EntityState => {
+export const onSpawn: OnEntitySpawn = (entityData: EntityData): EntityData => {
+  if (Math.random() > 0.5) {
+    return {
+      ...entityData,
+      model_path: "kibble_ctf/test_entity_alt.gltf",
+    };
+  }
+
+  return entityData;
+};
+
+export const update: EntityUpdate = (
+  id: string,
+  currentState: EntityState,
+): EntityState => {
   const [lastX, lastY, lastZ] = currentState.position;
-  const nextPosition: Vec3 = [lastX, lastY, lastZ - ENTITY_SPEED * DT];
+  const [velX, velY, velZ] = currentState.velocity;
+  const nextPosition: Vec3 = [lastX + velX * DT, lastY + velY * DT, lastZ + velZ * DT];
 
+  if (nextPosition[0] > 32) {
+    nextPosition[0] = 0;
+  }
+  if (nextPosition[0] < 0) {
+    nextPosition[0] = 32;
+  }
+  if (nextPosition[2] > 32) {
+    nextPosition[2] = 0;
+  }
   if (nextPosition[2] < 0) {
-    // // Spawn one new entity
-    // hy.spawnEntity(0, [nextPosition[0] + 2., nextPosition[1] + 1., 16]);
-
-    // Reset the current entity
     nextPosition[2] = 32;
-
-    // // Despawn any other entity so we don't flood the level
-
-    // const entities = hy.getEntities();
-    // const entityIds = Object.keys(entities);
-
-    // // Despawn a random entity
-    // let entityId = entityIds[Math.floor(Math.random() * entityIds.length)];
-    // if (entityId !== undefined) {
-    //   hy.despawnEntity(entityId);
-    // }
   }
 
   return {

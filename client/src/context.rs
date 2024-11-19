@@ -41,6 +41,14 @@ impl Engine {
         self.send_packet(packet);
     }
 
+    pub fn ctx_get_engine_mode(&mut self) -> EngineMode {
+        match self.state {
+            GameState::Loading => EngineMode::Play,
+            GameState::Playing { .. } => EngineMode::Play,
+            GameState::Editing { .. } => EngineMode::Edit,
+        }
+    }
+
     pub fn ctx_get_canvas(&self) -> web_sys::HtmlCanvasElement {
         self.context.canvas.clone()
     }
@@ -94,10 +102,7 @@ impl Engine {
             name: "We should let you set entity names in the editor".into(),
             entity_type: entity_type_id,
             model_path: entity_type.default_model_path().into(),
-            state: EntityState {
-                position: Default::default(),
-                velocity: Default::default(),
-            },
+            state: EntityState::default(),
         });
     }
 }
