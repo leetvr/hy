@@ -575,6 +575,7 @@ fn player_update(
             position: current_state.position,
             animation_state: animation_change,
             script_state: script_state_change,
+            facing_angle: current_state.facing_angle,
         })
     } else {
         None

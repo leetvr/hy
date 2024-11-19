@@ -63,6 +63,7 @@ pub fn handle_update_player(
         position,
         animation_state,
         script_state,
+        facing_angle,
     }: net_types::UpdatePlayer,
 ) {
     let Some(player) = players.get_mut(&id) else {
@@ -70,12 +71,8 @@ pub fn handle_update_player(
         return;
     };
 
-    let movement: glam::Vec2 = position.xz() - player.position.xz();
-    if movement.length() > 0. {
-        player.facing_angle = movement.to_angle();
-    }
-
     player.position = position;
+    player.facing_angle = facing_angle;
     if let Some(animation_state) = animation_state {
         if let Some(model) = player.model.as_mut() {
             model.play_animation(&animation_state, 0.5);
