@@ -49,12 +49,7 @@ function App({ engine }: { engine: Engine }) {
       )}
       <RightBar selectedEntity={false} />
       {currentMode === EngineMode.Play && <CtfGameUi
-          redScore="4"
-          blueScore="2"
-          health="92"
-          ammo="4"
-          myTeam="red"
-          iHaveFlag={false}
+          engine={engine}
       />}
     </div>
   );
