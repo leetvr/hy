@@ -99,6 +99,12 @@ export const update = (playerID, currentState, controls) => {
                         newCustomState.ammo = newCustomState.maxAmmo;
                     }
                 }
+                if (entityData.entity_type == BANDAGE_TYPE_ID) {
+                    if (newCustomState.health < newCustomState.maxHealth) {
+                        hy.despawnEntity(collision.targetId);
+                        newCustomState.health = newCustomState.maxHealth;
+                    }
+                }
                 if (entityData.entity_type == BULLET_TYPE_ID) {
                     // No friendly fire!
                     const firedByTeam = entityData.state.customState.firedByTeam;
@@ -301,6 +307,7 @@ const RED_FLAG_TYPE_ID = 4;
 const SHOTGUN_TYPE_ID = 5;
 const BULLET_TYPE_ID = 6;
 const AMMO_TYPE_ID = 7;
+const BANDAGE_TYPE_ID = 8;
 function max_ammo(entity_type) {
     if (entity_type == GUN_TYPE_ID) {
         return 10;
