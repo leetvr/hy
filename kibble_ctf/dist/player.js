@@ -143,9 +143,6 @@ export const update = (playerID, currentState, controls) => {
     newVelocity[2] = correctedMovement[2];
     if (isOnGround && newControls.jump) {
         newVelocity[1] = JUMP_SPEED;
-        if (attachedEntities["hand_left_anchor"]) {
-            hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
-        }
     }
     newPosition[0] += newVelocity[0] * DT;
     newPosition[1] += newVelocity[1] * DT;
