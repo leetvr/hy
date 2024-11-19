@@ -2,6 +2,7 @@ mod cube_vao;
 mod debug_renderer;
 mod grid_renderer;
 mod skybox;
+mod ssao;
 mod tonemapping;
 mod vertex;
 
@@ -80,6 +81,7 @@ pub struct Renderer {
     debug_renderer: debug_renderer::DebugRenderer,
     skybox_renderer: skybox::SkyboxRenderer,
     tonemapping_renderer: tonemapping::TonemappingRenderer,
+    ssao_renderer: ssao::SsaoRenderer,
 
     light_buffer: glow::Buffer,
 }
@@ -120,12 +122,12 @@ impl Renderer {
         let shadow_target = ShadowTarget::new(&gl, SHADOW_SIZE);
 
         let camera = Camera::default();
+        let resolution = UVec2::new(canvas.width(), canvas.height());
 
         let grid_renderer = grid_renderer::GridRenderer::new(&gl);
         let debug_renderer = debug_renderer::DebugRenderer::new(&gl);
         let tonemapping_renderer = tonemapping::TonemappingRenderer::new(&gl);
-
-        let resolution = UVec2::new(canvas.width(), canvas.height());
+        let ssao_renderer = ssao::SsaoRenderer::new(&gl, resolution);
 
         let light_buffer = unsafe { gl.create_buffer().expect("Failed to create buffer") };
 
@@ -141,6 +143,7 @@ impl Renderer {
             grid_renderer,
             debug_renderer,
             skybox_renderer,
+            ssao_renderer,
             tonemapping_renderer,
             light_buffer,
         })
@@ -151,6 +154,8 @@ impl Renderer {
 
         self.hdr_target.dispose(&self.gl);
         self.hdr_target = HdrFramebuffer::new(&self.gl, dimension);
+
+        self.ssao_renderer.resize(&self.gl, dimension);
     }
 
     pub fn render(
@@ -313,6 +318,18 @@ impl Renderer {
                 glow::NEAREST,
             );
 
+            // -----------------
+            // --- SSAO Pass ---
+            // -----------------
+
+            self.ssao_renderer.render(
+                &self.gl,
+                self.resolution,
+                self.hdr_target.depth_texture,
+                self.hdr_target.framebuffer,
+                projection_matrix,
+            );
+
             // ------------------------
             // --- Tonemapping Pass ---
             // ------------------------
@@ -440,7 +457,6 @@ struct PrimaryProgram {
     program: glow::Program,
     matrix_location: Option<glow::UniformLocation>,
     shadow_matrix_location: Option<glow::UniformLocation>,
-    texture_location: Option<glow::UniformLocation>,
     tint_location: Option<glow::UniformLocation>,
     depth_cutoff_location: Option<glow::UniformLocation>,
     shadow_map_location: Option<glow::UniformLocation>,
@@ -478,7 +494,6 @@ impl PrimaryProgram {
                 program,
                 matrix_location,
                 shadow_matrix_location,
-                texture_location,
                 tint_location,
                 depth_cutoff_location,
                 shadow_map_location,
@@ -570,6 +585,7 @@ impl ShadowTarget {
         }
     }
 
+    #[expect(unused)]
     fn dispose(&mut self, gl: &glow::Context) {
         unsafe {
             gl.delete_framebuffer(self.framebuffer);
@@ -710,12 +726,12 @@ impl HdrFramebuffer {
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
