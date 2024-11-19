@@ -219,6 +219,9 @@ impl GameInstance {
                     let Some(anchor) = &entity.state.anchor else {
                         continue;
                     };
+                    if anchor.player_id != client.player_id {
+                        continue;
+                    }
 
                     let entity_list = player
                         .state
