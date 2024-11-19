@@ -75,7 +75,7 @@ const fireBullets = ({ playerId, yaw, pitch, position }: Interaction) => {
   // If the angle is wrong, don't find out why, just bash it into place
   let fixedYaw = yaw + Math.PI / 2;
   // This one is just tuned to feel better so you don't constantly shoot the ground
-  let fixedPitch = pitch + 0.2;
+  let fixedPitch = pitch + 0.3;
 
   let initialVelocity: Vec3 = [
     speed * Math.cos(fixedPitch) * Math.cos(fixedYaw),
@@ -84,7 +84,7 @@ const fireBullets = ({ playerId, yaw, pitch, position }: Interaction) => {
   ];
   const initialPosition: Vec3 = [
     position[0] + (Math.cos(fixedPitch) * -Math.cos(fixedYaw)) * 0.25,
-    position[1] + Math.sin(fixedPitch) * 0.25,
+    position[1] + 0.25 + Math.sin(fixedPitch) * 0.25,
     position[2] + -(Math.cos(fixedPitch) * Math.sin(fixedYaw)) * 0.25,
   ];
 

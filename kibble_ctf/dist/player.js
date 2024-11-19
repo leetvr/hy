@@ -17,6 +17,7 @@ export const onSpawn = (playerId, currentState) => {
     newCustomState.health = MAX_HEALTH;
     newCustomState.spawnPosition = position;
     newCustomState.respawnTimer = RESPAWN_TIME;
+    newCustomState.stunned = false;
     newCustomState.coyoteTime = 0.;
     newCustomState.jumpInputTime = 0.;
     newCustomState.itemPickupCooldowns = {};
@@ -39,22 +40,16 @@ export const update = (playerID, currentState, controls) => {
     let newControls = Object.assign({}, controls);
     let isAlive = newCustomState.health > 0;
     if (!isAlive) {
-        if (attachedEntities["hand_left_anchor"]) {
-            hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
-        }
         if (newCustomState.respawnTimer <= 0) {
             newPosition = newCustomState.spawnPosition;
             newCustomState.health = MAX_HEALTH;
             newCustomState.respawnTimer = 3.0;
         }
         newCustomState.respawnTimer -= DT;
-        // Reset controls when player is dead
-        newControls.move_direction = [0, 0];
-        newControls.jump = false;
-        newControls.fire = false;
     }
     const collisions = hy.getCollisionsForPlayer(playerID);
     let touchedEntities = {};
+    let knockback = [0, 0, 0];
     collisions.forEach((collision) => {
         if (!isAlive) {
             return;
@@ -132,6 +127,21 @@ export const update = (playerID, currentState, controls) => {
                     if (newCustomState.health <= 0) {
                         newCustomState.respawnTimer = RESPAWN_TIME;
                     }
+                    // Get knocked away from the ball
+                    const ballVelocity = [entityData.state.velocity[0], entityData.state.velocity[2]];
+                    const length = Math.hypot(ballVelocity[0], ballVelocity[1]);
+                    if (length > 0) {
+                        let normalizedBallVelocity = [
+                            ballVelocity[0] / length,
+                            ballVelocity[1] / length,
+                        ];
+                        knockback = [
+                            normalizedBallVelocity[0] * 10,
+                            5,
+                            normalizedBallVelocity[1] * 10
+                        ];
+                        newCustomState.stunned = true;
+                    }
                 }
                 if (entityData.entity_type == BLUE_FLAG_TYPE_ID || entityData.entity_type == RED_FLAG_TYPE_ID) {
                     // Don't do anything with a flag that is already carried
@@ -151,7 +161,7 @@ export const update = (playerID, currentState, controls) => {
                     }
                     else {
                         // Pick up the flag if we aren't already holding something in the left hand
-                        if (!attachedEntities["hand_left_anchor"]) {
+                        if (!newCustomState.stunned && !attachedEntities["hand_left_anchor"]) {
                             hy.anchorEntity(collision.targetId, playerID, "hand_left_anchor");
                         }
                     }
@@ -159,6 +169,15 @@ export const update = (playerID, currentState, controls) => {
             }
         }
     });
+    if (!isAlive || newCustomState.stunned) {
+        if (attachedEntities["hand_left_anchor"]) {
+            hy.detachEntity(attachedEntities["hand_left_anchor"][0], newPosition);
+        }
+        // Reset controls when player is dead or stunned
+        newControls.move_direction = [0, 0];
+        newControls.jump = false;
+        newControls.fire = false;
+    }
     // Items that are no longer in contact with the player should be removed from the dontPickupItem
     // list
     Object.keys(newCustomState.itemPickupCooldowns).forEach((itemId) => {
@@ -207,11 +226,19 @@ export const update = (playerID, currentState, controls) => {
     }
     else {
         // TODO: Apply damping to horizontal velocity when no input
-        newVelocity[0] *= 0.7;
-        newVelocity[2] *= 0.7;
+        if (wasOnGround && !newCustomState.stunned) {
+            newVelocity[0] *= 0.7;
+            newVelocity[2] *= 0.7;
+        }
     }
     // Apply gravity
     newVelocity[1] += GRAVITY * DT;
+    if (knockback[0] != 0 || knockback[1] != 0 || knockback[2] != 0) {
+        console.log("knockback", knockback);
+        newVelocity[0] = knockback[0];
+        newVelocity[1] = knockback[1];
+        newVelocity[2] = knockback[2];
+    }
     // Update position based on velocity and delta time
     const desiredMovement = [newVelocity[0], newVelocity[1], newVelocity[2]];
     const { correctedMovement, isOnGround } = hy.checkMovementForCollisions(playerID, position, desiredMovement);
@@ -219,7 +246,8 @@ export const update = (playerID, currentState, controls) => {
     newVelocity[1] = correctedMovement[1];
     newVelocity[2] = correctedMovement[2];
     newVelocity[1] = Math.max(newVelocity[1], MIN_FALL_SPEED);
-    if (isOnGround) {
+    if (isOnGround && newVelocity[1] < 0) {
+        newCustomState.stunned = false;
         newCustomState.coyoteTime = COYOTE_TIME;
     }
     else {
