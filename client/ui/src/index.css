@@ -87,6 +87,9 @@ a:hover {
     box-sizing: border-box;
     text-align: left;
 }
+.block-button {
+    padding: 4px;
+}
 .block-button img, .entity-button img {
     display: inline-block;
     vertical-align: middle;
@@ -98,6 +101,44 @@ a:hover {
 .block-button-container, .entity-button-container {
     overflow: hidden auto;
     flex: auto;
+}
+.block-button .block-cube-ctr {
+    width: 32px;
+    height: 32px;
+    perspective: 100px;
+    display: inline-block;
+    margin-right: 14px;
+}
+.block-button .block-cube-cube {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: translateY(30px) translateX(15px) rotateY(33deg) rotateX(-45deg) translateZ(-32px);
+    transition: transform 0.2s;
+}
+.block-button:hover .block-cube-cube {
+    transform: translateY(30px) translateX(15px) rotateY(33deg) rotateX(-45deg) translateZ(-32px) scale(115%);
+    transition: transform 1.5s;
+}
+.block-button .cube-face {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+    background-size: 32px 32px;
+}
+.block-button .top {
+    background-color: #f00;
+    transform: rotateX(90deg) translateZ(16px);
+}
+.block-button .left {
+    background-color: #0f0;
+    transform: rotateY(-90deg) translateZ(16px);
+}
+.block-button .right {
+    /* really 'front' if you're thinking in three dimensions */
+    background-color: #00f;
+    transform: rotateY(0deg) translateZ(16px);
 }
 
 body {

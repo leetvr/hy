@@ -1,21 +1,22 @@
 import { BlockType } from "../../pkg/client.js";
 
 export default function BlockButton({ blockType, onClickHandler, isOn }: { blockType: BlockType | undefined, onClickHandler: (BlockType) => void, isOn: boolean }) {
-    let imageUrl;
+    let blockImg;
     let blockName;
     if(blockType === undefined) {
-        imageUrl = "/client/ui/public/block-delete.png";
         blockName = "Delete block";
+        blockImg = <img src="/client/ui/public/block-delete.png" alt="" width="32" height="32" />;
     } else {
-        imageUrl = getBlockImageUrlByType(blockType);
         blockName = blockType.name;
+        blockImg = <div className="block-cube-ctr">
+            <div className="block-cube-cube">
+                <div className="cube-face top" style={ {'background-image': 'url("' + blockType.top_texture + '")'} }></div>
+                <div className="cube-face left" style={ {'background-image': 'url("' + blockType.south_texture + '")'} }></div>
+                <div className="cube-face right" style={ {'background-image': 'url("' + blockType.east_texture + '")'} }></div>
+            </div>
+        </div>;
     }
     return <button className={"block-button " + (isOn ? "button-on" : "")} onClick={() => { onClickHandler(blockType) }}>
-        <img src={imageUrl} alt="" width="32" height="32" /> {blockName}
+        {blockImg} {blockName}
     </button>;
-}
-
-function getBlockImageUrlByType(blockType: BlockType): string {
-    // TODO: when there's an actual blockType.image, do it here
-    return "/client/ui/public/block-generic.png";
 }
