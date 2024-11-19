@@ -21,9 +21,9 @@ const fireBullets = ({ playerId, yaw, pitch, position }) => {
         -(speed * Math.cos(fixedPitch) * Math.sin(fixedYaw))
     ];
     const initialPosition = [
-        position[0] + Math.cos(fixedPitch) * -Math.cos(fixedYaw),
-        position[1] + Math.sin(fixedPitch) + 0.5,
-        position[2] + -(Math.cos(fixedPitch) * Math.sin(fixedYaw)),
+        position[0] + (Math.cos(fixedPitch) * -Math.cos(fixedYaw)) * 0.25,
+        position[1] + Math.sin(fixedPitch) * 0.25,
+        position[2] + -(Math.cos(fixedPitch) * Math.sin(fixedYaw)) * 0.25,
     ];
     hy.spawnEntity(6, initialPosition, [0, 0, 0], initialVelocity, { firedByTeam: team });
 };

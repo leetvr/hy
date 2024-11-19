@@ -45,4 +45,5 @@ globalThis.hy = {
   playSound: (soundId, position, volume) => {
     return core.ops.play_sound(soundId, position, volume);
   },
+  getBlock: core.ops.get_block,
 };
