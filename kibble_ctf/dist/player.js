@@ -5,10 +5,18 @@ const DT = 1 / 60; // Fixed delta time (seconds per frame)
 export const onSpawn = (playerID, currentState) => {
     const { customState, position } = currentState;
     let newCustomState = Object.assign({}, customState);
+    let newModelPath;
+    if (customState.team == "red") {
+        newModelPath = "kibble_ctf/player_red.gltf";
+    }
+    else {
+        newModelPath = "kibble_ctf/player_blue.gltf";
+    }
     newCustomState.health = MAX_HEALTH;
     newCustomState.spawnPosition = position;
     newCustomState.respawnTimer = 0;
-    return Object.assign(Object.assign({}, currentState), { customState: newCustomState });
+    // NOTE(ll): modelPath *must* be set here, otherwise the model won't be loaded.
+    return Object.assign(Object.assign({}, currentState), { customState: newCustomState, modelPath: newModelPath });
 };
 export const update = (playerID, currentState, controls) => {
     // Note(ll): I just put attachedEntities in currentState but mutating it in the script will not have any effect.
@@ -55,6 +63,11 @@ export const update = (playerID, currentState, controls) => {
                     }
                 }
                 if (entityData.entity_type == BULLET_TYPE) {
+                    // No friendly fire!
+                    const firedByTeam = entityData.state.customState.firedByTeam;
+                    if (firedByTeam == customState.team) {
+                        return;
+                    }
                     // Destroy bullet and take damage
                     hy.despawnEntity(collision.targetId);
                     hy.playSound("pain", currentState.position, 10);
@@ -67,9 +80,7 @@ export const update = (playerID, currentState, controls) => {
                     const entityData = hy.getEntityData(collision.targetId);
                     // No friendly fire!
                     const firedByTeam = entityData.state.customState.firedByTeam;
-                    console.log("Ball was fired by", firedByTeam, entityData.state.customState, customState);
                     if (firedByTeam == customState.team) {
-                        console.log("friendly fire!");
                         return;
                     }
                     // Destroy bullet and take damage
@@ -158,14 +169,8 @@ export const update = (playerID, currentState, controls) => {
     if (!isAlive) {
         newAnimationState = "sleep";
     }
-    return {
-        position: newPosition,
-        velocity: newVelocity,
-        animationState: newAnimationState,
-        customState: newCustomState,
-        isOnGround,
-        attachedEntities,
-    };
+    return Object.assign(Object.assign({}, currentState), { position: newPosition, velocity: newVelocity, animationState: newAnimationState, customState: newCustomState, isOnGround,
+        attachedEntities });
 };
 const MAX_HEALTH = 5;
 const RESPAWN_TIME = 3.0;

@@ -262,6 +262,7 @@ pub struct PlayerState {
     // Map of anchor name to entity id for attached entities
     #[serde(default)]
     pub attached_entities: HashMap<String, Vec<EntityID>>,
+    pub model_path: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
