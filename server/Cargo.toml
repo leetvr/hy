@@ -2,6 +2,7 @@
 name = "server"
 version = "0.1.0"
 edition = "2021"
+license = "MPL-2.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 webbrowser.workspace = true
